@@ -1,0 +1,12 @@
+node_modules
+dist
+coverage
+.git
+.env
+*.log
+apps/*/dist
+packages/*/dist
+packages/*/*.tsbuildinfo
+pdf-tools
+VoteBroker_2
+VoteBroker_rar

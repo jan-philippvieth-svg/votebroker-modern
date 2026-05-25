@@ -1,0 +1,33 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3000
+      VOTEBROKER_FEE_BPS: ${VOTEBROKER_FEE_BPS:-300}
+      VOTEBROKER_MIN_FEE_USD: ${VOTEBROKER_MIN_FEE_USD:-0.05}
+      VOTEBROKER_FEE_POST_AUTHOR: ${VOTEBROKER_FEE_POST_AUTHOR:-votebroker}
+      VOTEBROKER_FEE_POST_PERMLINK: ${VOTEBROKER_FEE_POST_PERMLINK:-monthly-fees}
+      VOTEBROKER_WARNING_AFTER_FAILURES: ${VOTEBROKER_WARNING_AFTER_FAILURES:-2}
+      VOTEBROKER_PAUSE_AFTER_FAILURES: ${VOTEBROKER_PAUSE_AFTER_FAILURES:-4}
+      STEEMCONNECT_HOST: ${STEEMCONNECT_HOST:-https://api.steemconnect.com}
+      STEEMCONNECT_CLIENT_ID: ${STEEMCONNECT_CLIENT_ID:-votebroker}
+      STEEMCONNECT_CLIENT_SECRET: ${STEEMCONNECT_CLIENT_SECRET}
+      STEEMCONNECT_REDIRECT_URI: ${STEEMCONNECT_REDIRECT_URI:-https://votebroker.org/auth/callback}
+      STEEMCONNECT_SCOPES: ${STEEMCONNECT_SCOPES:-login,vote}
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_BASE: /api
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "80:80"
