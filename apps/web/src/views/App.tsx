@@ -3,6 +3,7 @@ import {
   BadgeDollarSign,
   BarChart3,
   CheckCircle2,
+  ChevronDown,
   Gauge,
   LineChart,
   Send,
@@ -26,6 +27,7 @@ import {
   type ConsentType,
   type VoteQuoteResponse
 } from "../api";
+import { createTranslator, locales, type Locale } from "../i18n";
 
 const statusLabel = {
   active: "Aktiv",
@@ -62,6 +64,7 @@ const voteFlow = [
 ];
 
 export function App() {
+  const [locale, setLocale] = useState<Locale>(() => (window.localStorage.getItem("votebroker.locale") as Locale | null) ?? "de");
   const [session, setSession] = useState<AuthSession | null>(() => {
     const raw = window.localStorage.getItem("votebroker.session");
     return raw ? JSON.parse(raw) as AuthSession : null;
@@ -79,11 +82,12 @@ export function App() {
   const [loading, setLoading] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [consentLoading, setConsentLoading] = useState<ConsentType | null>(null);
+  const t = createTranslator(locale);
 
   useEffect(() => {
     getConsentCatalog()
       .then(setConsentCatalog)
-      .catch((err) => setConsentError(err instanceof Error ? err.message : "Consent-Katalog konnte nicht geladen werden"));
+      .catch((err) => setConsentError(err instanceof Error ? err.message : "Consent catalog could not be loaded"));
   }, []);
 
   useEffect(() => {
@@ -94,7 +98,7 @@ export function App() {
 
     getConsentState(session.token)
       .then(setConsentState)
-      .catch((err) => setConsentError(err instanceof Error ? err.message : "Consent-Status konnte nicht geladen werden"));
+      .catch((err) => setConsentError(err instanceof Error ? err.message : "Consent state could not be loaded"));
   }, [session]);
 
   useEffect(() => {
@@ -114,7 +118,7 @@ export function App() {
         url.searchParams.delete("state");
         window.history.replaceState({}, document.title, url.pathname + url.search);
       })
-      .catch((err) => setAuthError(err instanceof Error ? err.message : "Login fehlgeschlagen"))
+      .catch((err) => setAuthError(err instanceof Error ? err.message : "Login failed"))
       .finally(() => setAuthLoading(false));
   }, []);
 
@@ -122,6 +126,11 @@ export function App() {
     if (!result) return "0.00";
     return (result.quote.voteWeightBps / 100).toFixed(2);
   }, [result]);
+
+  function changeLocale(nextLocale: Locale) {
+    setLocale(nextLocale);
+    window.localStorage.setItem("votebroker.locale", nextLocale);
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -132,7 +141,7 @@ export function App() {
       const quote = await quoteVote({ username, author, permlink, desiredVoteUsd });
       setResult(quote);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unbekannter Fehler");
+      setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setLoading(false);
     }
@@ -146,7 +155,7 @@ export function App() {
       const url = await getSteemConnectUrl();
       window.location.assign(url);
     } catch (err) {
-      setAuthError(err instanceof Error ? err.message : "Login konnte nicht gestartet werden");
+      setAuthError(err instanceof Error ? err.message : "Login could not be started");
       setAuthLoading(false);
     }
   }
@@ -161,7 +170,7 @@ export function App() {
 
   async function updateConsent(type: ConsentType, action: "grant" | "revoke") {
     if (!session) {
-      setConsentError("Bitte zuerst mit SteemConnect verbinden.");
+      setConsentError("Please connect with SteemConnect first.");
       return;
     }
 
@@ -173,7 +182,7 @@ export function App() {
         : await revokeConsent(session.token, type);
       setConsentState(nextState);
     } catch (err) {
-      setConsentError(err instanceof Error ? err.message : "Consent konnte nicht aktualisiert werden");
+      setConsentError(err instanceof Error ? err.message : "Consent could not be updated");
     } finally {
       setConsentLoading(null);
     }
@@ -184,11 +193,21 @@ export function App() {
       <header className="topbar">
         <div>
           <p className="eyebrow">VoteBroker</p>
-          <h1>Curation Dashboard</h1>
+          <h1>{t("dashboardTitle")}</h1>
         </div>
-        <div className="status-pill">
-          <CheckCircle2 size={16} />
-          Fee-vote billing
+        <div className="topbar-actions">
+          <label className="language-select">
+            <span>{t("language")}</span>
+            <select value={locale} onChange={(event) => changeLocale(event.target.value as Locale)}>
+              {locales.map((item) => (
+                <option key={item.code} value={item.code}>{item.label}</option>
+              ))}
+            </select>
+          </label>
+          <div className="status-pill">
+            <CheckCircle2 size={16} />
+            {t("feeBilling")}
+          </div>
         </div>
       </header>
 
@@ -198,6 +217,7 @@ export function App() {
         onConnect={connectSteem}
         onDisconnect={disconnect}
         session={session}
+        t={t}
       />
 
       <ConsentPanel
@@ -208,6 +228,7 @@ export function App() {
         onRevoke={(type) => updateConsent(type, "revoke")}
         session={session}
         state={consentState}
+        t={t}
       />
 
       <Dashboard />
@@ -216,27 +237,27 @@ export function App() {
         <form className="panel vote-form" onSubmit={submit}>
           <div className="panel-title">
             <BadgeDollarSign size={20} />
-            <h2>Vote erstellen</h2>
+            <h2>{t("createVote")}</h2>
           </div>
 
           <label>
-            Account
+            {t("account")}
             <input value={username} onChange={(event) => setUsername(event.target.value)} />
           </label>
 
           <div className="field-grid">
             <label>
-              Autor
+              {t("author")}
               <input value={author} onChange={(event) => setAuthor(event.target.value)} />
             </label>
             <label>
-              Permlink
+              {t("permlink")}
               <input value={permlink} onChange={(event) => setPermlink(event.target.value)} />
             </label>
           </div>
 
           <label>
-            Zielwert in USD
+            {t("targetUsd")}
             <input
               min="0.01"
               step="0.01"
@@ -248,7 +269,7 @@ export function App() {
 
           <button disabled={loading} type="submit">
             <Send size={16} />
-            {loading ? "Berechne..." : "Quote berechnen"}
+            {loading ? t("calculating") : t("calculateQuote")}
           </button>
 
           {error && (
@@ -262,27 +283,27 @@ export function App() {
         <section className="panel result-panel">
           <div className="panel-title">
             <Gauge size={20} />
-            <h2>Ergebnis</h2>
+            <h2>{t("result")}</h2>
           </div>
 
           {!result ? (
-            <div className="empty-state">Noch keine Quote berechnet.</div>
+            <div className="empty-state">{t("noQuote")}</div>
           ) : (
             <>
               <div className="metric-grid">
-                <Metric label="Vote-Wert" value={`$${result.quote.expectedVoteUsd.toFixed(2)}`} />
-                <Metric label="Vote-Gewicht" value={`${votePercent}%`} />
-                <Metric label="Gebuehr" value={`$${result.feeInvoice.amountUsd.toFixed(2)}`} />
-                <Metric label="Fee Vote" value={`${(result.feeInvoice.requiredVoteWeightBps / 100).toFixed(2)}%`} />
+                <Metric label={t("voteValue")} value={`$${result.quote.expectedVoteUsd.toFixed(2)}`} />
+                <Metric label={t("voteWeight")} value={`${votePercent}%`} />
+                <Metric label={t("fee")} value={`$${result.feeInvoice.amountUsd.toFixed(2)}`} />
+                <Metric label={t("feeVote")} value={`${(result.feeInvoice.requiredVoteWeightBps / 100).toFixed(2)}%`} />
               </div>
 
               <div className="billing-strip">
-                <span>Status</span>
+                <span>{t("status")}</span>
                 <strong>{statusLabel[result.account.status]}</strong>
               </div>
 
               <div className="fee-post">
-                <span>Gebuehrenpost</span>
+                <span>{t("feePost")}</span>
                 <strong>@{result.feeInvoice.feePostAuthor}/{result.feeInvoice.feePostPermlink}</strong>
               </div>
 
@@ -308,7 +329,9 @@ function ConsentPanel(props: {
   onRevoke: (type: ConsentType) => void;
   session: AuthSession | null;
   state: ConsentState | null;
+  t: ReturnType<typeof createTranslator>;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
   const activeTypes = new Set(props.state?.active.map((record) => record.type) ?? []);
   const history = props.state?.history.slice(0, 4) ?? [];
 
@@ -316,12 +339,40 @@ function ConsentPanel(props: {
     <section className="consent-panel">
       <div className="consent-head">
         <div>
-          <span>Consent Layer</span>
-          <strong>Login ist nicht gleich automatische Gebührenpost-Votes</strong>
+          <span>{props.t("consentLayer")}</span>
+          <strong>{props.t("consentHeadline")}</strong>
         </div>
-        <p>
-          Jeder operative Schritt wird separat bestaetigt und kann widerrufen werden.
-        </p>
+        <p>{props.t("consentCopy")}</p>
+        <div className="consent-manage">
+          <button className="secondary-button manage-button" type="button" onClick={() => setMenuOpen((open) => !open)}>
+            {props.t("manageConsent")}
+            <ChevronDown size={16} />
+          </button>
+          {menuOpen && (
+            <div className="consent-menu">
+              <p>{props.t("manageConsentHint")}</p>
+              {props.catalog.map((record) => {
+                const active = activeTypes.has(record.type);
+                return (
+                  <div className="consent-menu-row" key={record.type}>
+                    <div>
+                      <strong>{record.title}</strong>
+                      <span>{active ? props.t("active") : props.t("serviceBlocked")}</span>
+                    </div>
+                    <button
+                      className="secondary-button revoke-button"
+                      disabled={!active || !props.session || props.loadingType === record.type}
+                      type="button"
+                      onClick={() => props.onRevoke(record.type)}
+                    >
+                      {props.t("revoke")}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       {props.consentError && (
@@ -338,7 +389,7 @@ function ConsentPanel(props: {
           return (
             <article className={`consent-card ${active ? "active" : ""}`} key={record.type}>
               <div className="consent-card-head">
-                <span>{active ? "Aktiv" : "Ausstehend"}</span>
+                <span>{active ? props.t("active") : props.t("pending")}</span>
                 <strong>{record.title}</strong>
               </div>
               <p>{record.description}</p>
@@ -347,13 +398,14 @@ function ConsentPanel(props: {
                   <li key={scope}>{scope}</li>
                 ))}
               </ul>
+              {!active && <div className="service-blocked">{props.t("serviceBlocked")}</div>}
               {active ? (
                 <button className="secondary-button consent-action" disabled={disabled} type="button" onClick={() => props.onRevoke(record.type)}>
-                  Widerrufen
+                  {props.t("revoke")}
                 </button>
               ) : (
                 <button className="consent-action" disabled={disabled} type="button" onClick={() => props.onGrant(record.type)}>
-                  Bestaetigen
+                  {props.t("confirm")}
                 </button>
               )}
             </article>
@@ -362,13 +414,13 @@ function ConsentPanel(props: {
       </div>
 
       <div className="consent-history">
-        <span>Consent-History</span>
+        <span>{props.t("consentHistory")}</span>
         {history.length === 0 ? (
-          <strong>Noch keine Consent-Aenderungen.</strong>
+          <strong>{props.t("noHistory")}</strong>
         ) : (
           history.map((record) => (
             <strong key={record.id}>
-              {record.title}: {record.status === "granted" ? "bestaetigt" : "widerrufen"} am {new Date(record.revokedAt ?? record.createdAt ?? "").toLocaleDateString("de-DE")}
+              {record.title}: {record.status === "granted" ? props.t("granted") : props.t("revoked")} {props.t("changedOn")} {new Date(record.revokedAt ?? record.createdAt ?? "").toLocaleDateString("de-DE")}
             </strong>
           ))
         )}
@@ -383,13 +435,14 @@ function AuthBar(props: {
   onConnect: () => void;
   onDisconnect: () => void;
   session: AuthSession | null;
+  t: ReturnType<typeof createTranslator>;
 }) {
   return (
     <section className="auth-bar">
       <div>
-        <span>SteemConnect</span>
+        <span>{props.t("steemConnect")}</span>
         <strong>
-          {props.session ? `@${props.session.user.username} verbunden` : "Non-custodial Login fuer Votes und Fee-Consent"}
+          {props.session ? `@${props.session.user.username} ${props.t("connected")}` : props.t("nonCustodialLogin")}
         </strong>
       </div>
       {props.authError && (
@@ -400,12 +453,12 @@ function AuthBar(props: {
       )}
       {props.session ? (
         <button className="secondary-button" type="button" onClick={props.onDisconnect}>
-          Signout
+          {props.t("signout")}
         </button>
       ) : (
         <button className="secondary-button" disabled={props.authLoading} type="button" onClick={props.onConnect}>
           <ShieldCheck size={16} />
-          {props.authLoading ? "Verbinde..." : "Mit SteemConnect verbinden"}
+          {props.authLoading ? props.t("connecting") : props.t("connect")}
         </button>
       )}
     </section>
