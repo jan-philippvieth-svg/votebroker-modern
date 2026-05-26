@@ -11,7 +11,10 @@ This repository is structured as a portfolio-grade example of modern TypeScript 
 ## Highlights
 
 - **USD-targeted voting**: users enter a desired vote value such as `$2.50`; the system calculates the required vote weight.
+- **Vote timing recommendation**: users can pick fixed vote delays or let Auto Timing recommend a slot from historical performance buckets.
 - **Vote-funded billing**: platform fees are settled through an automated vote on a configured fee post.
+- **Fair-use payment rules**: small accounts can use the platform for free or support it voluntarily until fee-by-vote billing becomes fair.
+- **Community pool foundation**: shared curation pools expose member status, pool policy, fee ratio, and account health.
 - **Explicit consent layer**: SteemConnect login does not silently authorize fee-post votes.
 - **Domain-first architecture**: core business rules live in a framework-independent package.
 - **Typed API surface**: Fastify + Zod validate requests before calling workflows.
@@ -23,7 +26,7 @@ This repository is structured as a portfolio-grade example of modern TypeScript 
 
 VoteBroker has two coordinated vote flows:
 
-1. **Post vote**: the user chooses how much USD value they want to give to a target post.
+1. **Post vote**: the user chooses how much USD value they want to give to a target post and when the vote should execute.
 2. **Fee-post vote**: VoteBroker calculates its fee and settles it by casting a second vote from the user to a designated fee post.
 
 If voting power is too low to settle fees over time, the account moves through billing states:
@@ -32,6 +35,10 @@ If voting power is too low to settle fees over time, the account moves through b
 - `warning`: fee votes have been underfunded repeatedly
 - `paused`: new automated post votes are stopped until voting power recovers
 - `payment_required`: manual unlock or payment is required
+
+Vote timing is modeled as a recommendation layer. The user can choose a fixed delay such as `5`, `10`, `15`, `20`, `25`, or `30` minutes after post creation, or use `auto`. Auto Timing scores observed timing buckets by curation efficiency, author reward stability, competing vote density, reversal risk, sample size, and voting-power context.
+
+Payment is modeled as a fair-use policy, not a debt trap. Very small votes run in `free` mode, small or underpowered accounts can enter `donation` mode, healthy accounts use `billable` mode, temporary undercoverage uses `grace`, and unhealthy accounts can be `paused`. The quote response always explains why a mode was selected and whether a fee is required.
 
 ## Architecture
 
@@ -44,7 +51,9 @@ flowchart LR
   Workflow --> Ports["Integration Ports"]
 
   Domain --> VoteMath["USD Vote Math"]
+  Domain --> Timing["Vote Timing Recommendation"]
   Domain --> Billing["Fee Invoice + Billing State"]
+  Domain --> Pool["Community Pool + Health Score"]
 
   Ports --> AccountPower["Account Power Provider"]
   Ports --> VoteBroadcaster["Vote Broadcaster"]
@@ -55,6 +64,21 @@ flowchart LR
   VoteBroadcaster -. future .-> Chain
   InvoiceRepo -. future .-> Postgres["Postgres"]
   ConsentRepo -. future .-> Postgres
+```
+
+### Recommendation Layer
+
+```mermaid
+flowchart TD
+  Request["Vote Quote Request"] --> TimingMode{"Timing Mode"}
+  TimingMode -->|manual| Manual["Selected Delay\n5-30 minutes"]
+  TimingMode -->|auto| Buckets["Historical Timing Buckets"]
+  Buckets --> Score["Recommendation Scoring"]
+  Manual --> Result["Vote Timing Recommendation"]
+  Score --> Result
+  Account["Voting Power Snapshot"] --> Score
+  Score --> Factors["Efficiency\nStability\nCompetition\nRisk\nSample Confidence"]
+  Result --> Quote["USD Vote Quote + Fee Invoice"]
 ```
 
 ## Workspace Layout
@@ -128,6 +152,10 @@ VOTEBROKER_FEE_POST_AUTHOR=votebroker
 VOTEBROKER_FEE_POST_PERMLINK=monthly-fees
 VOTEBROKER_WARNING_AFTER_FAILURES=2
 VOTEBROKER_PAUSE_AFTER_FAILURES=4
+VOTEBROKER_FREE_UNTIL_VOTE_USD=0.25
+VOTEBROKER_DONATION_UNTIL_VOTE_USD=1
+VOTEBROKER_MAX_FEE_VOTE_WEIGHT_BPS=2000
+VOTEBROKER_GRACE_CONSECUTIVE_FAILURES=2
 VITE_API_BASE=http://localhost:3000
 STEEMCONNECT_HOST=https://api.steemconnect.com
 STEEMCONNECT_CLIENT_ID=votebroker
@@ -214,7 +242,8 @@ curl -X POST http://localhost:3000/api/votes/quote \
     "username": "demo",
     "author": "alice",
     "permlink": "example-post",
-    "desiredVoteUsd": 2.5
+    "desiredVoteUsd": 2.5,
+    "timingMode": "auto"
   }'
 ```
 
@@ -236,17 +265,84 @@ Example response:
     "expectedVoteUsd": 2.5,
     "voteWeightBps": 3125,
     "capped": false,
-    "warnings": []
+    "warnings": [],
+    "timing": {
+      "mode": "auto",
+      "selectedDelayMinutes": 15,
+      "scheduledAt": null,
+      "confidencePct": 100,
+      "score": 84,
+      "rationale": [
+        "15 Minuten ist aktuell der staerkste Slot aus den Erfahrungsdaten.",
+        "Score 84/100 bei 100% Datenvertrauen und 18% Timing-Risiko."
+      ],
+      "options": [
+        {
+          "delayMinutes": 5,
+          "score": 70,
+          "confidencePct": 70,
+          "expectedCurationPct": 83,
+          "riskPct": 30,
+          "label": "5 min nach Post-Erstellung"
+        },
+        {
+          "delayMinutes": 10,
+          "score": 80,
+          "confidencePct": 97,
+          "expectedCurationPct": 89,
+          "riskPct": 21,
+          "label": "10 min nach Post-Erstellung"
+        },
+        {
+          "delayMinutes": 15,
+          "score": 84,
+          "confidencePct": 100,
+          "expectedCurationPct": 92,
+          "riskPct": 18,
+          "label": "15 min nach Post-Erstellung"
+        }
+      ]
+    }
   },
   "feeInvoice": {
     "amountUsd": 0.08,
     "feePostAuthor": "votebroker",
     "feePostPermlink": "monthly-fees",
     "requiredVoteWeightBps": 94,
-    "status": "open"
+    "status": "open",
+    "billingMode": "billable",
+    "transparency": {
+      "headline": "Billable Mode",
+      "detail": "Die Fee kann voraussichtlich mit 0.94% Vote-Gewicht gedeckt werden.",
+      "userMessage": "Die Plattformgebuehr wird transparent per Fee-Post-Vote beglichen.",
+      "donationAllowed": false,
+      "feeRequired": true,
+      "reasons": [
+        "Der Account kann die Fee voraussichtlich mit angemessenem Vote-Gewicht decken.",
+        "Die Gebuehr wird transparent ueber den ausgewiesenen Fee-Post-Vote beglichen."
+      ]
+    }
   }
 }
 ```
+
+### Quote A Vote With Manual Timing
+
+```bash
+curl -X POST http://localhost:3000/api/votes/quote \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "demo",
+    "author": "alice",
+    "permlink": "example-post",
+    "desiredVoteUsd": 2.5,
+    "timingMode": "manual",
+    "voteDelayMinutes": 20,
+    "postCreatedAt": "2026-05-26T10:00:00.000Z"
+  }'
+```
+
+The response keeps the selected delay and includes a calculated `scheduledAt` timestamp.
 
 ### Settle A Fee Invoice
 
@@ -271,6 +367,9 @@ const quote = quoteUsdVote({
   author: "alice",
   permlink: "example-post",
   desiredVoteUsd: 2.5,
+  timing: {
+    mode: "auto"
+  },
   account: {
     username: "demo",
     votingPowerBps: 8000,
@@ -281,6 +380,7 @@ const quote = quoteUsdVote({
 });
 
 console.log(quote.voteWeightBps); // 3125 = 31.25%
+console.log(quote.timing.selectedDelayMinutes); // 15
 ```
 
 ## Test Status
@@ -296,8 +396,11 @@ npm test           PASS
 Covered domain behavior:
 
 - USD vote quote calculation
+- auto and manual vote timing recommendation
 - fee invoice calculation
+- fair-use payment modes for free, donation, billable, grace, and paused accounts
 - account pause state after repeated underfunded fee votes
+- community pool account health scoring
 
 ## Design Principles
 
@@ -310,6 +413,8 @@ Covered domain behavior:
 ## Current Limitations
 
 - Account power, vote value, and invoices are mocked in memory.
+- Vote timing uses seeded performance buckets until real execution history is stored.
+- Community pool data is currently demo-backed rather than persisted.
 - Fee settlement is estimated, not verified against real blockchain transactions.
 - Consent storage for automated fee-post votes is represented as a port but not implemented.
 - The current UI is a focused workflow prototype, not a complete dashboard.
@@ -322,6 +427,7 @@ Covered domain behavior:
 - Implement Hive/Steem/Blurt account power provider.
 - Implement live price/reward-fund provider.
 - Implement vote broadcaster for post votes and fee-post votes.
+- Persist vote execution history for timing recommendations.
 - Verify real chain transactions before settlement.
 
 ### Phase 2: Persistence And Auth
@@ -330,10 +436,13 @@ Covered domain behavior:
 - Store account billing status and failure counters.
 - Add user authentication and signed consent for automated fee-post votes.
 - Add audit log for every vote, invoice, and settlement attempt.
+- Persist community pools, memberships, policies, and health score inputs.
 
 ### Phase 3: Product UX
 
 - Add account dashboard.
+- Add pool administration for member roles, curation rules, budgets, and allowed tags.
+- Add timing analytics that compare manual slots with Auto Timing outcomes.
 - Add fee-post transparency page.
 - Add warnings for low voting power before automation fails.
 - Add admin unlock and manual payment workflow.

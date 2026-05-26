@@ -1,18 +1,22 @@
 import {
   assessFeeVote,
+  summarizeCommunityPool,
 } from "@votebroker/domain";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { feePolicy } from "./config.js";
 import { hasConsent } from "./consent/consentStore.js";
-import { getAccount, invoices, saveAccount } from "./mockStore.js";
+import { getAccount, getCommunityPool, invoices, saveAccount } from "./mockStore.js";
 import { voteBrokerWorkflow } from "./workflows.js";
 
 const quoteSchema = z.object({
   username: z.string().min(1),
   author: z.string().min(1),
   permlink: z.string().min(1),
-  desiredVoteUsd: z.number().positive()
+  desiredVoteUsd: z.number().positive(),
+  timingMode: z.enum(["manual", "auto"]).optional(),
+  voteDelayMinutes: z.number().int().min(5).max(30).optional(),
+  postCreatedAt: z.string().datetime().optional()
 });
 
 const settleSchema = z.object({
@@ -39,6 +43,23 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       feeInvoice: invoice,
       feePolicy
     };
+  });
+
+  app.get("/api/community/overview", async (request, reply) => {
+    const query = z.object({
+      username: z.string().min(1).optional(),
+      pool: z.string().min(1).optional()
+    }).safeParse(request.query);
+
+    if (!query.success) {
+      return reply.code(400).send({ error: "invalid_request", detail: query.error.flatten() });
+    }
+
+    const username = query.data.username ?? "demo";
+    const pool = getCommunityPool(query.data.pool);
+    const account = getAccount(username);
+
+    return summarizeCommunityPool({ account, pool, username });
   });
 
   app.post("/api/fees/settle", async (request, reply) => {

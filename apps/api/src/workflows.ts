@@ -11,7 +11,12 @@ export const voteBrokerWorkflow: VoteBrokerWorkflow = {
       author: params.author,
       permlink: params.permlink,
       desiredVoteUsd: params.desiredVoteUsd,
-      account
+      account,
+      timing: {
+        mode: params.timingMode ?? "auto",
+        delayMinutes: params.voteDelayMinutes,
+        postCreatedAt: params.postCreatedAt
+      }
     });
     const invoice = createFeeInvoice({
       id: randomUUID(),

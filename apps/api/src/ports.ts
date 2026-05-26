@@ -1,4 +1,5 @@
 import type { FeeInvoice, VoteQuote, VotingAccountSnapshot } from "@votebroker/domain";
+import type { VoteTimingMode } from "@votebroker/domain";
 
 export interface AccountPowerProvider {
   getAccountSnapshot(username: string): Promise<VotingAccountSnapshot>;
@@ -30,5 +31,8 @@ export interface VoteBrokerWorkflow {
     author: string;
     permlink: string;
     desiredVoteUsd: number;
+    timingMode?: VoteTimingMode;
+    voteDelayMinutes?: number;
+    postCreatedAt?: string;
   }): Promise<{ account: VotingAccountSnapshot; quote: VoteQuote; invoice: FeeInvoice }>;
 }

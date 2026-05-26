@@ -1,4 +1,5 @@
 import type { BasisPoints, VoteQuote, VoteQuoteRequest } from "./types.js";
+import { recommendVoteTiming } from "./voteTiming.js";
 
 export const MAX_BPS = 10_000;
 
@@ -18,6 +19,10 @@ export function getAvailableFullVoteUsd(fullPowerVoteUsd: number, votingPowerBps
 
 export function quoteUsdVote(request: VoteQuoteRequest): VoteQuote {
   const warnings: string[] = [];
+  const timing = recommendVoteTiming({
+    account: request.account,
+    request: request.timing
+  });
   const availableFullVoteUsd = getAvailableFullVoteUsd(
     request.account.fullPowerVoteUsd,
     request.account.votingPowerBps
@@ -31,7 +36,8 @@ export function quoteUsdVote(request: VoteQuoteRequest): VoteQuote {
       expectedVoteUsd: 0,
       voteWeightBps: 0,
       capped: false,
-      warnings: ["Der gewuenschte USD-Wert muss groesser als 0 sein."]
+      warnings: ["Der gewuenschte USD-Wert muss groesser als 0 sein."],
+      timing
     };
   }
 
@@ -43,7 +49,8 @@ export function quoteUsdVote(request: VoteQuoteRequest): VoteQuote {
       expectedVoteUsd: 0,
       voteWeightBps: 0,
       capped: true,
-      warnings: ["Aktuell ist kein wirksamer Vote-Wert verfuegbar."]
+      warnings: ["Aktuell ist kein wirksamer Vote-Wert verfuegbar."],
+      timing
     };
   }
 
@@ -63,7 +70,8 @@ export function quoteUsdVote(request: VoteQuoteRequest): VoteQuote {
     expectedVoteUsd,
     voteWeightBps,
     capped,
-    warnings
+    warnings,
+    timing
   };
 }
 

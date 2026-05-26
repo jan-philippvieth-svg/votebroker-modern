@@ -14,6 +14,22 @@ export interface VoteQuoteResponse {
     voteWeightBps: number;
     capped: boolean;
     warnings: string[];
+    timing: {
+      mode: "manual" | "auto";
+      selectedDelayMinutes: number;
+      scheduledAt: string | null;
+      confidencePct: number;
+      score: number;
+      rationale: string[];
+      options: Array<{
+        delayMinutes: number;
+        score: number;
+        confidencePct: number;
+        expectedCurationPct: number;
+        riskPct: number;
+        label: string;
+      }>;
+    };
   };
   feeInvoice: {
     id: string;
@@ -21,7 +37,16 @@ export interface VoteQuoteResponse {
     feePostAuthor: string;
     feePostPermlink: string;
     requiredVoteWeightBps: number;
-    status: "open" | "settled" | "underfunded";
+    status: "open" | "settled" | "underfunded" | "waived" | "donation_optional";
+    billingMode: "free" | "donation" | "billable" | "grace" | "paused";
+    transparency: {
+      headline: string;
+      detail: string;
+      userMessage: string;
+      donationAllowed: boolean;
+      feeRequired: boolean;
+      reasons: string[];
+    };
   };
   feePolicy: {
     feeBps: number;
@@ -30,6 +55,62 @@ export interface VoteQuoteResponse {
 }
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:3000";
+
+export type PoolRole = "owner" | "admin" | "curator" | "member";
+export type PoolMembershipStatus = "active" | "limited" | "paused";
+
+export interface CommunityPoolOverview {
+  pool: {
+    id: string;
+    name: string;
+    slug: string;
+    description: string;
+    members: Array<{
+      username: string;
+      role: PoolRole;
+      delegatedSp: number;
+      votingPowerBps: number;
+      consentActive: boolean;
+      feeReliabilityPct: number;
+      executionReliabilityPct: number;
+      status: PoolMembershipStatus;
+    }>;
+    policy: {
+      maxVoteUsdPerPost: number;
+      dailyVoteBudgetUsd: number;
+      minVotingPowerBps: number;
+      feeBps: number;
+      requireFeePostConsent: boolean;
+      requirePoolConsent: boolean;
+      allowedTags: string[];
+      blockedAuthors: string[];
+    };
+    stats: {
+      poolPowerSp: number;
+      activeMembers: number;
+      curatedUsd30d: number;
+      feesUsd30d: number;
+      pendingFeesUsd: number;
+      scheduledVotesUsd: number;
+      executionRatePct: number;
+      fairnessPct: number;
+    };
+  };
+  health: {
+    username: string;
+    score: number;
+    status: "excellent" | "healthy" | "watch" | "blocked";
+    summary: string;
+    factors: Array<{
+      key: string;
+      label: string;
+      score: number;
+      weight: number;
+      detail: string;
+    }>;
+    recommendations: string[];
+  };
+}
 
 export interface AuthSession {
   token: string;
@@ -151,6 +232,8 @@ export async function quoteVote(payload: {
   author: string;
   permlink: string;
   desiredVoteUsd: number;
+  timingMode?: "manual" | "auto";
+  voteDelayMinutes?: number;
 }): Promise<VoteQuoteResponse> {
   const response = await fetch(`${API_BASE}/api/votes/quote`, {
     method: "POST",
@@ -160,6 +243,15 @@ export async function quoteVote(payload: {
 
   if (!response.ok) {
     throw new Error("Quote konnte nicht erstellt werden.");
+  }
+
+  return response.json();
+}
+
+export async function getCommunityOverview(username: string): Promise<CommunityPoolOverview> {
+  const response = await fetch(`${API_BASE}/api/community/overview?username=${encodeURIComponent(username)}`);
+  if (!response.ok) {
+    throw new Error("Community Pool konnte nicht geladen werden.");
   }
 
   return response.json();

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assessFeeVote, createFeeInvoice, quoteUsdVote } from "./index.js";
-import type { FeePolicy, VotingAccountSnapshot } from "./index.js";
+import { assessFeeVote, calculateAccountHealthScore, createFeeInvoice, quoteUsdVote, recommendVoteTiming } from "./index.js";
+import type { CommunityPoolMember, FeePolicy, VotingAccountSnapshot } from "./index.js";
 
 const account: VotingAccountSnapshot = {
   username: "alice",
@@ -17,7 +17,11 @@ const policy: FeePolicy = {
   feePostAuthor: "votebroker",
   feePostPermlink: "fees-2026-05",
   warningAfterFailures: 2,
-  pauseAfterFailures: 4
+  pauseAfterFailures: 4,
+  freeUntilVoteUsd: 0.25,
+  donationUntilVoteUsd: 1,
+  maxFeeVoteWeightBps: 2_000,
+  graceConsecutiveFailures: 2
 };
 
 test("quotes a vote by desired USD amount", () => {
@@ -45,6 +49,7 @@ test("creates fee invoice from expected vote value", () => {
   assert.equal(invoice.amountUsd, 0.12);
   assert.equal(invoice.feePostAuthor, "votebroker");
   assert.equal(invoice.requiredVoteWeightBps, 150);
+  assert.equal(invoice.billingMode, "billable");
 });
 
 test("pauses account after repeated underfunded fee votes", () => {
@@ -64,4 +69,110 @@ test("pauses account after repeated underfunded fee votes", () => {
 
   assert.equal(assessment.invoice.status, "underfunded");
   assert.equal(assessment.accountStatus, "paused");
+});
+
+test("calculates explainable account health score for pool automation", () => {
+  const member: CommunityPoolMember = {
+    username: "alice",
+    role: "curator",
+    delegatedSp: 7200,
+    votingPowerBps: 8_000,
+    consentActive: true,
+    feeReliabilityPct: 96,
+    executionReliabilityPct: 98,
+    status: "active"
+  };
+
+  const health = calculateAccountHealthScore({
+    account,
+    member,
+    pendingFeesUsd: 0.08
+  });
+
+  assert.equal(health.status, "excellent");
+  assert.equal(health.factors.length, 5);
+  assert.ok(health.score >= 86);
+});
+
+test("blocks health score when pool consent is missing", () => {
+  const member: CommunityPoolMember = {
+    username: "alice",
+    role: "curator",
+    delegatedSp: 7200,
+    votingPowerBps: 8_000,
+    consentActive: false,
+    feeReliabilityPct: 82,
+    executionReliabilityPct: 88,
+    status: "paused"
+  };
+
+  const health = calculateAccountHealthScore({
+    account,
+    member,
+    pendingFeesUsd: 2
+  });
+
+  assert.equal(health.status, "watch");
+  assert.ok(health.recommendations.includes("Pool-, Vote- und Fee-Post-Consent vollstaendig bestaetigen."));
+});
+
+test("recommends an automatic vote timing slot from observed buckets", () => {
+  const timing = recommendVoteTiming({ account });
+
+  assert.equal(timing.mode, "auto");
+  assert.equal(timing.selectedDelayMinutes, 15);
+  assert.ok(timing.score >= 80);
+  assert.equal(timing.options.length, 6);
+});
+
+test("keeps manual vote timing when user selects a delay", () => {
+  const quote = quoteUsdVote({
+    author: "bob",
+    permlink: "timed-post",
+    desiredVoteUsd: 4,
+    account,
+    timing: {
+      mode: "manual",
+      delayMinutes: 20,
+      postCreatedAt: "2026-05-26T10:00:00.000Z"
+    }
+  });
+
+  assert.equal(quote.timing.mode, "manual");
+  assert.equal(quote.timing.selectedDelayMinutes, 20);
+  assert.equal(quote.timing.scheduledAt, "2026-05-26T10:20:00.000Z");
+});
+
+test("waives mandatory fees for very small fair-use votes", () => {
+  const quote = quoteUsdVote({
+    author: "bob",
+    permlink: "small-post",
+    desiredVoteUsd: 0.2,
+    account
+  });
+  const invoice = createFeeInvoice({ id: "fee_free", account, quote, policy });
+
+  assert.equal(invoice.billingMode, "free");
+  assert.equal(invoice.status, "waived");
+  assert.equal(invoice.amountUsd, 0);
+  assert.equal(invoice.transparency.feeRequired, false);
+});
+
+test("offers donation mode when mandatory billing would be unfair", () => {
+  const tinyAccount = {
+    ...account,
+    votingPowerBps: 500,
+    fullPowerVoteUsd: 10
+  };
+  const quote = quoteUsdVote({
+    author: "bob",
+    permlink: "starter-post",
+    desiredVoteUsd: 0.8,
+    account: tinyAccount
+  });
+  const invoice = createFeeInvoice({ id: "fee_donation", account: tinyAccount, quote, policy });
+
+  assert.equal(invoice.billingMode, "donation");
+  assert.equal(invoice.status, "donation_optional");
+  assert.equal(invoice.transparency.donationAllowed, true);
 });

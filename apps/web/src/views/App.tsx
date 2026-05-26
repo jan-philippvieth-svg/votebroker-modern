@@ -4,16 +4,20 @@ import {
   BarChart3,
   CheckCircle2,
   ChevronDown,
+  Clock3,
   Gauge,
   LineChart,
+  Network,
   Send,
   ShieldCheck,
   TrendingUp,
+  Users,
   WalletCards
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   completeSteemConnectLogin,
+  getCommunityOverview,
   getConsentCatalog,
   getConsentState,
   getSteemConnectUrl,
@@ -22,6 +26,7 @@ import {
   revokeConsent,
   signOut,
   type AuthSession,
+  type CommunityPoolOverview,
   type ConsentRecord,
   type ConsentState,
   type ConsentType,
@@ -63,6 +68,8 @@ const voteFlow = [
   { label: "Paused risk", value: "Low", color: "orange" }
 ];
 
+const timingDelayOptions = [5, 10, 15, 20, 25, 30];
+
 export function App() {
   const [locale, setLocale] = useState<Locale>(() => (window.localStorage.getItem("votebroker.locale") as Locale | null) ?? "de");
   const [session, setSession] = useState<AuthSession | null>(() => {
@@ -73,12 +80,16 @@ export function App() {
   const [author, setAuthor] = useState("authorname");
   const [permlink, setPermlink] = useState("example-post");
   const [desiredVoteUsd, setDesiredVoteUsd] = useState(2.5);
+  const [timingMode, setTimingMode] = useState<"auto" | "manual">("auto");
+  const [voteDelayMinutes, setVoteDelayMinutes] = useState(15);
   const [result, setResult] = useState<VoteQuoteResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [consentCatalog, setConsentCatalog] = useState<ConsentRecord[]>([]);
   const [consentState, setConsentState] = useState<ConsentState | null>(null);
   const [consentError, setConsentError] = useState<string | null>(null);
+  const [communityOverview, setCommunityOverview] = useState<CommunityPoolOverview | null>(null);
+  const [communityError, setCommunityError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [consentLoading, setConsentLoading] = useState<ConsentType | null>(null);
@@ -100,6 +111,15 @@ export function App() {
       .then(setConsentState)
       .catch((err) => setConsentError(err instanceof Error ? err.message : "Consent state could not be loaded"));
   }, [session]);
+
+  useEffect(() => {
+    getCommunityOverview(username)
+      .then((overview) => {
+        setCommunityOverview(overview);
+        setCommunityError(null);
+      })
+      .catch((err) => setCommunityError(err instanceof Error ? err.message : "Community pool could not be loaded"));
+  }, [username]);
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -138,7 +158,14 @@ export function App() {
     setError(null);
 
     try {
-      const quote = await quoteVote({ username, author, permlink, desiredVoteUsd });
+      const quote = await quoteVote({
+        username,
+        author,
+        permlink,
+        desiredVoteUsd,
+        timingMode,
+        voteDelayMinutes: timingMode === "manual" ? voteDelayMinutes : undefined
+      });
       setResult(quote);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
@@ -231,7 +258,7 @@ export function App() {
         t={t}
       />
 
-      <Dashboard />
+      <Dashboard communityError={communityError} overview={communityOverview} />
 
       <section className="workspace">
         <form className="panel vote-form" onSubmit={submit}>
@@ -267,6 +294,45 @@ export function App() {
             />
           </label>
 
+          <div className="timing-control">
+            <div className="panel-title compact-title">
+              <Clock3 size={18} />
+              <h2>Vote Timing</h2>
+            </div>
+            <div className="segmented-control">
+              <button
+                className={timingMode === "auto" ? "selected" : ""}
+                type="button"
+                onClick={() => setTimingMode("auto")}
+              >
+                Auto
+              </button>
+              <button
+                className={timingMode === "manual" ? "selected" : ""}
+                type="button"
+                onClick={() => setTimingMode("manual")}
+              >
+                Manuell
+              </button>
+            </div>
+            {timingMode === "manual" ? (
+              <div className="delay-grid">
+                {timingDelayOptions.map((minutes) => (
+                  <button
+                    className={voteDelayMinutes === minutes ? "selected" : ""}
+                    key={minutes}
+                    type="button"
+                    onClick={() => setVoteDelayMinutes(minutes)}
+                  >
+                    {minutes} min
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="timing-hint">Auto waehlt den Slot mit bestem Score aus Curation, Risiko, Konkurrenz und Datenvertrauen.</p>
+            )}
+          </div>
+
           <button disabled={loading} type="submit">
             <Send size={16} />
             {loading ? t("calculating") : t("calculateQuote")}
@@ -293,9 +359,12 @@ export function App() {
               <div className="metric-grid">
                 <Metric label={t("voteValue")} value={`$${result.quote.expectedVoteUsd.toFixed(2)}`} />
                 <Metric label={t("voteWeight")} value={`${votePercent}%`} />
-                <Metric label={t("fee")} value={`$${result.feeInvoice.amountUsd.toFixed(2)}`} />
+                <Metric label={t("fee")} value={result.feeInvoice.amountUsd > 0 ? `$${result.feeInvoice.amountUsd.toFixed(2)}` : "Fair Use"} />
                 <Metric label={t("feeVote")} value={`${(result.feeInvoice.requiredVoteWeightBps / 100).toFixed(2)}%`} />
               </div>
+
+              <TimingResult timing={result.quote.timing} />
+              <BillingTransparency invoice={result.feeInvoice} />
 
               <div className="billing-strip">
                 <span>{t("status")}</span>
@@ -318,6 +387,71 @@ export function App() {
         </section>
       </section>
     </main>
+  );
+}
+
+function BillingTransparency(props: { invoice: VoteQuoteResponse["feeInvoice"] }) {
+  const modeTone = props.invoice.billingMode === "billable" || props.invoice.billingMode === "grace"
+    ? "billable"
+    : props.invoice.billingMode === "paused"
+      ? "paused"
+      : "free";
+
+  return (
+    <section className={`billing-transparency ${modeTone}`}>
+      <div className="billing-transparency-head">
+        <div>
+          <span>Payment Rule</span>
+          <strong>{props.invoice.transparency.headline}</strong>
+        </div>
+        <b>{props.invoice.billingMode}</b>
+      </div>
+      <p>{props.invoice.transparency.userMessage}</p>
+      <small>{props.invoice.transparency.detail}</small>
+      <ul>
+        {props.invoice.transparency.reasons.map((reason) => (
+          <li key={reason}>{reason}</li>
+        ))}
+      </ul>
+      {props.invoice.transparency.donationAllowed && (
+        <div className="donation-strip">
+          Freiwilliger Support-Vote ist erlaubt, aber keine Pflicht.
+        </div>
+      )}
+    </section>
+  );
+}
+
+function TimingResult(props: { timing: VoteQuoteResponse["quote"]["timing"] }) {
+  const bestOptions = [...props.timing.options].sort((left, right) => right.score - left.score).slice(0, 3);
+
+  return (
+    <section className="timing-result">
+      <div className="timing-result-head">
+        <div>
+          <span>Vote Timing</span>
+          <strong>{props.timing.selectedDelayMinutes} min nach Post-Erstellung</strong>
+        </div>
+        <div className="timing-score">
+          <span>{props.timing.score}</span>
+          Score
+        </div>
+      </div>
+      <div className="timing-rationale">
+        {props.timing.rationale.map((entry) => (
+          <p key={entry}>{entry}</p>
+        ))}
+      </div>
+      <div className="timing-options">
+        {bestOptions.map((option) => (
+          <div className={option.delayMinutes === props.timing.selectedDelayMinutes ? "selected" : ""} key={option.delayMinutes}>
+            <strong>{option.delayMinutes} min</strong>
+            <span>{option.score}/100</span>
+            <small>{option.riskPct}% Risiko</small>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -474,7 +608,7 @@ function Metric(props: { label: string; value: string }) {
   );
 }
 
-function Dashboard() {
+function Dashboard(props: { communityError: string | null; overview: CommunityPoolOverview | null }) {
   const maxCurated = Math.max(...curationSeries.map((entry) => entry.curated));
   const trendPoints = curationSeries
     .map((entry, index) => {
@@ -597,6 +731,122 @@ function Dashboard() {
           </div>
         </section>
       </div>
+
+      <CommunityPoolSection communityError={props.communityError} overview={props.overview} />
+    </section>
+  );
+}
+
+function CommunityPoolSection(props: { communityError: string | null; overview: CommunityPoolOverview | null }) {
+  if (props.communityError) {
+    return (
+      <section className="panel pool-panel">
+        <div className="notice danger">
+          <AlertTriangle size={16} />
+          {props.communityError}
+        </div>
+      </section>
+    );
+  }
+
+  const overview = props.overview;
+  if (!overview) {
+    return (
+      <section className="panel pool-panel">
+        <div className="empty-state">Community Pool wird geladen.</div>
+      </section>
+    );
+  }
+
+  const feeRatio = overview.pool.stats.feesUsd30d / overview.pool.stats.curatedUsd30d;
+  const healthTone = overview.health.status === "excellent" || overview.health.status === "healthy"
+    ? "good"
+    : overview.health.status === "watch"
+      ? "watch"
+      : "blocked";
+
+  return (
+    <section className="pool-grid">
+      <section className="panel pool-panel">
+        <div className="panel-title compact-title">
+          <Users size={20} />
+          <h2>Community Pool</h2>
+        </div>
+        <div className="pool-headline">
+          <div>
+            <span>{overview.pool.name}</span>
+            <strong>{overview.pool.stats.poolPowerSp.toLocaleString("de-DE")} SP</strong>
+            <p>{overview.pool.description}</p>
+          </div>
+          <div className="pool-badge">
+            {overview.pool.stats.activeMembers}/{overview.pool.members.length} aktiv
+          </div>
+        </div>
+
+        <div className="pool-metrics">
+          <Metric label="Curated 30d" value={`$${overview.pool.stats.curatedUsd30d.toFixed(2)}`} />
+          <Metric label="Fees 30d" value={`$${overview.pool.stats.feesUsd30d.toFixed(2)}`} />
+          <Metric label="Scheduled Votes" value={`$${overview.pool.stats.scheduledVotesUsd.toFixed(2)}`} />
+          <Metric label="Fee Ratio" value={`${(feeRatio * 100).toFixed(1)}%`} />
+        </div>
+
+        <div className="policy-strip">
+          <span>Pool-Regeln</span>
+          <strong>Max ${overview.pool.policy.maxVoteUsdPerPost.toFixed(2)} pro Post</strong>
+          <strong>{overview.pool.policy.dailyVoteBudgetUsd.toFixed(2)} USD Tagesbudget</strong>
+          <strong>{(overview.pool.policy.minVotingPowerBps / 100).toFixed(0)}% min. Voting Power</strong>
+        </div>
+
+        <div className="member-list">
+          {overview.pool.members.map((member) => (
+            <div className="member-row" key={member.username}>
+              <div>
+                <strong>@{member.username}</strong>
+                <span>{member.role} - {member.delegatedSp.toLocaleString("de-DE")} SP</span>
+              </div>
+              <span className={`member-status ${member.status}`}>{member.status}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel health-panel">
+        <div className="panel-title compact-title">
+          <Network size={20} />
+          <h2>Account Health Score</h2>
+        </div>
+        <div className={`health-score ${healthTone}`}>
+          <span>{overview.health.score}</span>
+          <strong>{overview.health.status}</strong>
+        </div>
+        <p className="health-summary">{overview.health.summary}</p>
+
+        <div className="factor-list">
+          {overview.health.factors.map((factor) => (
+            <div className="factor-row" key={factor.key}>
+              <div>
+                <strong>{factor.label}</strong>
+                <span>{factor.detail}</span>
+              </div>
+              <div className="factor-meter" style={{ "--score": `${factor.score}%` } as React.CSSProperties}>
+                <i />
+              </div>
+              <b>{factor.score}</b>
+            </div>
+          ))}
+        </div>
+
+        <div className="recommendations">
+          <span>Naechste sinnvolle Schritte</span>
+          {overview.health.recommendations.length === 0 ? (
+            <strong>Alles stabil. Pool-Automation kann konservativ laufen.</strong>
+          ) : (
+            overview.health.recommendations.map((recommendation) => (
+              <strong key={recommendation}>{recommendation}</strong>
+            ))
+          )}
+        </div>
+      </section>
     </section>
   );
 }
