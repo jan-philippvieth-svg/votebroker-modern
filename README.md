@@ -156,6 +156,7 @@ VOTEBROKER_FREE_UNTIL_VOTE_USD=0.25
 VOTEBROKER_DONATION_UNTIL_VOTE_USD=1
 VOTEBROKER_MAX_FEE_VOTE_WEIGHT_BPS=2000
 VOTEBROKER_GRACE_CONSECUTIVE_FAILURES=2
+VOTEBROKER_OPERATOR_TOKEN=change-me
 VITE_API_BASE=http://localhost:3000
 STEEMCONNECT_HOST=https://api.steemconnect.com
 STEEMCONNECT_CLIENT_ID=votebroker
@@ -355,6 +356,17 @@ curl -X POST http://localhost:3000/api/fees/settle \
 ```
 
 This endpoint currently simulates settlement against the in-memory account snapshot. In production it should verify the actual chain transaction before marking an invoice as settled.
+
+### Internal Operator Overview
+
+The internal operator dashboard is available at `/operator` in the web app and reads only real runtime data from invoices and accounts. It is protected by `VOTEBROKER_OPERATOR_TOKEN`.
+
+```bash
+curl http://localhost:3000/api/operator/overview \
+  -H "x-operator-token: change-me"
+```
+
+If no invoices exist yet, revenue values are `0` and lists are empty. The endpoint does not fabricate demo revenue.
 
 ## Domain Example
 

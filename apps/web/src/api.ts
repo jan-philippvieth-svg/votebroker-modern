@@ -112,6 +112,56 @@ export interface CommunityPoolOverview {
   };
 }
 
+export interface OperatorOverview {
+  generatedAt: string;
+  revenue: {
+    settledFeeUsd: number;
+    pendingFeeUsd: number;
+    underfundedFeeUsd: number;
+    waivedFeeUsd: number;
+    donationValueUsd: number;
+    donationOpportunityUsd: number;
+    curationMovedUsd: number;
+    feeCoveragePct: number;
+  };
+  invoices: {
+    total: number;
+    settled: number;
+    open: number;
+    underfunded: number;
+    waived: number;
+    donationOptional: number;
+  };
+  accounts: {
+    total: number;
+    active: number;
+    warning: number;
+    paused: number;
+    paymentRequired: number;
+  };
+  billingModes: Record<"free" | "donation" | "billable" | "grace" | "paused", number>;
+  topAccounts: Array<{
+    username: string;
+    settledFeeUsd: number;
+    pendingFeeUsd: number;
+    waivedFeeUsd: number;
+    invoiceCount: number;
+  }>;
+  recentInvoices: Array<{
+    id: string;
+    username: string;
+    sourceAuthor: string;
+    sourcePermlink: string;
+    sourceExpectedVoteUsd: number;
+    nominalFeeUsd: number;
+    amountUsd: number;
+    requiredVoteWeightBps: number;
+    status: "open" | "settled" | "underfunded" | "waived" | "donation_optional";
+    billingMode: "free" | "donation" | "billable" | "grace" | "paused";
+    createdAt: string;
+  }>;
+}
+
 export interface AuthSession {
   token: string;
   expiry: string;
@@ -252,6 +302,21 @@ export async function getCommunityOverview(username: string): Promise<CommunityP
   const response = await fetch(`${API_BASE}/api/community/overview?username=${encodeURIComponent(username)}`);
   if (!response.ok) {
     throw new Error("Community Pool konnte nicht geladen werden.");
+  }
+
+  return response.json();
+}
+
+export async function getOperatorOverview(token: string): Promise<OperatorOverview> {
+  const response = await fetch(`${API_BASE}/api/operator/overview`, {
+    headers: {
+      "x-operator-token": token
+    }
+  });
+  if (!response.ok) {
+    throw new Error(response.status === 503
+      ? "Operator Dashboard ist serverseitig nicht konfiguriert."
+      : "Operator Dashboard konnte nicht geladen werden.");
   }
 
   return response.json();

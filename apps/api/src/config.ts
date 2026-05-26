@@ -12,3 +12,7 @@ export const feePolicy: FeePolicy = {
   maxFeeVoteWeightBps: Number(process.env.VOTEBROKER_MAX_FEE_VOTE_WEIGHT_BPS ?? 2_000),
   graceConsecutiveFailures: Number(process.env.VOTEBROKER_GRACE_CONSECUTIVE_FAILURES ?? 2)
 };
+
+export const operatorConfig = {
+  token: process.env.VOTEBROKER_OPERATOR_TOKEN ?? ""
+};

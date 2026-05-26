@@ -41,6 +41,8 @@ export function createFeeInvoice(params: {
     username: params.account.username,
     sourceAuthor: params.quote.author,
     sourcePermlink: params.quote.permlink,
+    sourceExpectedVoteUsd: params.quote.expectedVoteUsd,
+    nominalFeeUsd: roundUsd(rawFeeUsd),
     amountUsd: roundUsd(amountUsd),
     feePostAuthor: params.policy.feePostAuthor,
     feePostPermlink: params.policy.feePostPermlink,

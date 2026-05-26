@@ -2,6 +2,7 @@ import cors from "@fastify/cors";
 import Fastify from "fastify";
 import { registerAuthRoutes } from "./auth/routes.js";
 import { registerConsentRoutes } from "./consent/routes.js";
+import { registerOperatorRoutes } from "./operator/routes.js";
 import { registerRoutes } from "./routes.js";
 
 const app = Fastify({
@@ -13,6 +14,7 @@ await app.register(cors, {
 });
 await registerAuthRoutes(app);
 await registerConsentRoutes(app);
+await registerOperatorRoutes(app);
 await registerRoutes(app);
 
 const port = Number(process.env.PORT ?? 3000);

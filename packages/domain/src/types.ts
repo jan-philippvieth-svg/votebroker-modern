@@ -87,6 +87,8 @@ export interface FeeInvoice {
   username: string;
   sourceAuthor: string;
   sourcePermlink: string;
+  sourceExpectedVoteUsd: number;
+  nominalFeeUsd: number;
   amountUsd: number;
   feePostAuthor: string;
   feePostPermlink: string;
@@ -114,6 +116,46 @@ export interface BillingAssessment {
   settledUsd: number;
   missingUsd: number;
   warnings: string[];
+}
+
+export interface OperatorRevenueAccount {
+  username: string;
+  settledFeeUsd: number;
+  pendingFeeUsd: number;
+  waivedFeeUsd: number;
+  invoiceCount: number;
+}
+
+export interface OperatorOverview {
+  generatedAt: string;
+  revenue: {
+    settledFeeUsd: number;
+    pendingFeeUsd: number;
+    underfundedFeeUsd: number;
+    waivedFeeUsd: number;
+    donationValueUsd: number;
+    donationOpportunityUsd: number;
+    curationMovedUsd: number;
+    feeCoveragePct: number;
+  };
+  invoices: {
+    total: number;
+    settled: number;
+    open: number;
+    underfunded: number;
+    waived: number;
+    donationOptional: number;
+  };
+  accounts: {
+    total: number;
+    active: number;
+    warning: number;
+    paused: number;
+    paymentRequired: number;
+  };
+  billingModes: Record<BillingMode, number>;
+  topAccounts: OperatorRevenueAccount[];
+  recentInvoices: FeeInvoice[];
 }
 
 export type PoolRole = "owner" | "admin" | "curator" | "member";

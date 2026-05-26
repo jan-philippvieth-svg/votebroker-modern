@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assessFeeVote, calculateAccountHealthScore, createFeeInvoice, quoteUsdVote, recommendVoteTiming } from "./index.js";
+import { assessFeeVote, calculateAccountHealthScore, createFeeInvoice, createOperatorOverview, quoteUsdVote, recommendVoteTiming } from "./index.js";
 import type { CommunityPoolMember, FeePolicy, VotingAccountSnapshot } from "./index.js";
 
 const account: VotingAccountSnapshot = {
@@ -175,4 +175,34 @@ test("offers donation mode when mandatory billing would be unfair", () => {
   assert.equal(invoice.billingMode, "donation");
   assert.equal(invoice.status, "donation_optional");
   assert.equal(invoice.transparency.donationAllowed, true);
+});
+
+test("aggregates operator overview from actual invoices", () => {
+  const quote = quoteUsdVote({
+    author: "bob",
+    permlink: "operator-post",
+    desiredVoteUsd: 4,
+    account
+  });
+  const openInvoice = createFeeInvoice({ id: "fee_open", account, quote, policy });
+  const settledInvoice = { ...openInvoice, id: "fee_settled", status: "settled" as const };
+  const freeQuote = quoteUsdVote({
+    author: "bob",
+    permlink: "free-post",
+    desiredVoteUsd: 0.2,
+    account
+  });
+  const waivedInvoice = createFeeInvoice({ id: "fee_waived", account, quote: freeQuote, policy });
+
+  const overview = createOperatorOverview({
+    accounts: [account],
+    invoices: [openInvoice, settledInvoice, waivedInvoice],
+    now: new Date("2026-05-26T12:00:00.000Z")
+  });
+
+  assert.equal(overview.invoices.total, 3);
+  assert.equal(overview.revenue.pendingFeeUsd, 0.12);
+  assert.equal(overview.revenue.settledFeeUsd, 0.12);
+  assert.equal(overview.revenue.waivedFeeUsd, 0.05);
+  assert.equal(overview.topAccounts[0].username, "alice");
 });
