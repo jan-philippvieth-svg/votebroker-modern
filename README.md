@@ -493,6 +493,7 @@ Covered domain behavior:
 - [Consent Model](docs/CONSENT_MODEL.md)
 - [Deployment](docs/DEPLOYMENT.md)
 - [Migration Notes](docs/MIGRATION.md)
+- [Security Notes](docs/SECURITY.md)
 
 ## Portfolio Note
 

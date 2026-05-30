@@ -60,6 +60,8 @@ VOTEBROKER_FEE_POST_PERMLINK=monthly-fees
 
 The production default mirrors SteemDunk: code flow plus server-side broadcasting by the authorized VoteBroker account. User private keys are never stored.
 
+See [Security Notes](SECURITY.md) for the dsteem runtime dependency notes and the audit checklist.
+
 Optional manual token fallback:
 
 ```env

@@ -44,6 +44,54 @@ test("blocks vote without consent", () => {
   });
 });
 
+test("blocks vote when account is paused", () => {
+  const result = evaluateVoteBroadcastPolicy({
+    hasConsent: true,
+    hasPostingAuthority: true,
+    hasPostingWif: true,
+    accountStatus: "paused",
+    fullPowerVoteUsd: 10,
+    weightBps: 500
+  });
+
+  assert.deepEqual(result, {
+    allowed: false,
+    reason: "account_paused"
+  });
+});
+
+test("blocks vote when quote is implausible", () => {
+  const result = evaluateVoteBroadcastPolicy({
+    hasConsent: true,
+    hasPostingAuthority: true,
+    hasPostingWif: true,
+    accountStatus: "active",
+    fullPowerVoteUsd: 0,
+    weightBps: 500
+  });
+
+  assert.deepEqual(result, {
+    allowed: false,
+    reason: "implausible_quote"
+  });
+});
+
+test("blocks vote with invalid weight", () => {
+  const result = evaluateVoteBroadcastPolicy({
+    hasConsent: true,
+    hasPostingAuthority: true,
+    hasPostingWif: true,
+    accountStatus: "active",
+    fullPowerVoteUsd: 10,
+    weightBps: 10_001
+  });
+
+  assert.deepEqual(result, {
+    allowed: false,
+    reason: "invalid_weight"
+  });
+});
+
 test("allows vote with consent, posting authority, WIF, and plausible quote", () => {
   const result = evaluateVoteBroadcastPolicy({
     hasConsent: true,

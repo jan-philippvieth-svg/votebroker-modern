@@ -74,6 +74,8 @@ VOTEBROKER_MANUAL_TOKEN_FALLBACK=true
 
 Keep the client secret and `VOTEBROKER_POSTING_WIF` only in `.env` on the server. Never put either value into frontend code or Docker build args.
 
+See `docs/SECURITY.md` for the dsteem runtime dependency notes and the audit checklist.
+
 ## Production Readiness Matrix
 
 Production-ready:
