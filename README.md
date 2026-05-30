@@ -159,12 +159,17 @@ VOTEBROKER_MAX_FEE_VOTE_WEIGHT_BPS=2000
 VOTEBROKER_GRACE_CONSECUTIVE_FAILURES=2
 VOTEBROKER_OPERATOR_TOKEN=change-me
 VITE_API_BASE=http://localhost:3000
-STEEMCONNECT_HOST=https://hivesigner.com
+STEEMCONNECT_AUTH_HOST=https://v2.steemconnect.com
+STEEMCONNECT_API_HOST=https://api.steemconnect.com
 STEEMCONNECT_CLIENT_ID=votebroker
 STEEMCONNECT_CLIENT_SECRET=
-STEEMCONNECT_RESPONSE_TYPE=token
+STEEMCONNECT_RESPONSE_TYPE=code
 STEEMCONNECT_REDIRECT_URI=http://localhost:5173/auth/callback
-STEEMCONNECT_SCOPES=login,vote
+STEEMCONNECT_SCOPES=offline,vote
+STEEM_NODE_URL=https://api.steemit.com
+VOTEBROKER_BROADCAST_ACCOUNT=votebroker
+VOTEBROKER_POSTING_WIF=
+VOTEBROKER_MANUAL_TOKEN_FALLBACK=false
 ```
 
 ## API Examples
@@ -194,7 +199,7 @@ Response:
 
 ```json
 {
-  "url": "https://hivesigner.com/oauth2/authorize?client_id=votebroker&..."
+  "url": "https://v2.steemconnect.com/oauth2/authorize?client_id=votebroker&..."
 }
 ```
 
@@ -224,7 +229,7 @@ curl -X POST http://localhost:3000/api/auth/steemconnect/callback \
   }'
 ```
 
-For production, the default callback body uses the access-token flow:
+The access-token callback remains available for optional manual fallback mode:
 
 ```bash
 curl -X POST http://localhost:3000/api/auth/steemconnect/callback \

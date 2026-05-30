@@ -4,9 +4,16 @@ import {
 } from "@votebroker/domain";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { writeAuditEvent } from "./audit/auditLog.js";
 import { getSession } from "./auth/sessionStore.js";
 import { broadcastSteemConnectVote } from "./auth/steemConnect.js";
-import { feePolicy } from "./config.js";
+import {
+  broadcastServerSideVote,
+  createSteemClient,
+  evaluateVoteBroadcastPolicy,
+  getPostingAuthority
+} from "./chain/steemBroadcaster.js";
+import { broadcastConfig, feePolicy } from "./config.js";
 import { hasConsent } from "./consent/consentStore.js";
 import { getAccount, getCommunityPool, invoices, saveAccount } from "./mockStore.js";
 import { voteBrokerWorkflow } from "./workflows.js";
@@ -30,7 +37,8 @@ const settleSchema = z.object({
 const executeVoteSchema = z.object({
   author: z.string().min(1),
   permlink: z.string().min(1),
-  weightBps: z.number().int().min(1).max(10_000)
+  weightBps: z.number().int().min(1).max(10_000),
+  broadcastMode: z.enum(["server", "token"]).optional()
 });
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
@@ -57,11 +65,20 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   app.post("/api/votes/execute", async (request, reply) => {
     const session = getSession(getSessionHeader(request.headers.session));
-    if (!session?.user.accessToken) {
-      return reply.code(401).send({ error: "authorized_steemconnect_session_required" });
+    if (!session) {
+      return reply.code(401).send({ error: "authorized_session_required" });
     }
 
     if (!hasConsent(session.user.username, "target_vote")) {
+      const body = executeVoteSchema.partial().safeParse(request.body);
+      writeAuditEvent({
+        type: "vote_broadcast_blocked",
+        username: session.user.username,
+        author: body.success ? body.data.author ?? "unknown" : "unknown",
+        permlink: body.success ? body.data.permlink ?? "unknown" : "unknown",
+        weightBps: body.success ? body.data.weightBps ?? 0 : 0,
+        detail: "missing_consent"
+      });
       return reply.code(403).send({
         error: "target_vote_consent_required",
         detail: "Der Nutzer muss Zielvotes explizit bestaetigen, bevor VoteBroker einen Vote broadcastet."
@@ -73,12 +90,78 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: "invalid_request", detail: input.error.flatten() });
     }
 
-    const result = await broadcastSteemConnectVote({
-      accessToken: session.user.accessToken,
-      voter: session.user.username,
+    const account = getAccount(session.user.username);
+    const broadcastMode = input.data.broadcastMode ?? "server";
+    writeAuditEvent({
+      type: "vote_broadcast_attempt",
+      username: session.user.username,
       author: input.data.author,
       permlink: input.data.permlink,
-      weightBps: input.data.weightBps
+      weightBps: input.data.weightBps,
+      detail: `Attempting ${broadcastMode} vote broadcast`
+    });
+
+    let transactionId: string;
+    if (broadcastMode === "token") {
+      if (!broadcastConfig.manualTokenFallback) {
+        return reply.code(403).send({ error: "manual_token_fallback_disabled" });
+      }
+      if (!session.user.accessToken) {
+        return reply.code(401).send({ error: "authorized_steemconnect_token_required" });
+      }
+      const result = await broadcastSteemConnectVote({
+        accessToken: session.user.accessToken,
+        voter: session.user.username,
+        author: input.data.author,
+        permlink: input.data.permlink,
+        weightBps: input.data.weightBps
+      });
+      transactionId = result.transactionId;
+    } else {
+      const client = createSteemClient();
+      const hasAuthority = await getPostingAuthority({
+        client,
+        username: session.user.username
+      });
+      const policy = evaluateVoteBroadcastPolicy({
+        hasConsent: true,
+        hasPostingAuthority: hasAuthority,
+        hasPostingWif: Boolean(broadcastConfig.postingWif),
+        accountStatus: account.status,
+        fullPowerVoteUsd: account.fullPowerVoteUsd,
+        weightBps: input.data.weightBps
+      });
+      if (!policy.allowed) {
+        writeAuditEvent({
+          type: "vote_broadcast_blocked",
+          username: session.user.username,
+          author: input.data.author,
+          permlink: input.data.permlink,
+          weightBps: input.data.weightBps,
+          detail: policy.reason ?? "unknown"
+        });
+        return reply.code(policy.reason === "missing_posting_authority" ? 403 : 400).send({
+          error: policy.reason
+        });
+      }
+      const result = await broadcastServerSideVote({
+        client,
+        voter: session.user.username,
+        author: input.data.author,
+        permlink: input.data.permlink,
+        weightBps: input.data.weightBps
+      });
+      transactionId = result.transactionId;
+    }
+
+    writeAuditEvent({
+      type: "vote_broadcast_success",
+      username: session.user.username,
+      author: input.data.author,
+      permlink: input.data.permlink,
+      weightBps: input.data.weightBps,
+      transactionId,
+      detail: "Vote broadcast accepted"
     });
 
     return {
@@ -87,7 +170,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       author: input.data.author,
       permlink: input.data.permlink,
       weightBps: input.data.weightBps,
-      transactionId: result.transactionId
+      transactionId
     };
   });
 
@@ -110,8 +193,8 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   app.post("/api/fees/settle", async (request, reply) => {
     const session = getSession(getSessionHeader(request.headers.session));
-    if (!session?.user.accessToken) {
-      return reply.code(401).send({ error: "authorized_steemconnect_session_required" });
+    if (!session) {
+      return reply.code(401).send({ error: "authorized_session_required" });
     }
 
     const input = settleSchema.safeParse(request.body);
@@ -130,6 +213,14 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     }
 
     if (!hasConsent(account.username, "fee_post_vote")) {
+      writeAuditEvent({
+        type: "fee_vote_broadcast_blocked",
+        username: session.user.username,
+        author: invoice.feePostAuthor,
+        permlink: invoice.feePostPermlink,
+        weightBps: invoice.requiredVoteWeightBps,
+        detail: "missing_consent"
+      });
       return reply.code(403).send({
         error: "fee_post_consent_required",
         detail: "Der Nutzer muss Fee-Post-Votes explizit bestaetigen, bevor VoteBroker Gebuehrenpost-Votes ausfuehrt."
@@ -137,12 +228,55 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     }
 
     if (invoice.requiredVoteWeightBps > 0) {
-      await broadcastSteemConnectVote({
-        accessToken: session.user.accessToken,
+      writeAuditEvent({
+        type: "fee_vote_broadcast_attempt",
+        username: session.user.username,
+        author: invoice.feePostAuthor,
+        permlink: invoice.feePostPermlink,
+        weightBps: invoice.requiredVoteWeightBps,
+        detail: `Attempting fee vote settlement for invoice ${invoice.id}`
+      });
+      const client = createSteemClient();
+      const hasAuthority = await getPostingAuthority({
+        client,
+        username: session.user.username
+      });
+      const policy = evaluateVoteBroadcastPolicy({
+        hasConsent: true,
+        hasPostingAuthority: hasAuthority,
+        hasPostingWif: Boolean(broadcastConfig.postingWif),
+        accountStatus: account.status,
+        fullPowerVoteUsd: account.fullPowerVoteUsd,
+        weightBps: invoice.requiredVoteWeightBps
+      });
+      if (!policy.allowed) {
+        writeAuditEvent({
+          type: "fee_vote_broadcast_blocked",
+          username: session.user.username,
+          author: invoice.feePostAuthor,
+          permlink: invoice.feePostPermlink,
+          weightBps: invoice.requiredVoteWeightBps,
+          detail: policy.reason ?? "unknown"
+        });
+        return reply.code(policy.reason === "missing_posting_authority" ? 403 : 400).send({
+          error: policy.reason
+        });
+      }
+      const result = await broadcastServerSideVote({
+        client,
         voter: session.user.username,
         author: invoice.feePostAuthor,
         permlink: invoice.feePostPermlink,
         weightBps: invoice.requiredVoteWeightBps
+      });
+      writeAuditEvent({
+        type: "fee_vote_broadcast_success",
+        username: session.user.username,
+        author: invoice.feePostAuthor,
+        permlink: invoice.feePostPermlink,
+        weightBps: invoice.requiredVoteWeightBps,
+        transactionId: result.transactionId,
+        detail: `Fee vote settlement accepted for invoice ${invoice.id}`
       });
     }
 

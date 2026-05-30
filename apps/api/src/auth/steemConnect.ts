@@ -9,37 +9,21 @@ export interface BroadcastVoteResult {
   raw: unknown;
 }
 
-const host = process.env.STEEMCONNECT_HOST ?? process.env.HIVESIGNER_HOST ?? "https://hivesigner.com";
-const clientId = process.env.STEEMCONNECT_CLIENT_ID ?? "votebroker";
-const redirectUri = process.env.STEEMCONNECT_REDIRECT_URI ?? "http://localhost:5173/auth/callback";
-const clientSecret = process.env.STEEMCONNECT_CLIENT_SECRET ?? "";
-const scopes = process.env.STEEMCONNECT_SCOPES ?? "login,vote";
-const responseType = process.env.STEEMCONNECT_RESPONSE_TYPE ?? (scopes.split(",").includes("offline") ? "code" : "token");
+import { buildSteemConnectLoginUrl, getSteemConnectConfig, requireCodeFlowSecret } from "./steemConnectConfig.js";
 
 export function getSteemConnectLoginUrl(state?: string): string {
-  const url = new URL("/oauth2/authorize", host);
-  url.searchParams.set("client_id", clientId);
-  url.searchParams.set("redirect_uri", redirectUri);
-  url.searchParams.set("scope", scopes);
-  if (responseType === "code") {
-    url.searchParams.set("response_type", "code");
-  }
-  if (state) {
-    url.searchParams.set("state", state);
-  }
-  return url.toString();
+  return buildSteemConnectLoginUrl(getSteemConnectConfig(), state);
 }
 
 export async function exchangeSteemConnectCode(code: string): Promise<SteemConnectTokenResponse> {
-  if (!clientSecret) {
-    throw new Error("STEEMCONNECT_CLIENT_SECRET is not configured");
-  }
+  const config = getSteemConnectConfig();
+  requireCodeFlowSecret(config.clientSecret);
 
-  const url = new URL("/api/oauth2/token", host);
+  const url = new URL("/api/oauth2/token", config.apiHost);
   const body = new URLSearchParams({
     code,
-    client_secret: clientSecret,
-    redirect_uri: redirectUri,
+    client_secret: config.clientSecret,
+    redirect_uri: config.redirectUri,
     grant_type: "authorization_code"
   });
 
@@ -79,7 +63,7 @@ export async function completeSteemConnectAccessToken(accessToken: string, expir
 }
 
 export async function verifySteemConnectAccessToken(accessToken: string): Promise<string> {
-  const response = await fetch(new URL("/api/me", host), {
+  const response = await fetch(new URL("/api/me", getSteemConnectConfig().apiHost), {
     headers: {
       Authorization: accessToken,
       Accept: "application/json"
@@ -111,7 +95,7 @@ export async function broadcastSteemConnectVote(params: {
   permlink: string;
   weightBps: number;
 }): Promise<BroadcastVoteResult> {
-  const response = await fetch(new URL("/api/broadcast", host), {
+  const response = await fetch(new URL("/api/broadcast", getSteemConnectConfig().apiHost), {
     method: "POST",
     headers: {
       Authorization: params.accessToken,

@@ -34,14 +34,19 @@ Set at least:
 
 ```env
 VOTEBROKER_OPERATOR_TOKEN=use-a-long-random-secret
-STEEMCONNECT_HOST=https://hivesigner.com
+STEEMCONNECT_AUTH_HOST=https://v2.steemconnect.com
+STEEMCONNECT_API_HOST=https://api.steemconnect.com
 STEEMCONNECT_CLIENT_ID=votebroker
-STEEMCONNECT_RESPONSE_TYPE=token
+STEEMCONNECT_CLIENT_SECRET=your-steemconnect-client-secret
+STEEMCONNECT_RESPONSE_TYPE=code
 STEEMCONNECT_REDIRECT_URI=https://votebroker.org/auth/callback
-STEEMCONNECT_SCOPES=login,vote
+STEEMCONNECT_SCOPES=offline,vote
+STEEM_NODE_URL=https://api.steemit.com
+VOTEBROKER_BROADCAST_ACCOUNT=votebroker
+VOTEBROKER_POSTING_WIF=your-votebroker-posting-wif
 ```
 
-`STEEMCONNECT_CLIENT_SECRET` is only required when `STEEMCONNECT_RESPONSE_TYPE=code` is used, typically together with an `offline` scope. The default production mode is token/implicit flow, because HiveSigner redirects the browser back with an `access_token`.
+Production follows the proven SteemDunk pattern: SteemConnect code flow with `offline,vote`, a server-side client secret, and server-side broadcasting through the VoteBroker account's posting key. VoteBroker never stores private user keys.
 
 ## HiveSigner / SteemConnect App Setup
 
@@ -56,30 +61,32 @@ https://votebroker.org/auth/callback
 Required scopes for the current VoteBroker production flow:
 
 ```text
-login,vote
+offline,vote
 ```
 
-Optional code/offline flow:
+Optional manual fallback flow:
 
 ```text
-STEEMCONNECT_RESPONSE_TYPE=code
-STEEMCONNECT_SCOPES=offline,login,vote
-STEEMCONNECT_CLIENT_SECRET=<server-side-secret>
+STEEMCONNECT_RESPONSE_TYPE=token
+STEEMCONNECT_SCOPES=login,vote
+VOTEBROKER_MANUAL_TOKEN_FALLBACK=true
 ```
 
-Keep the client secret only in `.env` on the server. Never put it into frontend code.
+Keep the client secret and `VOTEBROKER_POSTING_WIF` only in `.env` on the server. Never put either value into frontend code or Docker build args.
 
 ## Production Readiness Matrix
 
 Production-ready:
 
 - Login URL generation with one-time OAuth state.
-- Callback handling for HiveSigner/SteemConnect `access_token`.
-- Optional server-side `code` exchange when explicitly configured.
+- SteemConnect code-flow callback with server-side secret.
+- Optional access-token callback for manual/fallback mode.
 - State/CSRF validation before session creation.
 - Token verification through signer `/api/me`.
-- Manual target vote broadcast through signer `/api/broadcast`.
-- Fee-post settlement broadcast through signer `/api/broadcast`, gated by `fee_post_vote` consent.
+- Server-side target vote broadcast using `VOTEBROKER_POSTING_WIF`.
+- Server-side fee-post settlement broadcast using `VOTEBROKER_POSTING_WIF`, gated by `fee_post_vote` consent.
+- Posting authority check before server-side vote broadcast.
+- In-memory audit log entries for attempts, blocks, and successful broadcasts.
 
 Stub/mock:
 

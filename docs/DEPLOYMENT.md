@@ -44,21 +44,28 @@ nano .env
 ```env
 VOTEBROKER_PUBLIC_URL=https://votebroker.org
 VOTEBROKER_OPERATOR_TOKEN=use-a-long-random-token
-STEEMCONNECT_HOST=https://hivesigner.com
+STEEMCONNECT_AUTH_HOST=https://v2.steemconnect.com
+STEEMCONNECT_API_HOST=https://api.steemconnect.com
 STEEMCONNECT_CLIENT_ID=votebroker
-STEEMCONNECT_RESPONSE_TYPE=token
+STEEMCONNECT_CLIENT_SECRET=your-secret
+STEEMCONNECT_RESPONSE_TYPE=code
 STEEMCONNECT_REDIRECT_URI=https://votebroker.org/auth/callback
-STEEMCONNECT_SCOPES=login,vote
+STEEMCONNECT_SCOPES=offline,vote
+STEEM_NODE_URL=https://api.steemit.com
+VOTEBROKER_BROADCAST_ACCOUNT=votebroker
+VOTEBROKER_POSTING_WIF=your-votebroker-posting-wif
 VOTEBROKER_FEE_POST_AUTHOR=votebroker
 VOTEBROKER_FEE_POST_PERMLINK=monthly-fees
 ```
 
-`STEEMCONNECT_CLIENT_SECRET` is only needed for the optional code/offline flow:
+The production default mirrors SteemDunk: code flow plus server-side broadcasting by the authorized VoteBroker account. User private keys are never stored.
+
+Optional manual token fallback:
 
 ```env
-STEEMCONNECT_RESPONSE_TYPE=code
-STEEMCONNECT_SCOPES=offline,login,vote
-STEEMCONNECT_CLIENT_SECRET=your-secret
+STEEMCONNECT_RESPONSE_TYPE=token
+STEEMCONNECT_SCOPES=login,vote
+VOTEBROKER_MANUAL_TOKEN_FALLBACK=true
 ```
 
 ## HiveSigner / SteemConnect
@@ -74,20 +81,22 @@ https://votebroker.org/auth/callback
 Required scopes:
 
 ```text
-login,vote
+offline,vote
 ```
 
-The default VoteBroker production flow expects HiveSigner/SteemConnect to redirect back with `access_token`, `expires_in`, and `state`. VoteBroker validates the one-time `state`, verifies the token through `/api/me`, and only then creates a local session.
+The default VoteBroker production flow expects SteemConnect to redirect back with `code` and `state`. VoteBroker validates the one-time `state`, exchanges the code server-side through `STEEMCONNECT_CLIENT_SECRET`, verifies the returned token through `/api/me`, and then creates a local session.
 
 ## Live Versus Mock
 
 Production-ready:
 
 - OAuth state creation and validation.
-- `access_token` callback handling.
-- optional `code` flow when `STEEMCONNECT_RESPONSE_TYPE=code` and a server-side secret are configured.
-- target vote broadcasting through `/api/broadcast`.
-- fee-post vote broadcasting through `/api/broadcast`, gated by explicit fee-post consent.
+- `code` callback handling with server-side secret.
+- optional `access_token` callback for manual/fallback mode.
+- target vote broadcasting with server-side VoteBroker posting key.
+- fee-post vote broadcasting with server-side VoteBroker posting key, gated by explicit fee-post consent.
+- posting authority validation before broadcasting.
+- in-memory audit log for attempts, blocks, and successful broadcasts.
 
 Still mock/stub:
 

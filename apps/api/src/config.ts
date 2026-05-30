@@ -16,3 +16,15 @@ export const feePolicy: FeePolicy = {
 export const operatorConfig = {
   token: process.env.VOTEBROKER_OPERATOR_TOKEN ?? ""
 };
+
+export const steemNetworkConfig = {
+  nodeUrl: process.env.STEEM_NODE_URL ?? "https://api.steemit.com",
+  chainId: process.env.STEEM_CHAIN_ID ?? "0000000000000000000000000000000000000000000000000000000000000000",
+  addressPrefix: process.env.STEEM_ADDRESS_PREFIX ?? "STM"
+};
+
+export const broadcastConfig = {
+  account: process.env.VOTEBROKER_BROADCAST_ACCOUNT ?? "votebroker",
+  postingWif: process.env.VOTEBROKER_POSTING_WIF ?? "",
+  manualTokenFallback: process.env.VOTEBROKER_MANUAL_TOKEN_FALLBACK === "true"
+};
