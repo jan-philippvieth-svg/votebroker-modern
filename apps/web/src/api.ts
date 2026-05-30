@@ -183,6 +183,15 @@ export interface AuthSession {
   };
 }
 
+export interface VoteExecutionResponse {
+  status: "broadcast";
+  voter: string;
+  author: string;
+  permlink: string;
+  weightBps: number;
+  transactionId: string;
+}
+
 export type ConsentType = "login" | "target_vote" | "fee_post_vote" | "auto_vote";
 
 export interface ConsentRecord {
@@ -213,11 +222,16 @@ export async function getSteemConnectUrl(): Promise<string> {
   return data.url;
 }
 
-export async function completeSteemConnectLogin(code: string): Promise<AuthSession> {
+export async function completeSteemConnectCallback(payload: {
+  code?: string;
+  accessToken?: string;
+  expiresIn?: number;
+  state: string;
+}): Promise<AuthSession> {
   const response = await fetch(`${API_BASE}/api/auth/steemconnect/callback`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ code })
+    body: JSON.stringify(payload)
   });
 
   if (!response.ok) {
@@ -307,6 +321,29 @@ export async function quoteVote(payload: {
 
   if (!response.ok) {
     throw new Error("Quote konnte nicht erstellt werden.");
+  }
+
+  return response.json();
+}
+
+export async function executeVote(token: string, payload: {
+  author: string;
+  permlink: string;
+  weightBps: number;
+}): Promise<VoteExecutionResponse> {
+  const response = await fetch(`${API_BASE}/api/votes/execute`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      session: token
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    throw new Error(response.status === 403
+      ? "Vote-Consent fehlt oder wurde widerrufen."
+      : "Vote konnte nicht an SteemConnect/HiveSigner gesendet werden.");
   }
 
   return response.json();

@@ -1391,6 +1391,54 @@ button:disabled {
   padding: 16px;
 }
 
+.execution-panel {
+  align-items: center;
+  background: #f5f8fb;
+  border: 1px solid #d7e0e6;
+  border-radius: 8px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-top: 18px;
+  padding: 16px;
+}
+
+.execution-panel span {
+  color: #607078;
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  margin-bottom: 5px;
+  text-transform: uppercase;
+}
+
+.execution-panel strong {
+  color: #17202a;
+  display: block;
+}
+
+.execution-panel p {
+  color: #4f6068;
+  font-size: 13px;
+  margin: 6px 0 0;
+}
+
+.execution-panel .execution-success,
+.execution-panel .execution-error {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.execution-panel .execution-success {
+  color: #1a7f64;
+  font-weight: 700;
+}
+
+.execution-panel .execution-error {
+  color: #b44336;
+  font-weight: 700;
+}
+
 .billing-transparency.free {
   background: #e9f6f4;
   border: 1px solid #b9ded9;
@@ -1535,6 +1583,7 @@ button:disabled {
   .pool-headline,
   .timing-result-head,
   .power-stable-head,
+  .execution-panel,
   .billing-transparency-head,
   .operator-bar-row,
   .operator-table-row,

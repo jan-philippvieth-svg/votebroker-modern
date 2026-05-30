@@ -1,19 +1,27 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { grantConsent } from "../consent/consentStore.js";
 import { createSession, deleteSession, getSession } from "./sessionStore.js";
-import { exchangeSteemConnectCode, getSteemConnectLoginUrl } from "./steemConnect.js";
+import { consumeAuthState, createAuthState } from "./stateStore.js";
+import { completeSteemConnectAccessToken, exchangeSteemConnectCode, getSteemConnectLoginUrl } from "./steemConnect.js";
 
 const callbackSchema = z.object({
-  code: z.string().min(1)
+  code: z.string().min(1).optional(),
+  accessToken: z.string().min(1).optional(),
+  access_token: z.string().min(1).optional(),
+  expiresIn: z.number().positive().optional(),
+  expires_in: z.number().positive().optional(),
+  state: z.string().min(1)
+}).refine((input) => Boolean(input.code || input.accessToken || input.access_token), {
+  message: "Either code or access_token is required"
 });
 
 export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/api/auth/steemconnect/url", async (request) => {
-    const state = typeof request.query === "object" && request.query
-      ? (request.query as { state?: string }).state
-      : undefined;
+  app.get("/api/auth/steemconnect/url", async () => {
+    const state = createAuthState();
     return {
-      url: getSteemConnectLoginUrl(state)
+      url: getSteemConnectLoginUrl(state),
+      state
     };
   });
 
@@ -24,12 +32,24 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     }
 
     try {
-      const tokenData = await exchangeSteemConnectCode(input.data.code);
+      if (!consumeAuthState(input.data.state)) {
+        return reply.code(403).send({
+          error: "invalid_oauth_state",
+          detail: "OAuth state is missing, expired, or already used."
+        });
+      }
+
+      const accessToken = input.data.accessToken ?? input.data.access_token;
+      const expiresIn = input.data.expiresIn ?? input.data.expires_in;
+      const tokenData = accessToken
+        ? await completeSteemConnectAccessToken(accessToken, expiresIn)
+        : await exchangeSteemConnectCode(input.data.code as string);
       const session = createSession({
         username: tokenData.username,
         provider: "steemconnect",
         accessToken: tokenData.access_token
-      });
+      }, tokenData.expires_in);
+      grantConsent(tokenData.username, "login");
 
       return {
         token: session.token,

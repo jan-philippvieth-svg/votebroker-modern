@@ -44,13 +44,64 @@ nano .env
 ```env
 VOTEBROKER_PUBLIC_URL=https://votebroker.org
 VOTEBROKER_OPERATOR_TOKEN=use-a-long-random-token
+STEEMCONNECT_HOST=https://hivesigner.com
 STEEMCONNECT_CLIENT_ID=votebroker
-STEEMCONNECT_CLIENT_SECRET=your-secret
+STEEMCONNECT_RESPONSE_TYPE=token
 STEEMCONNECT_REDIRECT_URI=https://votebroker.org/auth/callback
 STEEMCONNECT_SCOPES=login,vote
 VOTEBROKER_FEE_POST_AUTHOR=votebroker
 VOTEBROKER_FEE_POST_PERMLINK=monthly-fees
 ```
+
+`STEEMCONNECT_CLIENT_SECRET` is only needed for the optional code/offline flow:
+
+```env
+STEEMCONNECT_RESPONSE_TYPE=code
+STEEMCONNECT_SCOPES=offline,login,vote
+STEEMCONNECT_CLIENT_SECRET=your-secret
+```
+
+## HiveSigner / SteemConnect
+
+Register or configure the app in the HiveSigner/SteemConnect app dashboard for the account configured as `STEEMCONNECT_CLIENT_ID`.
+
+Use this exact redirect URL:
+
+```text
+https://votebroker.org/auth/callback
+```
+
+Required scopes:
+
+```text
+login,vote
+```
+
+The default VoteBroker production flow expects HiveSigner/SteemConnect to redirect back with `access_token`, `expires_in`, and `state`. VoteBroker validates the one-time `state`, verifies the token through `/api/me`, and only then creates a local session.
+
+## Live Versus Mock
+
+Production-ready:
+
+- OAuth state creation and validation.
+- `access_token` callback handling.
+- optional `code` flow when `STEEMCONNECT_RESPONSE_TYPE=code` and a server-side secret are configured.
+- target vote broadcasting through `/api/broadcast`.
+- fee-post vote broadcasting through `/api/broadcast`, gated by explicit fee-post consent.
+
+Still mock/stub:
+
+- account power data
+- full vote USD value
+- community pool stats
+- in-memory sessions, consents, and invoices
+
+Not live yet:
+
+- persistent database
+- real chain pricing/reward-fund adapter
+- scheduled auto-vote worker
+- durable retry/audit queue
 
 ## Start
 

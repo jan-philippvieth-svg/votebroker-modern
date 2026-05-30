@@ -16,7 +16,8 @@ import {
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
-  completeSteemConnectLogin,
+  completeSteemConnectCallback,
+  executeVote,
   getCommunityOverview,
   getConsentCatalog,
   getConsentState,
@@ -30,6 +31,7 @@ import {
   type ConsentRecord,
   type ConsentState,
   type ConsentType,
+  type VoteExecutionResponse,
   type VoteQuoteResponse
 } from "../api";
 import { createTranslator, locales, type Locale } from "../i18n";
@@ -85,7 +87,9 @@ export function App() {
   const [plannedVotesToday, setPlannedVotesToday] = useState(10);
   const [targetVotingPowerPct, setTargetVotingPowerPct] = useState(80);
   const [result, setResult] = useState<VoteQuoteResponse | null>(null);
+  const [execution, setExecution] = useState<VoteExecutionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [executionError, setExecutionError] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [consentCatalog, setConsentCatalog] = useState<ConsentRecord[]>([]);
   const [consentState, setConsentState] = useState<ConsentState | null>(null);
@@ -124,21 +128,18 @@ export function App() {
   }, [username]);
 
   useEffect(() => {
-    const url = new URL(window.location.href);
-    const code = url.searchParams.get("code");
-    if (!code) {
+    const callback = readSteemConnectCallback();
+    if (!callback) {
       return;
     }
 
     setAuthLoading(true);
-    completeSteemConnectLogin(code)
+    completeSteemConnectCallback(callback)
       .then((nextSession) => {
         setSession(nextSession);
         setUsername(nextSession.user.username);
         window.localStorage.setItem("votebroker.session", JSON.stringify(nextSession));
-        url.searchParams.delete("code");
-        url.searchParams.delete("state");
-        window.history.replaceState({}, document.title, url.pathname + url.search);
+        window.history.replaceState({}, document.title, window.location.pathname);
       })
       .catch((err) => setAuthError(err instanceof Error ? err.message : "Login failed"))
       .finally(() => setAuthLoading(false));
@@ -158,6 +159,8 @@ export function App() {
     event.preventDefault();
     setLoading(true);
     setError(null);
+    setExecution(null);
+    setExecutionError(null);
 
     try {
       const quote = await quoteVote({
@@ -216,6 +219,25 @@ export function App() {
       setConsentError(err instanceof Error ? err.message : "Consent could not be updated");
     } finally {
       setConsentLoading(null);
+    }
+  }
+
+  async function broadcastQuotedVote() {
+    if (!session || !result) {
+      setExecutionError("Bitte zuerst mit SteemConnect verbinden und eine Quote erstellen.");
+      return;
+    }
+
+    setExecutionError(null);
+    try {
+      const nextExecution = await executeVote(session.token, {
+        author: result.quote.author,
+        permlink: result.quote.permlink,
+        weightBps: result.quote.voteWeightBps
+      });
+      setExecution(nextExecution);
+    } catch (err) {
+      setExecutionError(err instanceof Error ? err.message : "Vote konnte nicht gesendet werden.");
     }
   }
 
@@ -402,6 +424,13 @@ export function App() {
               <TimingResult timing={result.quote.timing} />
               <PowerRecommendationResult recommendation={result.quote.powerRecommendation} />
               <BillingTransparency invoice={result.feeInvoice} />
+              <VoteExecutionPanel
+                execution={execution}
+                error={executionError}
+                hasSession={Boolean(session)}
+                onExecute={broadcastQuotedVote}
+                quote={result}
+              />
 
               <div className="billing-strip">
                 <span>{t("status")}</span>
@@ -424,6 +453,56 @@ export function App() {
         </section>
       </section>
     </main>
+  );
+}
+
+function readSteemConnectCallback(): { code?: string; accessToken?: string; expiresIn?: number; state: string } | null {
+  const url = new URL(window.location.href);
+  const hash = new URLSearchParams(url.hash.startsWith("#") ? url.hash.slice(1) : url.hash);
+  const search = url.searchParams;
+  const state = search.get("state") ?? hash.get("state");
+  const code = search.get("code") ?? undefined;
+  const accessToken = search.get("access_token") ?? hash.get("access_token") ?? undefined;
+  const expiresRaw = search.get("expires_in") ?? hash.get("expires_in");
+  const expiresIn = expiresRaw ? Number(expiresRaw) : undefined;
+
+  if (!state || (!code && !accessToken)) {
+    return null;
+  }
+
+  return {
+    code,
+    accessToken,
+    expiresIn: Number.isFinite(expiresIn) ? expiresIn : undefined,
+    state
+  };
+}
+
+function VoteExecutionPanel(props: {
+  quote: VoteQuoteResponse;
+  execution: VoteExecutionResponse | null;
+  error: string | null;
+  hasSession: boolean;
+  onExecute: () => void;
+}) {
+  return (
+    <section className="execution-panel">
+      <div>
+        <span>Live Vote Broadcast</span>
+        <strong>{props.hasSession ? "Bereit fuer SteemConnect/HiveSigner" : "Login erforderlich"}</strong>
+        <p>VoteBroker sendet diesen Vote erst nach aktivem Vote-Consent und nur mit deinem Access Token.</p>
+      </div>
+      <button className="primary-button" disabled={!props.hasSession || props.quote.quote.voteWeightBps <= 0} type="button" onClick={props.onExecute}>
+        <Send size={16} />
+        Vote senden
+      </button>
+      {props.execution && (
+        <p className="execution-success">Broadcast akzeptiert: {props.execution.transactionId}</p>
+      )}
+      {props.error && (
+        <p className="execution-error">{props.error}</p>
+      )}
+    </section>
   );
 }
 

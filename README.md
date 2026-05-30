@@ -159,9 +159,10 @@ VOTEBROKER_MAX_FEE_VOTE_WEIGHT_BPS=2000
 VOTEBROKER_GRACE_CONSECUTIVE_FAILURES=2
 VOTEBROKER_OPERATOR_TOKEN=change-me
 VITE_API_BASE=http://localhost:3000
-STEEMCONNECT_HOST=https://api.steemconnect.com
+STEEMCONNECT_HOST=https://hivesigner.com
 STEEMCONNECT_CLIENT_ID=votebroker
 STEEMCONNECT_CLIENT_SECRET=
+STEEMCONNECT_RESPONSE_TYPE=token
 STEEMCONNECT_REDIRECT_URI=http://localhost:5173/auth/callback
 STEEMCONNECT_SCOPES=login,vote
 ```
@@ -193,7 +194,7 @@ Response:
 
 ```json
 {
-  "url": "https://api.steemconnect.com/oauth2/authorize?client_id=votebroker&..."
+  "url": "https://hivesigner.com/oauth2/authorize?client_id=votebroker&..."
 }
 ```
 
@@ -212,13 +213,26 @@ Every consent can be revoked and every change is written to consent history. Fee
 
 See [Consent Model](docs/CONSENT_MODEL.md).
 
-After SteemConnect redirects back with a `code`, exchange it for a local VoteBroker session:
+When `STEEMCONNECT_RESPONSE_TYPE=code` is explicitly enabled, exchange the returned code and one-time state for a local VoteBroker session:
 
 ```bash
 curl -X POST http://localhost:3000/api/auth/steemconnect/callback \
   -H "Content-Type: application/json" \
   -d '{
-    "code": "steemconnect-code"
+    "code": "steemconnect-code",
+    "state": "one-time-oauth-state"
+  }'
+```
+
+For production, the default callback body uses the access-token flow:
+
+```bash
+curl -X POST http://localhost:3000/api/auth/steemconnect/callback \
+  -H "Content-Type: application/json" \
+  -d '{
+    "accessToken": "hivesigner-access-token",
+    "expiresIn": 36000,
+    "state": "one-time-oauth-state"
   }'
 ```
 

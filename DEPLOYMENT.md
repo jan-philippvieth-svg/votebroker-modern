@@ -34,10 +34,65 @@ Set at least:
 
 ```env
 VOTEBROKER_OPERATOR_TOKEN=use-a-long-random-secret
+STEEMCONNECT_HOST=https://hivesigner.com
 STEEMCONNECT_CLIENT_ID=votebroker
-STEEMCONNECT_CLIENT_SECRET=your-steemconnect-secret
+STEEMCONNECT_RESPONSE_TYPE=token
 STEEMCONNECT_REDIRECT_URI=https://votebroker.org/auth/callback
+STEEMCONNECT_SCOPES=login,vote
 ```
+
+`STEEMCONNECT_CLIENT_SECRET` is only required when `STEEMCONNECT_RESPONSE_TYPE=code` is used, typically together with an `offline` scope. The default production mode is token/implicit flow, because HiveSigner redirects the browser back with an `access_token`.
+
+## HiveSigner / SteemConnect App Setup
+
+Create or configure the OAuth app in the HiveSigner/SteemConnect app dashboard for the account used as `STEEMCONNECT_CLIENT_ID`.
+
+Use exactly this redirect URL:
+
+```text
+https://votebroker.org/auth/callback
+```
+
+Required scopes for the current VoteBroker production flow:
+
+```text
+login,vote
+```
+
+Optional code/offline flow:
+
+```text
+STEEMCONNECT_RESPONSE_TYPE=code
+STEEMCONNECT_SCOPES=offline,login,vote
+STEEMCONNECT_CLIENT_SECRET=<server-side-secret>
+```
+
+Keep the client secret only in `.env` on the server. Never put it into frontend code.
+
+## Production Readiness Matrix
+
+Production-ready:
+
+- Login URL generation with one-time OAuth state.
+- Callback handling for HiveSigner/SteemConnect `access_token`.
+- Optional server-side `code` exchange when explicitly configured.
+- State/CSRF validation before session creation.
+- Token verification through signer `/api/me`.
+- Manual target vote broadcast through signer `/api/broadcast`.
+- Fee-post settlement broadcast through signer `/api/broadcast`, gated by `fee_post_vote` consent.
+
+Stub/mock:
+
+- Account voting power and full-power vote value still come from the in-memory demo account provider.
+- Invoice, consent history, and session storage are in-memory.
+- Community pool metrics are demo snapshots.
+
+Not live yet:
+
+- Persistent Postgres/Redis storage.
+- Real chain account-power/reward-fund pricing adapter.
+- Scheduled auto-vote worker.
+- Durable vote execution history and retry queue.
 
 ## Start
 
