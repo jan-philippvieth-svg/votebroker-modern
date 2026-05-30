@@ -3,7 +3,7 @@ WORKDIR /app
 
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY apps/web/package.json apps/web/package.json
-RUN npm ci --workspaces --include-workspace-root
+RUN npm ci --workspace @votebroker/web --include-workspace-root
 
 FROM deps AS build
 ARG VITE_API_BASE=/api
@@ -15,3 +15,4 @@ FROM nginx:1.27-alpine AS runtime
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 EXPOSE 80
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD wget -qO- http://127.0.0.1/healthz || exit 1

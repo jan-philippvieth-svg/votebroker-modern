@@ -461,6 +461,15 @@ input:focus {
   padding: 14px;
 }
 
+.power-recommendation-control {
+  background: #f7faf8;
+  border: 1px solid #dce5e7;
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
 .segmented-control,
 .delay-grid {
   display: grid;
@@ -1309,6 +1318,73 @@ button:disabled {
   font-weight: 700;
 }
 
+.power-stable-result {
+  border-radius: 8px;
+  margin-top: 18px;
+  padding: 16px;
+}
+
+.power-stable-result.good {
+  background: #e9f6f4;
+  border: 1px solid #b9ded9;
+}
+
+.power-stable-result.watch {
+  background: #fff8e7;
+  border: 1px solid #f2d38a;
+}
+
+.power-stable-result.danger {
+  background: #fff0ef;
+  border: 1px solid #efafa6;
+}
+
+.power-stable-head {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr auto;
+}
+
+.power-stable-head span {
+  color: #607078;
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  margin-bottom: 5px;
+  text-transform: uppercase;
+}
+
+.power-stable-head strong {
+  color: #17202a;
+  display: block;
+  font-size: 18px;
+}
+
+.power-stable-head b {
+  background: #ffffff;
+  border: 1px solid #dce5e7;
+  border-radius: 999px;
+  color: #34454d;
+  font-size: 11px;
+  padding: 7px 10px;
+  text-transform: uppercase;
+}
+
+.power-stable-result p {
+  color: #4f6068;
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 12px 0 0;
+}
+
+.power-stable-metrics {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 14px;
+}
+
 .billing-transparency {
   border-radius: 8px;
   margin-top: 18px;
@@ -1449,6 +1525,7 @@ button:disabled {
   .summary-grid,
   .consent-grid,
   .pool-metrics,
+  .power-stable-metrics,
   .delay-grid,
   .timing-options,
   .field-grid {
@@ -1457,6 +1534,7 @@ button:disabled {
 
   .pool-headline,
   .timing-result-head,
+  .power-stable-head,
   .billing-transparency-head,
   .operator-bar-row,
   .operator-table-row,

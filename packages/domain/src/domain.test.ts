@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assessFeeVote, calculateAccountHealthScore, createFeeInvoice, createOperatorOverview, quoteUsdVote, recommendVoteTiming } from "./index.js";
+import { assessFeeVote, calculateAccountHealthScore, createFeeInvoice, createOperatorOverview, quoteUsdVote, recommendPowerStableVote, recommendVoteTiming } from "./index.js";
 import type { CommunityPoolMember, FeePolicy, VotingAccountSnapshot } from "./index.js";
 
 const account: VotingAccountSnapshot = {
@@ -205,4 +205,36 @@ test("aggregates operator overview from actual invoices", () => {
   assert.equal(overview.revenue.settledFeeUsd, 0.12);
   assert.equal(overview.revenue.waivedFeeUsd, 0.05);
   assert.equal(overview.topAccounts[0].username, "alice");
+});
+
+test("recommends a max average vote weight to keep voting power stable", () => {
+  const recommendation = recommendPowerStableVote({
+    account,
+    desiredVoteWeightBps: 500,
+    request: {
+      plannedVotesToday: 10,
+      targetVotingPowerBps: 8_000
+    }
+  });
+
+  assert.equal(recommendation.maxAverageVoteWeightBps, 170);
+  assert.equal(recommendation.riskLevel, "high");
+  assert.equal(recommendation.withinRecommendation, false);
+});
+
+test("includes power-stable recommendation in vote quote", () => {
+  const quote = quoteUsdVote({
+    author: "bob",
+    permlink: "power-stable-post",
+    desiredVoteUsd: 0.1,
+    account,
+    powerRecommendation: {
+      plannedVotesToday: 20,
+      targetVotingPowerBps: 7_500
+    }
+  });
+
+  assert.equal(quote.powerRecommendation.plannedVotesToday, 20);
+  assert.equal(quote.powerRecommendation.targetVotingPowerBps, 7_500);
+  assert.ok(quote.powerRecommendation.maxAverageVoteWeightBps > 0);
 });

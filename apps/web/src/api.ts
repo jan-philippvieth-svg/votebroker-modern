@@ -30,6 +30,18 @@ export interface VoteQuoteResponse {
         label: string;
       }>;
     };
+    powerRecommendation: {
+      plannedVotesToday: number;
+      targetVotingPowerBps: number;
+      estimatedRegenerationBps: number;
+      dailyPowerBudgetBps: number;
+      maxAverageVoteWeightBps: number;
+      desiredVoteWeightBps: number;
+      riskLevel: "low" | "medium" | "high" | "recovery";
+      withinRecommendation: boolean;
+      message: string;
+      detail: string;
+    };
   };
   feeInvoice: {
     id: string;
@@ -284,6 +296,8 @@ export async function quoteVote(payload: {
   desiredVoteUsd: number;
   timingMode?: "manual" | "auto";
   voteDelayMinutes?: number;
+  plannedVotesToday?: number;
+  targetVotingPowerBps?: number;
 }): Promise<VoteQuoteResponse> {
   const response = await fetch(`${API_BASE}/api/votes/quote`, {
     method: "POST",

@@ -4,6 +4,8 @@ apps/*/dist
 packages/*/dist
 .env
 .env.local
+.env.production
+.env.staging
 coverage
 *.log
 *.tsbuildinfo

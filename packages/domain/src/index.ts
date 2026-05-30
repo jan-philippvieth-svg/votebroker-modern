@@ -5,3 +5,4 @@ export * from "./consent.js";
 export * from "./communityPool.js";
 export * from "./voteTiming.js";
 export * from "./operator.js";
+export * from "./powerStable.js";

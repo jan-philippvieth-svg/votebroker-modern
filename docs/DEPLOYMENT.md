@@ -1,11 +1,12 @@
 # Deployment
 
-This repository ships two Docker images:
+This repository ships a production-ready Docker Compose stack for a small VPS:
 
 - `apps/api/Dockerfile`: Fastify API
 - `apps/web/Dockerfile`: Nginx static web app with `/api` reverse proxy
+- `caddy`: public HTTPS entrypoint with automatic Let's Encrypt certificates
 
-The default `docker-compose.yml` exposes the web container on port `80` and proxies API calls to the internal API service.
+The default `docker-compose.yml` exposes only Caddy on ports `80`, `443`, and `443/udp`. The API and web containers stay on the private Docker network.
 
 ## Domain
 
@@ -22,11 +23,27 @@ A     votebroker.org      <server-ip>
 CNAME www                votebroker.org
 ```
 
+For the STRATO VPS shown in the setup screenshot, the current IPv4 target is:
+
+```text
+A     votebroker.org      82.165.216.47
+CNAME www                votebroker.org
+```
+
+Keep ports `80` and `443` open in the STRATO firewall. Caddy needs port `80` for certificate issuance and port `443` for HTTPS traffic.
+
 ## Environment
 
 Create `.env` from `.env.example` and set production values:
 
+```bash
+cp .env.example .env
+nano .env
+```
+
 ```env
+VOTEBROKER_PUBLIC_URL=https://votebroker.org
+VOTEBROKER_OPERATOR_TOKEN=use-a-long-random-token
 STEEMCONNECT_CLIENT_ID=votebroker
 STEEMCONNECT_CLIENT_SECRET=your-secret
 STEEMCONNECT_REDIRECT_URI=https://votebroker.org/auth/callback
@@ -44,27 +61,51 @@ docker compose up -d --build
 Health check:
 
 ```bash
-curl http://votebroker.org/health
+curl https://votebroker.org/health
+```
+
+Inspect containers:
+
+```bash
+docker compose ps
+docker compose logs -f caddy
+docker compose logs -f api
+```
+
+Update after pulling a new version:
+
+```bash
+git pull
+docker compose up -d --build
+docker image prune -f
 ```
 
 ## HTTPS
 
-For HTTPS, put Caddy, Traefik, Nginx Proxy Manager, or the server's existing reverse proxy in front of this compose stack.
-
-Recommended external proxy target:
+Caddy is included in the compose stack and automatically provisions certificates for:
 
 ```text
-http://127.0.0.1:80
+https://votebroker.org
+https://www.votebroker.org
 ```
 
-If the server proxy already owns ports `80` and `443`, change the compose mapping to a private port:
+If another reverse proxy already owns ports `80` and `443`, remove the `caddy` service and expose the web service privately instead:
 
 ```yaml
-ports:
-  - "127.0.0.1:8080:80"
+web:
+  ports:
+    - "127.0.0.1:8080:80"
 ```
 
 Then proxy `https://votebroker.org` to `http://127.0.0.1:8080`.
+
+## Resource Fit
+
+The STRATO VPS Linux VC2-4 profile is sufficient for the current stack:
+
+- 2 CPU cores: enough for API, Caddy, and static web serving
+- 4 GB RAM: enough for Node runtime and Docker build room
+- 120 GB storage: enough for source, images, logs, and future database volume
 
 ## Production Notes
 

@@ -20,6 +20,7 @@ export interface VoteQuoteRequest {
   desiredVoteUsd: number;
   account: VotingAccountSnapshot;
   timing?: VoteTimingRequest;
+  powerRecommendation?: PowerStableRecommendationRequest;
 }
 
 export interface VoteQuote {
@@ -31,6 +32,27 @@ export interface VoteQuote {
   capped: boolean;
   warnings: string[];
   timing: VoteTimingRecommendation;
+  powerRecommendation: PowerStableRecommendation;
+}
+
+export interface PowerStableRecommendationRequest {
+  plannedVotesToday: number;
+  targetVotingPowerBps: BasisPoints;
+  hoursUntilTomorrow?: number;
+  safetyReserveBps?: BasisPoints;
+}
+
+export interface PowerStableRecommendation {
+  plannedVotesToday: number;
+  targetVotingPowerBps: BasisPoints;
+  estimatedRegenerationBps: BasisPoints;
+  dailyPowerBudgetBps: BasisPoints;
+  maxAverageVoteWeightBps: BasisPoints;
+  desiredVoteWeightBps: BasisPoints;
+  riskLevel: "low" | "medium" | "high" | "recovery";
+  withinRecommendation: boolean;
+  message: string;
+  detail: string;
 }
 
 export type VoteTimingMode = "manual" | "auto";

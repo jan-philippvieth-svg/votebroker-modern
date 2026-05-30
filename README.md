@@ -116,10 +116,11 @@ npm test
 ## Docker Deployment
 
 ```bash
+cp .env.example .env
 docker compose up -d --build
 ```
 
-The web container serves the React app and proxies `/api` to the Fastify service. Production notes for `votebroker.org` live in [Deployment](docs/DEPLOYMENT.md).
+The production compose stack runs Caddy on ports `80/443`, serves the React app through the internal web container, and proxies `/api` plus `/health` to the Fastify service. Caddy automatically provisions HTTPS certificates for `votebroker.org` and `www.votebroker.org` once DNS points to the server. Production notes live in [Deployment](docs/DEPLOYMENT.md).
 
 Start the API:
 

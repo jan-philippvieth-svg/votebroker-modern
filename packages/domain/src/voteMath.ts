@@ -1,4 +1,5 @@
 import type { BasisPoints, VoteQuote, VoteQuoteRequest } from "./types.js";
+import { recommendPowerStableVote } from "./powerStable.js";
 import { recommendVoteTiming } from "./voteTiming.js";
 
 export const MAX_BPS = 10_000;
@@ -29,6 +30,11 @@ export function quoteUsdVote(request: VoteQuoteRequest): VoteQuote {
   );
 
   if (request.desiredVoteUsd <= 0) {
+    const powerRecommendation = recommendPowerStableVote({
+      account: request.account,
+      desiredVoteWeightBps: 0,
+      request: request.powerRecommendation
+    });
     return {
       author: request.author,
       permlink: request.permlink,
@@ -37,11 +43,17 @@ export function quoteUsdVote(request: VoteQuoteRequest): VoteQuote {
       voteWeightBps: 0,
       capped: false,
       warnings: ["Der gewuenschte USD-Wert muss groesser als 0 sein."],
-      timing
+      timing,
+      powerRecommendation
     };
   }
 
   if (availableFullVoteUsd <= 0) {
+    const powerRecommendation = recommendPowerStableVote({
+      account: request.account,
+      desiredVoteWeightBps: 0,
+      request: request.powerRecommendation
+    });
     return {
       author: request.author,
       permlink: request.permlink,
@@ -50,7 +62,8 @@ export function quoteUsdVote(request: VoteQuoteRequest): VoteQuote {
       voteWeightBps: 0,
       capped: true,
       warnings: ["Aktuell ist kein wirksamer Vote-Wert verfuegbar."],
-      timing
+      timing,
+      powerRecommendation
     };
   }
 
@@ -62,6 +75,11 @@ export function quoteUsdVote(request: VoteQuoteRequest): VoteQuote {
   if (capped) {
     warnings.push("Der Zielwert ist hoeher als der aktuell maximal moegliche Vote.");
   }
+  const powerRecommendation = recommendPowerStableVote({
+    account: request.account,
+    desiredVoteWeightBps: voteWeightBps,
+    request: request.powerRecommendation
+  });
 
   return {
     author: request.author,
@@ -71,7 +89,8 @@ export function quoteUsdVote(request: VoteQuoteRequest): VoteQuote {
     voteWeightBps,
     capped,
     warnings,
-    timing
+    timing,
+    powerRecommendation
   };
 }
 

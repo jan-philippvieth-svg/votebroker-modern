@@ -16,6 +16,10 @@ export const voteBrokerWorkflow: VoteBrokerWorkflow = {
         mode: params.timingMode ?? "auto",
         delayMinutes: params.voteDelayMinutes,
         postCreatedAt: params.postCreatedAt
+      },
+      powerRecommendation: {
+        plannedVotesToday: params.plannedVotesToday ?? 10,
+        targetVotingPowerBps: params.targetVotingPowerBps ?? 8_000
       }
     });
     const invoice = createFeeInvoice({

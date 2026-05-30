@@ -1,3 +1,5 @@
+name: votebroker
+
 services:
   api:
     build:
@@ -27,6 +29,8 @@ services:
       STEEMCONNECT_SCOPES: ${STEEMCONNECT_SCOPES:-login,vote}
     expose:
       - "3000"
+    networks:
+      - votebroker_internal
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
       interval: 30s
@@ -47,6 +51,8 @@ services:
         condition: service_healthy
     expose:
       - "80"
+    networks:
+      - votebroker_internal
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
       interval: 30s
@@ -68,7 +74,15 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+    networks:
+      - votebroker_internal
+
+networks:
+  votebroker_internal:
+    name: votebroker_internal
 
 volumes:
   caddy_data:
+    name: votebroker_caddy_data
   caddy_config:
+    name: votebroker_caddy_config

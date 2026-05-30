@@ -82,6 +82,8 @@ export function App() {
   const [desiredVoteUsd, setDesiredVoteUsd] = useState(2.5);
   const [timingMode, setTimingMode] = useState<"auto" | "manual">("auto");
   const [voteDelayMinutes, setVoteDelayMinutes] = useState(15);
+  const [plannedVotesToday, setPlannedVotesToday] = useState(10);
+  const [targetVotingPowerPct, setTargetVotingPowerPct] = useState(80);
   const [result, setResult] = useState<VoteQuoteResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -164,7 +166,9 @@ export function App() {
         permlink,
         desiredVoteUsd,
         timingMode,
-        voteDelayMinutes: timingMode === "manual" ? voteDelayMinutes : undefined
+        voteDelayMinutes: timingMode === "manual" ? voteDelayMinutes : undefined,
+        plannedVotesToday,
+        targetVotingPowerBps: targetVotingPowerPct * 100
       });
       setResult(quote);
     } catch (err) {
@@ -234,6 +238,38 @@ export function App() {
           <div className="status-pill">
             <CheckCircle2 size={16} />
             {t("feeBilling")}
+          </div>
+
+          <div className="power-recommendation-control">
+            <div className="panel-title compact-title">
+              <Gauge size={18} />
+              <h2>Power-Stable Empfehlung</h2>
+            </div>
+            <div className="field-grid">
+              <label>
+                Geplante Votes heute
+                <input
+                  min="1"
+                  max="200"
+                  step="1"
+                  type="number"
+                  value={plannedVotesToday}
+                  onChange={(event) => setPlannedVotesToday(Number(event.target.value))}
+                />
+              </label>
+              <label>
+                Ziel Voting Power morgen (%)
+                <input
+                  min="0"
+                  max="100"
+                  step="1"
+                  type="number"
+                  value={targetVotingPowerPct}
+                  onChange={(event) => setTargetVotingPowerPct(Number(event.target.value))}
+                />
+              </label>
+            </div>
+            <p className="timing-hint">VoteBroker zeigt dir, wie stark einzelne Votes maximal sein sollten, damit deine Voting Power stabil bleibt.</p>
           </div>
         </div>
       </header>
@@ -364,6 +400,7 @@ export function App() {
               </div>
 
               <TimingResult timing={result.quote.timing} />
+              <PowerRecommendationResult recommendation={result.quote.powerRecommendation} />
               <BillingTransparency invoice={result.feeInvoice} />
 
               <div className="billing-strip">
@@ -387,6 +424,34 @@ export function App() {
         </section>
       </section>
     </main>
+  );
+}
+
+function PowerRecommendationResult(props: { recommendation: VoteQuoteResponse["quote"]["powerRecommendation"] }) {
+  const recommendation = props.recommendation;
+  const tone = recommendation.riskLevel === "low"
+    ? "good"
+    : recommendation.riskLevel === "medium"
+      ? "watch"
+      : "danger";
+
+  return (
+    <section className={`power-stable-result ${tone}`}>
+      <div className="power-stable-head">
+        <div>
+          <span>Power-Stable Empfehlung</span>
+          <strong>{recommendation.message}</strong>
+        </div>
+        <b>{recommendation.riskLevel}</b>
+      </div>
+      <p>{recommendation.detail}</p>
+      <div className="power-stable-metrics">
+        <Metric label="Empfohlen max." value={`${(recommendation.maxAverageVoteWeightBps / 100).toFixed(2)}%`} />
+        <Metric label="Dieser Vote" value={`${(recommendation.desiredVoteWeightBps / 100).toFixed(2)}%`} />
+        <Metric label="Tagesbudget" value={`${(recommendation.dailyPowerBudgetBps / 100).toFixed(2)}%`} />
+        <Metric label="Ziel morgen" value={`${(recommendation.targetVotingPowerBps / 100).toFixed(0)}%`} />
+      </div>
+    </section>
   );
 }
 

@@ -3,10 +3,14 @@ dist
 coverage
 .git
 .env
+.env.production
+.env.staging
 *.log
+*.png
 apps/*/dist
 packages/*/dist
 packages/*/*.tsbuildinfo
+docs/assets/*.png
 pdf-tools
 VoteBroker_2
 VoteBroker_rar

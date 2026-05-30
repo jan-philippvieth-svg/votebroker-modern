@@ -34,5 +34,7 @@ export interface VoteBrokerWorkflow {
     timingMode?: VoteTimingMode;
     voteDelayMinutes?: number;
     postCreatedAt?: string;
+    plannedVotesToday?: number;
+    targetVotingPowerBps?: number;
   }): Promise<{ account: VotingAccountSnapshot; quote: VoteQuote; invoice: FeeInvoice }>;
 }

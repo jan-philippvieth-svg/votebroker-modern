@@ -16,7 +16,9 @@ const quoteSchema = z.object({
   desiredVoteUsd: z.number().positive(),
   timingMode: z.enum(["manual", "auto"]).optional(),
   voteDelayMinutes: z.number().int().min(5).max(30).optional(),
-  postCreatedAt: z.string().datetime().optional()
+  postCreatedAt: z.string().datetime().optional(),
+  plannedVotesToday: z.number().int().min(1).max(200).optional(),
+  targetVotingPowerBps: z.number().int().min(0).max(10_000).optional()
 });
 
 const settleSchema = z.object({
