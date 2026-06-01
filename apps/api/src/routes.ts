@@ -13,6 +13,8 @@ import {
   evaluateVoteBroadcastPolicy,
   getPostingAuthority
 } from "./chain/steemBroadcaster.js";
+import { getCachedAuthority, setCachedAuthority } from "./chain/authorityCache.js";
+import { fetchSteemAccountSnapshot } from "./chain/steemAccount.js";
 import { broadcastConfig, feePolicy } from "./config.js";
 import { hasConsent } from "./consent/consentStore.js";
 import { getAccount, getCommunityPool, invoices, saveAccount } from "./mockStore.js";
@@ -47,6 +49,21 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     service: "votebroker-api"
   }));
 
+  app.get("/api/account/snapshot", async (request, reply) => {
+    const query = z.object({ username: z.string().min(1) }).safeParse(request.query);
+    if (!query.success) {
+      return reply.code(400).send({ error: "invalid_request", detail: "username is required" });
+    }
+    try {
+      return await fetchSteemAccountSnapshot(query.data.username);
+    } catch (err) {
+      return reply.code(404).send({
+        error: "account_not_found",
+        detail: err instanceof Error ? err.message : "unknown"
+      });
+    }
+  });
+
   app.post("/api/votes/quote", async (request, reply) => {
     const input = quoteSchema.safeParse(request.body);
     if (!input.success) {
@@ -66,7 +83,10 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   app.post("/api/votes/execute", async (request, reply) => {
     const session = getSession(getSessionHeader(request.headers.session));
     if (!session) {
-      return reply.code(401).send({ error: "authorized_session_required" });
+      return reply.code(401).send({
+        error: "authorized_session_required",
+        hint: "Session expired or missing. Please log in again via SteemConnect."
+      });
     }
 
     if (!hasConsent(session.user.username, "target_vote")) {
@@ -81,7 +101,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       });
       return reply.code(403).send({
         error: "target_vote_consent_required",
-        detail: "Der Nutzer muss Zielvotes explizit bestaetigen, bevor VoteBroker einen Vote broadcastet."
+        hint: "Grant Vote-Consent under Settings tab before broadcasting votes."
       });
     }
 
@@ -90,7 +110,20 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: "invalid_request", detail: input.error.flatten() });
     }
 
-    const account = getAccount(session.user.username);
+    // Use real Steem account data for policy checks — NOT the mockStore
+    // (mockStore returns fullPowerVoteUsd=0 for unknown users, blocking legitimate votes)
+    let liveFullPowerVoteUsd = 0;
+    let liveStatus: "active" | "warning" | "paused" | "payment_required" = "active";
+    try {
+      const liveSnap = await fetchSteemAccountSnapshot(session.user.username);
+      liveFullPowerVoteUsd = liveSnap.fullPowerVoteUsd;
+    } catch {
+      // Fall back to mockStore if Steem API unreachable
+      const cached = getAccount(session.user.username);
+      liveFullPowerVoteUsd = cached.fullPowerVoteUsd;
+      liveStatus = cached.status;
+    }
+
     const broadcastMode = input.data.broadcastMode ?? "server";
     writeAuditEvent({
       type: "vote_broadcast_attempt",
@@ -98,7 +131,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       author: input.data.author,
       permlink: input.data.permlink,
       weightBps: input.data.weightBps,
-      detail: `Attempting ${broadcastMode} vote broadcast`
+      detail: `Attempting ${broadcastMode} broadcast | fullPowerVoteUsd=${liveFullPowerVoteUsd.toFixed(4)}`
     });
 
     let transactionId: string;
@@ -119,18 +152,19 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       transactionId = result.transactionId;
     } else {
       const client = createSteemClient();
-      const hasAuthority = await getPostingAuthority({
-        client,
-        username: session.user.username
-      });
+      const cached = getCachedAuthority(session.user.username);
+      const hasAuthority = cached !== null ? cached : await getPostingAuthority({ client, username: session.user.username });
+      if (cached === null) setCachedAuthority(session.user.username, hasAuthority);
+
       const policy = evaluateVoteBroadcastPolicy({
-        hasConsent: true,
+        hasConsent:          true,
         hasPostingAuthority: hasAuthority,
-        hasPostingWif: Boolean(broadcastConfig.postingWif),
-        accountStatus: account.status,
-        fullPowerVoteUsd: account.fullPowerVoteUsd,
-        weightBps: input.data.weightBps
+        hasPostingWif:       Boolean(broadcastConfig.postingWif),
+        accountStatus:       liveStatus,
+        fullPowerVoteUsd:    liveFullPowerVoteUsd,
+        weightBps:           input.data.weightBps
       });
+
       if (!policy.allowed) {
         writeAuditEvent({
           type: "vote_broadcast_blocked",
@@ -138,20 +172,64 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
           author: input.data.author,
           permlink: input.data.permlink,
           weightBps: input.data.weightBps,
-          detail: policy.reason ?? "unknown"
+          detail: `blocked: ${policy.reason} | hasAuthority=${hasAuthority} | hasWif=${Boolean(broadcastConfig.postingWif)} | fullPowerVoteUsd=${liveFullPowerVoteUsd}`
         });
+        const hintMap: Record<string, string> = {
+          missing_posting_wif:       "Server is not configured with a posting key. Contact the operator.",
+          missing_posting_authority: "Grant posting authority to @votebroker via SteemConnect (Settings tab).",
+          account_paused:            "Account is paused. Settle outstanding fees.",
+          implausible_quote:         `Vote value is zero — account ${session.user.username} has no Steem Power or the Steem API was unreachable.`,
+          invalid_weight:            "Vote weight is out of range (1–10000 BPS).",
+        };
         return reply.code(policy.reason === "missing_posting_authority" ? 403 : 400).send({
-          error: policy.reason
+          error: policy.reason,
+          hint: hintMap[policy.reason ?? ""] ?? "Check account status.",
+          debug: { hasAuthority, hasWif: Boolean(broadcastConfig.postingWif), fullPowerVoteUsd: liveFullPowerVoteUsd }
         });
       }
-      const result = await broadcastServerSideVote({
-        client,
-        voter: session.user.username,
-        author: input.data.author,
-        permlink: input.data.permlink,
-        weightBps: input.data.weightBps
-      });
+
+      // Broadcast — catch chain-level errors explicitly
+      let result: { transactionId: string; confirmed: boolean };
+      try {
+        result = await broadcastServerSideVote({
+          client,
+          voter:     session.user.username,
+          author:    input.data.author,
+          permlink:  input.data.permlink,
+          weightBps: input.data.weightBps
+        });
+      } catch (err) {
+        const chainMsg = err instanceof Error ? err.message : String(err);
+        writeAuditEvent({
+          type: "vote_broadcast_blocked",
+          username: session.user.username,
+          author:   input.data.author,
+          permlink: input.data.permlink,
+          weightBps: input.data.weightBps,
+          detail:   `chain rejection: ${chainMsg}`
+        });
+        // Map known Steem chain errors to actionable messages
+        const isAuthority   = /unknown key|missing authority|not_valid_key|no_active_key/i.test(chainMsg);
+        const isDuplicate   = /duplicate|already voted|already_voted/i.test(chainMsg);
+        const isPostMissing = /unknown key|invalid_post/i.test(chainMsg) && !isAuthority;
+        return reply.code(400).send({
+          error:  isDuplicate   ? "already_voted"
+                : isAuthority  ? "missing_posting_authority"
+                : isPostMissing? "post_not_found"
+                : "chain_rejected",
+          hint:   isDuplicate   ? "Du hast diesen Post bereits gevoted."
+                : isAuthority  ? "Posting Authority für @votebroker fehlt. Bitte in den Einstellungen erteilen."
+                : isPostMissing? "Post nicht gefunden — Author/Permlink ungültig oder Post existiert nicht."
+                : `Blockchain-Fehler: ${chainMsg}`,
+          detail: chainMsg
+        });
+      }
+
       transactionId = result.transactionId;
+      if (!result.confirmed) {
+        request.log.warn({ transactionId, voter: session.user.username, author: input.data.author },
+          "Broadcast returned non-hash txId — possible silent failure");
+      }
     }
 
     writeAuditEvent({
@@ -161,7 +239,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       permlink: input.data.permlink,
       weightBps: input.data.weightBps,
       transactionId,
-      detail: "Vote broadcast accepted"
+      detail: `broadcast accepted | txId=${transactionId}`
     });
 
     return {
@@ -237,10 +315,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
         detail: `Attempting fee vote settlement for invoice ${invoice.id}`
       });
       const client = createSteemClient();
-      const hasAuthority = await getPostingAuthority({
-        client,
-        username: session.user.username
-      });
+      const cached = getCachedAuthority(session.user.username);
+      const hasAuthority = cached !== null ? cached : await getPostingAuthority({ client, username: session.user.username });
+      if (cached === null) setCachedAuthority(session.user.username, hasAuthority);
       const policy = evaluateVoteBroadcastPolicy({
         hasConsent: true,
         hasPostingAuthority: hasAuthority,

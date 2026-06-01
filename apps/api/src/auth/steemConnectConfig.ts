@@ -39,3 +39,15 @@ export function requireCodeFlowSecret(clientSecret: string): void {
     throw new Error("STEEMCONNECT_CLIENT_SECRET is not configured");
   }
 }
+
+export function buildAuthorityGrantUrl(): string {
+  const config = getSteemConnectConfig();
+  const origin = config.redirectUri.replace(/\/auth\/callback$/, "");
+  // Entry via /import so Vue Router cannot split the redirect_uri off the redirect param.
+  // The inner authorize path + redirect_uri must arrive as one encoded string.
+  const authorizeRedirect = `/authorize/${config.clientId}?redirect_uri=${origin}/dashboard`;
+  const url = new URL("/import", config.authHost);
+  url.searchParams.set("redirect", authorizeRedirect);
+  url.searchParams.set("authority", "active");
+  return url.toString();
+}

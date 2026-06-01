@@ -15,7 +15,6 @@ const policy: FeePolicy = {
   feeBps: 300,
   minFeeUsd: 0.05,
   feePostAuthor: "votebroker",
-  feePostPermlink: "fees-2026-05",
   warningAfterFailures: 2,
   pauseAfterFailures: 4,
   freeUntilVoteUsd: 0.25,
@@ -23,6 +22,8 @@ const policy: FeePolicy = {
   maxFeeVoteWeightBps: 2_000,
   graceConsecutiveFailures: 2
 };
+
+const testFeePostPermlink = "daily-fees-2026-05-31";
 
 test("quotes a vote by desired USD amount", () => {
   const quote = quoteUsdVote({
@@ -44,7 +45,7 @@ test("creates fee invoice from expected vote value", () => {
     desiredVoteUsd: 4,
     account
   });
-  const invoice = createFeeInvoice({ id: "fee_1", account, quote, policy });
+  const invoice = createFeeInvoice({ id: "fee_1", account, quote, policy, feePostPermlink: testFeePostPermlink });
 
   assert.equal(invoice.amountUsd, 0.12);
   assert.equal(invoice.feePostAuthor, "votebroker");
@@ -64,7 +65,7 @@ test("pauses account after repeated underfunded fee votes", () => {
     desiredVoteUsd: 4,
     account
   });
-  const invoice = createFeeInvoice({ id: "fee_2", account, quote, policy });
+  const invoice = createFeeInvoice({ id: "fee_2", account, quote, policy, feePostPermlink: testFeePostPermlink });
   const assessment = assessFeeVote({ account: weakAccount, invoice, policy });
 
   assert.equal(assessment.invoice.status, "underfunded");
@@ -150,7 +151,7 @@ test("waives mandatory fees for very small fair-use votes", () => {
     desiredVoteUsd: 0.2,
     account
   });
-  const invoice = createFeeInvoice({ id: "fee_free", account, quote, policy });
+  const invoice = createFeeInvoice({ id: "fee_free", account, quote, policy, feePostPermlink: testFeePostPermlink });
 
   assert.equal(invoice.billingMode, "free");
   assert.equal(invoice.status, "waived");
@@ -170,7 +171,7 @@ test("offers donation mode when mandatory billing would be unfair", () => {
     desiredVoteUsd: 0.8,
     account: tinyAccount
   });
-  const invoice = createFeeInvoice({ id: "fee_donation", account: tinyAccount, quote, policy });
+  const invoice = createFeeInvoice({ id: "fee_donation", account: tinyAccount, quote, policy, feePostPermlink: testFeePostPermlink });
 
   assert.equal(invoice.billingMode, "donation");
   assert.equal(invoice.status, "donation_optional");
@@ -184,7 +185,7 @@ test("aggregates operator overview from actual invoices", () => {
     desiredVoteUsd: 4,
     account
   });
-  const openInvoice = createFeeInvoice({ id: "fee_open", account, quote, policy });
+  const openInvoice = createFeeInvoice({ id: "fee_open", account, quote, policy, feePostPermlink: testFeePostPermlink });
   const settledInvoice = { ...openInvoice, id: "fee_settled", status: "settled" as const };
   const freeQuote = quoteUsdVote({
     author: "bob",
@@ -192,7 +193,7 @@ test("aggregates operator overview from actual invoices", () => {
     desiredVoteUsd: 0.2,
     account
   });
-  const waivedInvoice = createFeeInvoice({ id: "fee_waived", account, quote: freeQuote, policy });
+  const waivedInvoice = createFeeInvoice({ id: "fee_waived", account, quote: freeQuote, policy, feePostPermlink: testFeePostPermlink });
 
   const overview = createOperatorOverview({
     accounts: [account],

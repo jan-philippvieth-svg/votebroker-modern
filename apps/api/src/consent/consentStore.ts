@@ -1,7 +1,6 @@
 import type { ConsentRecord, ConsentState, ConsentType } from "@votebroker/domain";
 import { randomUUID } from "node:crypto";
-
-const consentHistory = new Map<string, ConsentRecord[]>();
+import { getDb } from "../db/index.js";
 
 export const consentCatalog: Record<ConsentType, Omit<ConsentRecord, "id" | "username" | "status" | "createdAt" | "revokedAt">> = {
   login: {
@@ -24,50 +23,99 @@ export const consentCatalog: Record<ConsentType, Omit<ConsentRecord, "id" | "use
   },
   auto_vote: {
     type: "auto_vote",
-    title: "Optionaler Auto-Vote-Consent",
-    description: "VoteBroker darf passende Votes automatisch ausfuehren, solange Limits, Status und Widerruf dies erlauben.",
-    scope: ["Auto-Vote-Regeln anwenden", "Limits beachten", "bei Widerruf sofort stoppen"]
+    title: "Automatisches Voting",
+    description: "VoteBroker darf in deinem Namen Votes auf Steem senden — nach deiner expliziten Freigabe und nur gemaess deiner Strategie.",
+    scope: ["Votes gemaess Strategie senden", "Limits und VP-Budget beachten", "sofort stoppen bei Widerruf"]
+  },
+  ai_strategy: {
+    type: "ai_strategy",
+    title: "AI Strategie Optimierung",
+    description: "VoteBroker analysiert deine Voting-Historie um personalisierte Strategie-Empfehlungen zu erstellen.",
+    scope: ["Voting-Historie lokal analysieren", "Autor-Rankings berechnen", "Strategie-Vorschlaege generieren", "Keine Weitergabe an Dritte"]
   }
 };
 
-export function getConsentState(username: string): ConsentState {
-  const history = consentHistory.get(username) ?? [];
-  const active = history.filter((record) => record.status === "granted" && !record.revokedAt);
+type ConsentRow = {
+  id: string;
+  username: string;
+  type: ConsentType;
+  status: "granted" | "revoked";
+  created_at: string;
+  revoked_at: string | null;
+};
+
+function rowToRecord(row: ConsentRow): ConsentRecord {
+  const template = consentCatalog[row.type];
   return {
-    username,
-    active,
-    history: [...history].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    id: row.id,
+    username: row.username,
+    type: row.type,
+    status: row.status,
+    title: template.title,
+    description: template.description,
+    scope: template.scope,
+    createdAt: row.created_at,
+    revokedAt: row.revoked_at ?? undefined
   };
+}
+
+export function getConsentState(username: string): ConsentState {
+  const rows = getDb().prepare(`
+    SELECT * FROM consents WHERE username = ? ORDER BY created_at DESC
+  `).all(username) as ConsentRow[];
+
+  const history = rows.map(rowToRecord);
+  const active  = history.filter(r => r.status === "granted" && !r.revokedAt);
+
+  return { username, active, history };
 }
 
 export function grantConsent(username: string, type: ConsentType): ConsentRecord {
+  // Revoke any currently active consent of this type first
   revokeConsent(username, type);
+
+  const id        = randomUUID();
+  const createdAt = new Date().toISOString();
+
+  getDb().prepare(`
+    INSERT INTO consents (id, username, type, status, created_at)
+    VALUES (?, ?, ?, 'granted', ?)
+  `).run(id, username, type, createdAt);
+
   const template = consentCatalog[type];
-  const record: ConsentRecord = {
-    ...template,
-    id: randomUUID(),
-    username,
-    status: "granted",
-    createdAt: new Date().toISOString()
+  return {
+    id, username, type, status: "granted",
+    title: template.title,
+    description: template.description,
+    scope: template.scope,
+    createdAt
   };
-  const history = consentHistory.get(username) ?? [];
-  history.push(record);
-  consentHistory.set(username, history);
-  return record;
 }
 
 export function revokeConsent(username: string, type: ConsentType): ConsentRecord | undefined {
-  const history = consentHistory.get(username) ?? [];
-  const active = [...history].reverse().find((record) => record.type === type && record.status === "granted" && !record.revokedAt);
-  if (!active) {
-    return undefined;
-  }
+  const db = getDb();
 
-  active.status = "revoked";
-  active.revokedAt = new Date().toISOString();
-  return active;
+  const active = db.prepare(`
+    SELECT * FROM consents
+    WHERE username = ? AND type = ? AND status = 'granted' AND revoked_at IS NULL
+    ORDER BY created_at DESC LIMIT 1
+  `).get(username, type) as ConsentRow | undefined;
+
+  if (!active) return undefined;
+
+  const revokedAt = new Date().toISOString();
+  db.prepare(`
+    UPDATE consents SET status = 'revoked', revoked_at = ? WHERE id = ?
+  `).run(revokedAt, active.id);
+
+  return rowToRecord({ ...active, status: "revoked", revoked_at: revokedAt });
 }
 
 export function hasConsent(username: string, type: ConsentType): boolean {
-  return getConsentState(username).active.some((record) => record.type === type);
+  const row = getDb().prepare(`
+    SELECT id FROM consents
+    WHERE username = ? AND type = ? AND status = 'granted' AND revoked_at IS NULL
+    LIMIT 1
+  `).get(username, type);
+  return Boolean(row);
 }

@@ -4,6 +4,7 @@ import { grantConsent } from "../consent/consentStore.js";
 import { createSession, deleteSession, getSession } from "./sessionStore.js";
 import { consumeAuthState, createAuthState } from "./stateStore.js";
 import { completeSteemConnectAccessToken, exchangeSteemConnectCode, getSteemConnectLoginUrl } from "./steemConnect.js";
+import { buildAuthorityGrantUrl } from "./steemConnectConfig.js";
 
 const callbackSchema = z.object({
   code: z.string().min(1).optional(),
@@ -24,6 +25,10 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       state
     };
   });
+
+  app.get("/api/auth/authority-grant-url", async () => ({
+    url: buildAuthorityGrantUrl()
+  }));
 
   app.post("/api/auth/steemconnect/callback", async (request, reply) => {
     const input = callbackSchema.safeParse(request.body);

@@ -15,6 +15,7 @@ export function createFeeInvoice(params: {
   account: VotingAccountSnapshot;
   quote: VoteQuote;
   policy: FeePolicy;
+  feePostPermlink: string;
   createdAt?: Date;
 }): FeeInvoice {
   const rawFeeUsd = Math.max(
@@ -45,7 +46,7 @@ export function createFeeInvoice(params: {
     nominalFeeUsd: roundUsd(rawFeeUsd),
     amountUsd: roundUsd(amountUsd),
     feePostAuthor: params.policy.feePostAuthor,
-    feePostPermlink: params.policy.feePostPermlink,
+    feePostPermlink: params.feePostPermlink,
     requiredVoteWeightBps,
     status: billing.feeRequired ? "open" : billing.mode === "donation" ? "donation_optional" : "waived",
     billingMode: billing.mode,

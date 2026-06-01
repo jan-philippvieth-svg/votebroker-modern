@@ -95,7 +95,6 @@ export interface FeePolicy {
   feeBps: BasisPoints;
   minFeeUsd: number;
   feePostAuthor: string;
-  feePostPermlink: string;
   warningAfterFailures: number;
   pauseAfterFailures: number;
   freeUntilVoteUsd: number;

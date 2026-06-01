@@ -66,7 +66,7 @@ export interface VoteQuoteResponse {
   };
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:3000";
+const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 
 export type PoolRole = "owner" | "admin" | "curator" | "member";
 export type PoolMembershipStatus = "active" | "limited" | "paused";
@@ -192,7 +192,7 @@ export interface VoteExecutionResponse {
   transactionId: string;
 }
 
-export type ConsentType = "login" | "target_vote" | "fee_post_vote" | "auto_vote";
+export type ConsentType = "login" | "target_vote" | "fee_post_vote" | "auto_vote" | "ai_strategy";
 
 export interface ConsentRecord {
   id?: string;
@@ -269,19 +269,27 @@ export async function getConsentState(token: string): Promise<ConsentState> {
   return response.json();
 }
 
+async function consentApiError(response: Response, fallback: string): Promise<never> {
+  let detail = "";
+  try {
+    const body = (await response.json()) as { error?: string; detail?: { fieldErrors?: Record<string, string[]> } };
+    const fieldErrors = body.detail?.fieldErrors;
+    if (fieldErrors) {
+      detail = Object.values(fieldErrors).flat().join(" ");
+    } else if (body.error) {
+      detail = body.error;
+    }
+  } catch {}
+  throw new Error(detail ? `${fallback}: ${detail}` : fallback);
+}
+
 export async function grantConsent(token: string, type: ConsentType): Promise<ConsentState> {
   const response = await fetch(`${API_BASE}/api/consents/grant`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      session: token
-    },
+    headers: { "Content-Type": "application/json", session: token },
     body: JSON.stringify({ type })
   });
-  if (!response.ok) {
-    throw new Error("Consent konnte nicht gespeichert werden.");
-  }
-
+  if (!response.ok) await consentApiError(response, "Consent konnte nicht aktiviert werden");
   const data = (await response.json()) as { state: ConsentState };
   return data.state;
 }
@@ -289,16 +297,10 @@ export async function grantConsent(token: string, type: ConsentType): Promise<Co
 export async function revokeConsent(token: string, type: ConsentType): Promise<ConsentState> {
   const response = await fetch(`${API_BASE}/api/consents/revoke`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      session: token
-    },
+    headers: { "Content-Type": "application/json", session: token },
     body: JSON.stringify({ type })
   });
-  if (!response.ok) {
-    throw new Error("Consent konnte nicht widerrufen werden.");
-  }
-
+  if (!response.ok) await consentApiError(response, "Consent konnte nicht deaktiviert werden");
   const data = (await response.json()) as { state: ConsentState };
   return data.state;
 }
@@ -326,6 +328,13 @@ export async function quoteVote(payload: {
   return response.json();
 }
 
+export class VoteBroadcastError extends Error {
+  constructor(public readonly code: string, message: string) {
+    super(message);
+    this.name = "VoteBroadcastError";
+  }
+}
+
 export async function executeVote(token: string, payload: {
   author: string;
   permlink: string;
@@ -333,20 +342,58 @@ export async function executeVote(token: string, payload: {
 }): Promise<VoteExecutionResponse> {
   const response = await fetch(`${API_BASE}/api/votes/execute`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      session: token
-    },
+    headers: { "Content-Type": "application/json", session: token },
     body: JSON.stringify(payload)
   });
 
   if (!response.ok) {
-    throw new Error(response.status === 403
-      ? "Vote-Consent fehlt oder wurde widerrufen."
-      : "Vote konnte nicht an SteemConnect/HiveSigner gesendet werden.");
+    let code = "broadcast_failed";
+    let errorBody: unknown = {};
+    try {
+      errorBody = await response.json();
+      const data = errorBody as { error?: string };
+      if (data.error) code = data.error;
+    } catch {}
+
+    if (response.status === 401) throw new VoteBroadcastError("session_expired",
+      "Session abgelaufen. Bitte erneut einloggen.");
+    if (code === "target_vote_consent_required") throw new VoteBroadcastError(code,
+      "Vote-Consent fehlt. Bitte unter Einstellungen → Vote-Consent erteilen.");
+    if (code === "missing_posting_authority") throw new VoteBroadcastError(code,
+      "Posting Authority fehlt. Bitte @votebroker die Posting-Berechtigung erteilen.");
+    if (code === "missing_posting_wif") throw new VoteBroadcastError(code,
+      "Server-seitiges Voting nicht konfiguriert (Posting-Key fehlt).");
+    if (code === "account_paused") throw new VoteBroadcastError(code,
+      "Account ist pausiert. Bitte offene Gebühren begleichen.");
+    if (code === "manual_token_fallback_disabled") throw new VoteBroadcastError(code,
+      "Token-basiertes Voting ist serverseitig deaktiviert.");
+    if (code === "authorized_session_required") throw new VoteBroadcastError("session_expired",
+      "Session abgelaufen. Bitte erneut einloggen.");
+    if (code === "already_voted") throw new VoteBroadcastError(code,
+      "Dieser Post wurde bereits gevoted.");
+    if (code === "post_not_found") throw new VoteBroadcastError(code,
+      "Post nicht gefunden — Author oder Permlink ungültig.");
+    if (code === "chain_rejected") {
+      const detail = (errorBody as { detail?: string }).detail ?? "";
+      throw new VoteBroadcastError(code,
+        `Blockchain-Fehler: ${detail || "Transaktion abgelehnt."}`);
+    }
+    throw new VoteBroadcastError(code,
+      `Vote fehlgeschlagen (${code}). Bitte prüfe die Browser-Konsole für Details.`);
   }
 
   return response.json();
+}
+
+export async function checkSessionValid(token: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${API_BASE}/api/auth/me`, {
+      headers: { session: token }
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
 
 export async function getCommunityOverview(username: string): Promise<CommunityPoolOverview> {
@@ -371,4 +418,466 @@ export async function getOperatorOverview(token: string): Promise<OperatorOvervi
   }
 
   return response.json();
+}
+
+export interface SteemAccountSnapshot {
+  username: string;
+  votingPowerBps: number;
+  steemPowerSp: number;
+  fullPowerVoteUsd: number;
+  currentVoteUsd: number;
+  steemPriceUsd: number;
+}
+
+export async function getAccountSnapshot(username: string): Promise<SteemAccountSnapshot> {
+  const response = await fetch(`${API_BASE}/api/account/snapshot?username=${encodeURIComponent(username)}`);
+  if (!response.ok) throw new Error("Account-Snapshot konnte nicht geladen werden.");
+  return response.json();
+}
+
+export async function getAuthorityGrantUrl(): Promise<string> {
+  const response = await fetch(`${API_BASE}/api/auth/authority-grant-url`);
+  if (!response.ok) throw new Error("Authority-Grant-URL konnte nicht geladen werden.");
+  const data = (await response.json()) as { url: string };
+  return data.url;
+}
+
+export interface AuthorStats {
+  username: string;
+  voteCount: number;
+  sharePct: number;
+  avgWeightPct: number;
+  compositeScore: number;
+  lastVoteDaysAgo: number;
+  selectionReasons: string[];
+}
+
+export interface HourStats {
+  hour: number;
+  voteCount: number;
+  sharePct: number;
+}
+
+export interface SuggestedAuthorWeight {
+  username: string;
+  suggestedWeightBps: number;
+  suggestedWeightPct: number;
+  basedOnSharePct: number;
+}
+
+export interface CurationProfile {
+  username: string;
+  votesAnalyzed: number;
+  periodDays: number;
+  votesPerDay: number;
+  uniqueAuthors: number;
+  selfVotePct: number;
+  avgWeightPct: number;
+  fullWeightPct: number;
+  topAuthors: AuthorStats[];
+  peakHoursUtc: HourStats[];
+  dnaLabel: string;
+  dnaDescription: string;
+  powerStable: {
+    maxAvgWeightBps: number;
+    maxAvgWeightPct: number;
+    relevantAuthors: number;
+    suggestedTopWeights: SuggestedAuthorWeight[];
+  };
+}
+
+export interface PostOpportunity {
+  author:         string;
+  permlink:       string;
+  title:          string;
+  ageMinutes:     number;
+  remainingHours: number;
+  postScore:      number;
+  alreadyVoted:   boolean;
+  eligible:       boolean;
+  warning:        string | null;
+}
+
+// ── Vote Plan (Generate Votes) ────────────────────────────────────────────────
+
+export interface VotePlanEntry {
+  author:             string;
+  permlink:           string;
+  title:              string;
+  ageMinutes:         number;
+  remainingHours:     number;
+  postScore:          number;
+  category:           string;
+  priority:           number;
+  suggestedWeightPct: number;
+  suggestedWeightBps: number;
+  expectedVoteUsd:    number;
+  reason:             string;
+  reasons:            string[];
+  warning:            string | null;
+}
+
+export interface VotePlanSummary {
+  totalPosts: number;
+  currentVpPct: number;
+  estimatedVpSpendPct: number;
+  estimatedVpAfterPct: number;
+  sustainability: "sustainable" | "aggressive" | "critical";
+  skippedCategories: string[];
+}
+
+export type StopReason = "max_votes" | "max_spend" | "min_vp" | "none";
+
+export interface ConstraintReport {
+  minVpPct:           number;
+  maxVotesPerRun:     number;
+  maxVpSpendPct:      number;
+  effectiveBudgetPct: number;
+  includedVotes:      number;
+  excludedVotes:      number;
+  stoppedBy:          StopReason;
+  stoppedByLabel:     string;
+  vpAfterPlanPct:     number;
+}
+
+export interface VotePlanConstraints {
+  minVpPct:       number;
+  maxVotesPerRun: number;
+  maxVpSpendPct:  number;
+}
+
+export interface VotePlanResponse {
+  plan:        VotePlanEntry[];
+  summary:     VotePlanSummary;
+  constraints: VotePlanConstraints;
+  report:      ConstraintReport;
+  generatedAt: string;
+}
+
+export const DEFAULT_CONSTRAINTS: VotePlanConstraints = {
+  minVpPct:       50,   // allow spending when VP > 50% — enables meaningful votes
+  maxVotesPerRun: 3,    // quality over quantity — fewer, stronger votes
+  maxVpSpendPct:  80,   // floor is the effective limit; set high so minVpPct controls
+};
+
+export async function generateVotePlan(payload: {
+  voterUsername: string;
+  currentVpBps: number;
+  currentVoteUsd: number;
+  targetVpPct?: number;
+  constraints?: VotePlanConstraints;
+  rules: Array<{ username: string; category: string; maxWeightPct: number; minWeightPct: number; enabled: boolean; selectionReasons?: string[] }>;
+}): Promise<VotePlanResponse> {
+  const response = await fetch(`${API_BASE}/api/curation/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) throw new Error("Vote-Plan konnte nicht generiert werden.");
+  return response.json();
+}
+
+export interface OpportunitiesMeta {
+  requestedAuthors: number;
+  scannedAuthors:   number;
+  totalPosts:       number;
+  eligiblePosts:    number;
+  perAuthor: Record<string, {
+    scanned:       number;
+    eligible:      number;
+    alreadyVoted:  number;
+    noRecentPosts: boolean;
+  }>;
+}
+
+export interface OpportunitiesResponse {
+  opportunities: PostOpportunity[];
+  meta:          OpportunitiesMeta;
+}
+
+export async function getVoteOpportunities(
+  authors: string[],
+  voterUsername: string
+): Promise<OpportunitiesResponse> {
+  // Deduplicate authors before sending
+  const unique = [...new Set(authors.map(a => a.toLowerCase().trim()))].filter(Boolean);
+
+  console.log(`[VoteBroker] Opportunity scan — sending ${unique.length} authors (deduplicated from ${authors.length}):`, unique);
+
+  const response = await fetch(`${API_BASE}/api/curation/opportunities`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ authors: unique, voterUsername })
+  });
+  if (!response.ok) throw new Error("Offene Votes konnten nicht geladen werden.");
+  return response.json() as Promise<OpportunitiesResponse>;
+}
+
+// ── Admin types & API (owner-only) ───────────────────────────────────────────
+
+export interface AdminOverview {
+  users: { totalUsers: number; activeUsers7d: number; activeUsers30d: number; newUsersToday: number; newUsersMonth: number };
+  platform: { totalStrategies: number; activeSessions: number; totalConsents: number; authorityCached: number };
+  votes: { totalAttempts: number; totalSuccess: number; totalBlocked: number; last24h: number };
+}
+
+export interface AdminUserRow {
+  username: string;
+  lastSeen: string;
+  consentsGranted: number;
+  strategyRules: number;
+  hasStrategy: boolean;
+  isAdmin: boolean;
+}
+
+export interface FeePostLogEntry {
+  id: string; dateStr: string; status: "success" | "failed" | "skipped";
+  permlink: string | null; alreadyExisted: boolean; error: string | null;
+  executedAt: string; nextRunAt: string | null;
+}
+
+export interface AdminHealth {
+  api: { status: string; uptimeSeconds: number; memoryMb: number; heapUsedMb: number; nodeVersion: string };
+  database: { status: string; pingMs: number; activeSessions: number; expiredSessions: number; totalAuditEvents: number; authorityCacheEntries: number };
+  votes: { failedBroadcasts: number; recentBlocked: number };
+  feePost: {
+    schedulerActive: boolean;
+    nextRunAt: string;
+    lastRun: FeePostLogEntry | null;
+    lastStatus: string;
+    lastOk: boolean;
+    recentRuns: FeePostLogEntry[];
+  };
+  warnings: string[];
+}
+
+export interface AdminInsights {
+  consents: { breakdown: Record<string, number>; totalActive: number };
+  strategies: { total: number; totalRules: number; manualOverrides: number; avgRulesPerUser: number };
+  votes: { totalAttempts: number; totalSuccess: number; totalBlocked: number; last24h: number };
+  topAuthors: Array<{ username: string; strategiesCount: number }>;
+}
+
+export interface AdminNotification {
+  type: "login" | "consent" | "vote_blocked";
+  message: string;
+  timestamp: string;
+  severity: "info" | "warning" | "error";
+}
+
+export interface AdminDashboardData {
+  overview:      AdminOverview;
+  health:        AdminHealth;
+  users:         { users: AdminUserRow[]; total: number };
+  insights:      AdminInsights;
+  notifications: { notifications: AdminNotification[]; count: number };
+}
+
+// ── Content draft types ────────────────────────────────────────────────────────
+
+export type DraftStatus = "draft" | "reviewed" | "approved" | "scheduled" | "publishing" | "published" | "failed";
+
+export interface ContentDraft {
+  filename: string;
+  dateStr: string;
+  type: "product-post" | "tech-post" | "devlog-post";
+  title: string;
+  status: DraftStatus;
+  notes: string | null;
+  reviewedAt:         string | null;
+  approvedAt:         string | null;
+  scheduledAt:        string | null;
+  scheduledFor:       string | null;
+  publishedAt:        string | null;
+  publishTxId:        string | null;
+  publishedPermlink:  string | null;
+  failedAt:           string | null;
+  failedReason:       string | null;
+  createdAt: string;
+  updatedAt: string;
+  wordCount?: number;
+}
+
+export interface PublishResult {
+  ok:            boolean;
+  transactionId: string;
+  author:        string;
+  permlink:      string;
+  url:           string;
+  draft:         ContentDraft;
+}
+
+export class ContentValidationError extends Error {
+  constructor(public readonly violations: string[]) {
+    super(`Unfertige Platzhalter gefunden: ${violations.join(", ")}`);
+    this.name = "ContentValidationError";
+  }
+}
+
+export async function publishDraft(token: string, filename: string): Promise<PublishResult> {
+  const res = await fetch(`${API_BASE}/api/admin/content/publish`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", session: token },
+    body: JSON.stringify({ filename })
+  });
+  const data = await res.json() as PublishResult & { error?: string; failedReason?: string; violations?: string[] };
+  if (!res.ok) {
+    if (data.error === "content_validation_failed" && data.violations) {
+      throw new ContentValidationError(data.violations);
+    }
+    throw new Error(data.failedReason ?? data.error ?? "publish_failed");
+  }
+  return data;
+}
+
+export interface ContentListResponse {
+  drafts: ContentDraft[];
+  counts: Record<string, number>;
+  contentDir: string;
+  nextScheduled: ContentDraft | null;
+}
+
+export async function getContentDrafts(token: string): Promise<ContentListResponse> {
+  const res = await fetch(`${API_BASE}/api/admin/content`, { headers: { session: token } });
+  if (!res.ok) throw new Error("content_load_failed");
+  return res.json();
+}
+
+export async function getContentPreview(token: string, filename: string): Promise<{ filename: string; content: string; meta: Record<string, string> }> {
+  const res = await fetch(`${API_BASE}/api/admin/content/preview?file=${encodeURIComponent(filename)}`, { headers: { session: token } });
+  if (!res.ok) throw new Error("preview_load_failed");
+  return res.json();
+}
+
+export async function updateDraftStatus(token: string, filename: string, status: DraftStatus, opts?: { notes?: string; scheduledFor?: string; failedReason?: string }): Promise<ContentDraft> {
+  const res = await fetch(`${API_BASE}/api/admin/content/status`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", session: token },
+    body: JSON.stringify({ filename, status, ...opts })
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string; hint?: string };
+    throw new Error(data.hint ?? data.error ?? "status_update_failed");
+  }
+  const data = (await res.json()) as { draft: ContentDraft };
+  return data.draft;
+}
+
+export async function editDraftContent(token: string, filename: string, content: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/admin/content/edit`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", session: token },
+    body: JSON.stringify({ filename, content })
+  });
+  if (!res.ok) throw new Error("edit_failed");
+}
+
+export async function triggerFeePost(token: string): Promise<FeePostLogEntry> {
+  const res = await fetch(`${API_BASE}/api/admin/fee-post/trigger`, {
+    method: "POST",
+    headers: { session: token }
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string; detail?: string };
+    throw new Error(data.detail ?? data.error ?? "trigger_failed");
+  }
+  return res.json();
+}
+
+// ── Cockpit types ─────────────────────────────────────────────────────────────
+
+export interface AdminKpis {
+  users:   { total: number; active24h: number; active7d: number; newUsers24h: number; newUsers7d: number };
+  votes:   { today: number; successToday: number; blockedToday: number; totalSuccess: number; totalBlocked: number };
+  content: { published: number; openDrafts: number; failed: number };
+  feePost: { lastStatus: string; lastDate: string | null };
+  system:  { status: string; hasWif: boolean; dbOk: boolean };
+}
+
+export interface DayVotes  { day: string; total: number; success: number; blocked: number }
+export interface DayUsers  { day: string; new_users: number }
+export interface DayFeePost { day: string; status: string }
+export interface AdminAnalytics { votesByDay: DayVotes[]; usersByDay: DayUsers[]; feePostByDay: DayFeePost[] }
+
+export interface BroadcastEntry {
+  id: string; type: string; username: string; author: string | null;
+  permlink: string | null; weightBps: number | null; detail: string | null;
+  transactionId: string | null; createdAt: string;
+  status: "success" | "blocked" | "attempt";
+}
+
+export interface ContentQueueItem {
+  filename: string; status: string; title: string | null;
+  publish_tx_id: string | null; published_permlink: string | null;
+  scheduled_for: string | null; updated_at: string; failed_reason: string | null;
+}
+
+export interface AdminCockpit {
+  kpis:          AdminKpis;
+  health:        AdminHealth & { steemNode: { status: string; pingMs: number; block?: number }; hasWif: boolean; nodeUrl: string };
+  users:         { users: AdminUserRow[]; total: number };
+  broadcasts:    BroadcastEntry[];
+  analytics:     AdminAnalytics;
+  feePostLog:    FeePostLogEntry[];
+  notifications: { notifications: AdminNotification[]; count: number };
+  contentQueue:  ContentQueueItem[];
+}
+
+export async function getAdminCockpit(token: string): Promise<AdminCockpit> {
+  const res = await fetch(`${API_BASE}/api/admin/cockpit`, { headers: { session: token } });
+  if (!res.ok) throw new Error(res.status === 403 ? "admin_access_denied" : "cockpit_load_failed");
+  return res.json();
+}
+
+export async function getAdminDashboard(token: string): Promise<AdminDashboardData> {
+  const response = await fetch(`${API_BASE}/api/admin/all`, {
+    headers: { session: token }
+  });
+  if (!response.ok) throw new Error(response.status === 403 ? "admin_access_denied" : "admin_load_failed");
+  return response.json();
+}
+
+export async function getPersistedStrategy(token: string): Promise<unknown[] | null> {
+  const response = await fetch(`${API_BASE}/api/strategy`, {
+    headers: { session: token }
+  });
+  if (!response.ok) return null;
+  const data = (await response.json()) as { rules: unknown[] | null };
+  return data.rules;
+}
+
+export async function persistStrategy(token: string, rules: unknown[]): Promise<void> {
+  await fetch(`${API_BASE}/api/strategy`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", session: token },
+    body: JSON.stringify({ rules })
+  });
+}
+
+export async function getCurationDna(username: string, maxVotes = 500): Promise<CurationProfile> {
+  const response = await fetch(
+    `${API_BASE}/api/curation/dna?username=${encodeURIComponent(username)}&maxVotes=${maxVotes}`
+  );
+  if (!response.ok) throw new Error("Vote-DNA konnte nicht geladen werden.");
+  return response.json();
+}
+
+export async function checkPostingAuthority(username: string, broadcastAccount = "votebroker"): Promise<boolean> {
+  const response = await fetch("https://api.steemit.com", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "condenser_api.get_accounts",
+      params: [[username]],
+      id: 1
+    })
+  });
+  if (!response.ok) return false;
+  const data = (await response.json()) as {
+    result?: Array<{ posting: { account_auths: Array<[string, number]> } }>
+  };
+  const account = data.result?.[0];
+  if (!account) return false;
+  return account.posting.account_auths.some(([name]) => name === broadcastAccount);
 }

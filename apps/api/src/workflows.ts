@@ -1,12 +1,19 @@
-import { createFeeInvoice, quoteUsdVote } from "@votebroker/domain";
+import { createFeeInvoice, dailyFeePostPermlink, quoteUsdVote } from "@votebroker/domain";
 import { randomUUID } from "node:crypto";
 import { feePolicy } from "./config.js";
+import { fetchSteemAccountSnapshot, toVotingAccountSnapshot } from "./chain/steemAccount.js";
 import { getAccount, invoices } from "./mockStore.js";
 import type { VoteBrokerWorkflow } from "./ports.js";
 
 export const voteBrokerWorkflow: VoteBrokerWorkflow = {
   async quotePostVote(params) {
-    const account = getAccount(params.username);
+    let account = getAccount(params.username);
+    try {
+      const snapshot = await fetchSteemAccountSnapshot(params.username);
+      account = toVotingAccountSnapshot(snapshot);
+    } catch {
+      // fall back to mockStore (e.g. "demo" account or Steem API unavailable)
+    }
     const quote = quoteUsdVote({
       author: params.author,
       permlink: params.permlink,
@@ -26,7 +33,8 @@ export const voteBrokerWorkflow: VoteBrokerWorkflow = {
       id: randomUUID(),
       account,
       quote,
-      policy: feePolicy
+      policy: feePolicy,
+      feePostPermlink: dailyFeePostPermlink()
     });
 
     invoices.set(invoice.id, invoice);

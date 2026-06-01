@@ -2,7 +2,8 @@ export type ConsentType =
   | "login"
   | "target_vote"
   | "fee_post_vote"
-  | "auto_vote";
+  | "auto_vote"
+  | "ai_strategy";
 
 export type ConsentStatus = "granted" | "revoked";
 

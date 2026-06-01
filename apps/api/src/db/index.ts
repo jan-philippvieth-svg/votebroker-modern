@@ -1,0 +1,133 @@
+import { mkdirSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { createRequire } from "node:module";
+import type DatabaseConstructor from "better-sqlite3";
+
+// ESM-safe require for CJS native module
+const _require = createRequire(import.meta.url);
+const Database = _require("better-sqlite3") as typeof DatabaseConstructor;
+type Database = InstanceType<typeof DatabaseConstructor>;
+
+const DB_PATH = process.env.VOTEBROKER_DB_PATH ?? resolve("data", "votebroker.db");
+
+let _db: Database | null = null;
+
+export function getDb(): Database {
+  if (_db) return _db;
+
+  mkdirSync(dirname(resolve(DB_PATH)), { recursive: true });
+  _db = new Database(DB_PATH);
+  _db.pragma("journal_mode = WAL");
+  _db.pragma("foreign_keys = ON");
+  _db.pragma("synchronous = NORMAL");
+
+  initSchema(_db);
+  runMigrations(_db);
+  pruneExpiredSessions(_db);
+
+  return _db;
+}
+
+function initSchema(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      token       TEXT PRIMARY KEY,
+      username    TEXT NOT NULL,
+      provider    TEXT NOT NULL DEFAULT 'steemconnect',
+      access_token TEXT,
+      expiry      TEXT NOT NULL,
+      created_at  TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS consents (
+      id          TEXT PRIMARY KEY,
+      username    TEXT NOT NULL,
+      type        TEXT NOT NULL,
+      status      TEXT NOT NULL CHECK(status IN ('granted','revoked')),
+      created_at  TEXT NOT NULL,
+      revoked_at  TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_consents_username ON consents(username);
+
+    CREATE TABLE IF NOT EXISTS strategy_rules (
+      username    TEXT PRIMARY KEY,
+      rules_json  TEXT NOT NULL,
+      updated_at  TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS authority_cache (
+      username      TEXT PRIMARY KEY,
+      has_authority INTEGER NOT NULL,
+      checked_at    TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS content_drafts (
+      filename      TEXT PRIMARY KEY,
+      date_str      TEXT NOT NULL,
+      type          TEXT NOT NULL,
+      title         TEXT,
+      status        TEXT NOT NULL DEFAULT 'draft',
+      notes         TEXT,
+      reviewed_at   TEXT,
+      approved_at   TEXT,
+      scheduled_at  TEXT,
+      scheduled_for TEXT,
+      published_at  TEXT,
+      failed_at     TEXT,
+      failed_reason TEXT,
+      created_at    TEXT DEFAULT (datetime('now')),
+      updated_at    TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_drafts_status  ON content_drafts(status);
+    CREATE INDEX IF NOT EXISTS idx_drafts_date    ON content_drafts(date_str);
+
+    CREATE TABLE IF NOT EXISTS fee_post_log (
+      id           TEXT PRIMARY KEY,
+      date_str     TEXT NOT NULL,        -- YYYY-MM-DD
+      status       TEXT NOT NULL,        -- success | failed | skipped
+      permlink     TEXT,
+      already_existed INTEGER DEFAULT 0,
+      error        TEXT,
+      executed_at  TEXT DEFAULT (datetime('now')),
+      next_run_at  TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_fee_log_date ON fee_post_log(date_str);
+
+    CREATE TABLE IF NOT EXISTS audit_events (
+      id            TEXT PRIMARY KEY,
+      type          TEXT NOT NULL,
+      username      TEXT NOT NULL,
+      author        TEXT,
+      permlink      TEXT,
+      weight_bps    INTEGER,
+      detail        TEXT,
+      transaction_id TEXT,
+      created_at    TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_audit_username   ON audit_events(username);
+    CREATE INDEX IF NOT EXISTS idx_audit_created_at ON audit_events(created_at);
+    CREATE INDEX IF NOT EXISTS idx_audit_type       ON audit_events(type);
+  `);
+}
+
+function pruneExpiredSessions(db: Database): void {
+  db.prepare("DELETE FROM sessions WHERE expiry <= datetime('now')").run();
+}
+
+function runMigrations(db: Database): void {
+  // Add new columns to content_drafts if they don't exist (safe ALTER TABLE)
+  const columns = (db.prepare("PRAGMA table_info(content_drafts)").all() as Array<{ name: string }>).map(c => c.name);
+  const addIfMissing = (col: string, type: string) => {
+    if (!columns.includes(col)) {
+      db.exec(`ALTER TABLE content_drafts ADD COLUMN ${col} ${type}`);
+    }
+  };
+  if (columns.length > 0) { // only if table exists
+    addIfMissing("scheduled_at",  "TEXT");
+    addIfMissing("scheduled_for", "TEXT");
+    addIfMissing("failed_at",     "TEXT");
+    addIfMissing("failed_reason", "TEXT");
+    addIfMissing("publish_tx_id", "TEXT");  // blockchain transactionId after real publish
+    addIfMissing("published_permlink", "TEXT"); // on-chain permlink for verification
+  }
+}

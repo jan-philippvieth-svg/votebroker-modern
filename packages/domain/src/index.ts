@@ -6,3 +6,6 @@ export * from "./communityPool.js";
 export * from "./voteTiming.js";
 export * from "./operator.js";
 export * from "./powerStable.js";
+export * from "./feePost.js";
+export * from "./curationDna.js";
+export * from "./changelog.js";

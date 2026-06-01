@@ -82,18 +82,28 @@ export async function broadcastServerSideVote(params: {
   author: string;
   permlink: string;
   weightBps: number;
-}): Promise<{ transactionId: string }> {
+}): Promise<{ transactionId: string; confirmed: boolean }> {
   requireBroadcastConfig(broadcastConfig);
   const client = params.client ?? createSteemClient();
   const key = PrivateKey.fromString(broadcastConfig.postingWif);
+
   const result = await client.broadcast.vote({
-    voter: params.voter,
-    author: params.author,
+    voter:    params.voter,
+    author:   params.author,
     permlink: params.permlink,
-    weight: params.weightBps
+    weight:   params.weightBps
   }, key);
 
-  return {
-    transactionId: result.id ?? "broadcast_accepted"
-  };
+  // A confirmed broadcast has a 40-char hex transaction ID
+  const txId     = result.id ?? "";
+  const confirmed = /^[0-9a-f]{40}$/i.test(txId);
+
+  if (!txId) {
+    throw new Error(
+      `Vote broadcast returned no transaction ID — the Steem node may have rejected the transaction. ` +
+      `voter=${params.voter} author=${params.author} permlink=${params.permlink} weight=${params.weightBps}`
+    );
+  }
+
+  return { transactionId: txId, confirmed };
 }
