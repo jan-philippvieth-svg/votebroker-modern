@@ -180,6 +180,7 @@ export function App() {
   const [planLoading, setPlanLoading] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
   const [recentVotes, setRecentVotes] = useState<RecentVote[]>([]);
+  const [snapshotRefreshedAt, setSnapshotRefreshedAt] = useState<Date | null>(null);
   const [strategyRules, setStrategyRules] = useState<StrategyRule[] | null>(() => {
     try {
       const saved = window.localStorage.getItem("votebroker.strategy");
@@ -304,6 +305,24 @@ export function App() {
     }, 2000);
     return () => clearTimeout(timer);
   }, [strategyRules, strategyHydrated]);
+
+  // Refresh account snapshot (VP, SP, vote value) — called after voting and on a 60s interval
+  function refreshSnapshot() {
+    if (!session) return;
+    setSnapshotLoading(true);
+    getAccountSnapshot(session.user.username)
+      .then(snap => { setAccountSnapshot(snap); setUsername(snap.username); setSnapshotRefreshedAt(new Date()); })
+      .catch(() => {})
+      .finally(() => setSnapshotLoading(false));
+  }
+
+  // 60s polling for snapshot while on dashboard tab
+  useEffect(() => {
+    if (!session || activeTab !== "dashboard") return;
+    setSnapshotRefreshedAt(new Date()); // mark initial load as "refreshed now"
+    const id = setInterval(refreshSnapshot, 60_000);
+    return () => clearInterval(id);
+  }, [session?.token, activeTab]);
 
   const votePercent = useMemo(() => {
     if (!result) return "0.00";
@@ -476,6 +495,11 @@ export function App() {
         await new Promise(r => setTimeout(r, 1500));
       }
     }
+    // After batch is done, refresh VP and re-scan opportunities
+    if (ok + skipped > 0) {
+      setTimeout(() => refreshSnapshot(), 4_000);
+      if (opportunities !== null) setTimeout(() => loadOpportunities(), 7_000);
+    }
     return { ok, failed, skipped, results };
   }
 
@@ -497,6 +521,9 @@ export function App() {
         ? { ...p, alreadyVoted: true, eligible: false }
         : p
     ) ?? null);
+    // Refresh VP after the Steem node has processed the transaction
+    setTimeout(() => refreshSnapshot(), 4_000);
+    if (opportunities !== null) setTimeout(() => loadOpportunities(), 7_000);
     return { transactionId: result.transactionId };
   }
 
@@ -817,6 +844,7 @@ export function App() {
           session={session}
           snapshot={accountSnapshot}
           snapshotLoading={snapshotLoading}
+          snapshotRefreshedAt={snapshotRefreshedAt ?? undefined}
           strategyRules={strategyRules}
           opportunities={opportunities}
           opportunitiesLoading={opportunitiesLoading}
@@ -826,6 +854,7 @@ export function App() {
           onTabChange={setActiveTab}
           onGenerateVotes={generateVotes}
           onLoadOpportunities={loadOpportunities}
+          onRefreshSnapshot={refreshSnapshot}
         />
       )}
 

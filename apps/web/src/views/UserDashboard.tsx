@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   AuthSession,
   CurationProfile,
@@ -142,11 +142,15 @@ function generateInsights(
 
 // ── VP Arc Gauge ──────────────────────────────────────────────────────────────
 
-function VpGauge({ pct, size = 160 }: { pct: number; size?: number }) {
-  const cx = size / 2, cy = size * 0.52, r = size * 0.37, sw = size * 0.078;
+function VpGauge({ pct, sp, voteUsd, size = 160 }: {
+  pct: number; sp?: number; voteUsd?: number; size?: number;
+}) {
+  // cy moved up to 0.46 so the arc bottom (cy+r = 0.83*size) fits in the SVG height of 0.98*size
+  const cx = size / 2, cy = size * 0.46, r = size * 0.37, sw = size * 0.078;
   const col = vpCol(pct);
   const start = 145, total = 250;
   const valDeg = start + (pct / 100) * total;
+  const svgH   = size * 0.98;
 
   function p(deg: number, rr: number) {
     const rad = (deg - 90) * Math.PI / 180;
@@ -162,7 +166,7 @@ function VpGauge({ pct, size = 160 }: { pct: number; size?: number }) {
   const regenText = regenH === 0 ? "fully charged" : regenH < 1 ? `${Math.round(regenH*60)}m to full` : `${regenH.toFixed(1)}h to full`;
 
   return (
-    <svg width={size} height={size * 0.77} viewBox={`0 0 ${size} ${size * 0.77}`} style={{ overflow: "visible" }}>
+    <svg width={size} height={svgH} viewBox={`0 0 ${size} ${svgH}`}>
       <defs>
         <filter id="vglow"><feGaussianBlur stdDeviation="3" result="b"/>
           <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
@@ -174,9 +178,16 @@ function VpGauge({ pct, size = 160 }: { pct: number; size?: number }) {
       })}
       <path d={arc(start, valDeg)} fill="none" stroke={col} strokeWidth={sw} strokeLinecap="round" filter="url(#vglow)"/>
       <circle cx={tick.x} cy={tick.y} r={sw*0.55} fill={col} filter="url(#vglow)"/>
-      <text x={cx} y={cy - 6} textAnchor="middle" fill={col} fontSize={size*0.155} fontWeight="800" fontFamily="inherit">{pct.toFixed(1)}</text>
-      <text x={cx} y={cy + size*0.09} textAnchor="middle" fill={C.dim} fontSize={size*0.063} letterSpacing="1">VOTING POWER</text>
-      <text x={cx} y={cy + size*0.17} textAnchor="middle" fill={C.faint} fontSize={size*0.053}>{regenText}</text>
+      <text x={cx} y={cy - 5} textAnchor="middle" fill={col} fontSize={size*0.155} fontWeight="800" fontFamily="inherit">{pct.toFixed(1)}</text>
+      <text x={cx} y={cy + size*0.085} textAnchor="middle" fill={C.dim} fontSize={size*0.063} letterSpacing="1">VOTING POWER</text>
+      <text x={cx} y={cy + size*0.16} textAnchor="middle" fill={C.faint} fontSize={size*0.053}>{regenText}</text>
+      {/* SP + vote value sit below the arc without any risk of overlap */}
+      {sp !== undefined && voteUsd !== undefined && (
+        <>
+          <text x={cx} y={size * 0.905} textAnchor="middle" fill={C.info} fontSize={size*0.058} fontWeight="700">{sp.toFixed(0)} SP</text>
+          <text x={cx} y={size * 0.965} textAnchor="middle" fill={C.faint} fontSize={size*0.049}>full vote ≈ {fmtUsd(voteUsd)}</text>
+        </>
+      )}
     </svg>
   );
 }
@@ -559,6 +570,7 @@ export function UserDashboard(props: {
   session: AuthSession;
   snapshot: SteemAccountSnapshot | null;
   snapshotLoading: boolean;
+  snapshotRefreshedAt?: Date;
   strategyRules: StrategyRuleLite[] | null;
   opportunities: PostOpportunity[] | null;
   opportunitiesLoading: boolean;
@@ -568,6 +580,7 @@ export function UserDashboard(props: {
   onTabChange: (tab: "dna" | "dashboard" | "community" | "billing") => void;
   onGenerateVotes: () => void;
   onLoadOpportunities: () => void;
+  onRefreshSnapshot?: () => void;
 }) {
   const { snapshot, strategyRules, opportunities, votePlan, curationProfile, recentVotes } = props;
 
@@ -607,20 +620,25 @@ export function UserDashboard(props: {
       <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "1rem", alignItems: "stretch" }}>
 
         {/* VP Gauge */}
-        <div style={{ background: `linear-gradient(145deg, ${C.bg2}, ${C.bg1})`, border: `1px solid ${C.border}`, borderRadius: "12px", padding: "1rem 1.25rem", display: "flex", flexDirection: "column" as const, alignItems: "center", justifyContent: "center", minWidth: "175px" }}>
+        <div style={{ background: `linear-gradient(145deg, ${C.bg2}, ${C.bg1})`, border: `1px solid ${C.border}`, borderRadius: "12px", padding: "0.75rem 1.1rem 0.6rem", display: "flex", flexDirection: "column" as const, alignItems: "center", minWidth: "185px" }}>
+          {/* Header row */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", marginBottom: "0.25rem" }}>
+            <span style={{ color: C.faint, fontSize: "0.6rem", textTransform: "uppercase" as const, letterSpacing: "0.5px", fontWeight: 600 }}>
+              {props.snapshotLoading ? "Updating…" : props.snapshotRefreshedAt ? `${fmtAgeIso(props.snapshotRefreshedAt.toISOString())}` : "Account"}
+            </span>
+            {props.onRefreshSnapshot && (
+              <button type="button" onClick={props.onRefreshSnapshot} disabled={props.snapshotLoading} style={{ background: "none", border: "none", cursor: props.snapshotLoading ? "default" : "pointer", color: props.snapshotLoading ? C.faint : C.muted, fontSize: "0.72rem", padding: "0 0.1rem", lineHeight: 1, opacity: props.snapshotLoading ? 0.5 : 1 }} title="Refresh account data">↻</button>
+            )}
+          </div>
           {vpPct !== null ? (
-            <>
-              <VpGauge pct={vpPct} size={160}/>
-              {snapshot && (
-                <p style={{ fontSize: "0.72rem", color: C.muted, textAlign: "center", margin: "0.4rem 0 0" }}>
-                  <span style={{ color: C.info, fontWeight: 600 }}>{snapshot.steemPowerSp.toFixed(0)} SP</span>
-                  <span style={{ color: C.faint }}> · full vote = </span>
-                  <span style={{ color: C.ok, fontWeight: 600 }}>{fmtUsd(snapshot.fullPowerVoteUsd)}</span>
-                </p>
-              )}
-            </>
+            <VpGauge
+              pct={vpPct}
+              size={162}
+              sp={snapshot?.steemPowerSp}
+              voteUsd={snapshot?.fullPowerVoteUsd}
+            />
           ) : (
-            <div style={{ color: C.faint, padding: "2rem" }}>{props.snapshotLoading ? "Loading…" : "—"}</div>
+            <div style={{ color: C.faint, padding: "2.5rem 2rem", fontSize: "0.8rem" }}>{props.snapshotLoading ? "Loading…" : "—"}</div>
           )}
         </div>
 
@@ -636,8 +654,13 @@ export function UserDashboard(props: {
             {
               label: "Open Opportunities",
               value: openOpps.length > 0 ? `${openOpps.length}` : opportunities === null ? "—" : "0",
-              sub: openOpps.length > 0 ? `${openOpps.filter(p => p.postScore >= 80).length} in optimal window` : opportunities === null ? "tap to discover" : "all caught up ✓",
-              color: openOpps.length > 0 ? C.warn : C.ok, big: true,
+              sub: openOpps.length > 0
+                ? `${openOpps.filter(p => p.postScore >= 80).length} in optimal window`
+                : opportunities === null
+                  ? "tap to discover"
+                  : recentVotes.length > 0 ? "voted — re-scan for new posts ↻" : "all caught up ✓",
+              color: openOpps.length > 0 ? C.warn : opportunities !== null && recentVotes.length > 0 ? C.info : C.ok,
+              big: true,
               onClick: () => { props.onLoadOpportunities(); props.onTabChange("dna"); },
             },
             {
