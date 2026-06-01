@@ -3,6 +3,8 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { fetchVoteHistory } from "../chain/voteHistory.js";
 import { fetchRecentPostsWithVotes, fetchRecentPostsDebug, type PostOpportunity } from "../chain/recentPosts.js";
+import { getSession } from "../auth/sessionStore.js";
+import { getGrowthData } from "./growthService.js";
 
 // ── Shared schemas ────────────────────────────────────────────────────────────
 
@@ -474,5 +476,21 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
       },
       generatedAt: new Date().toISOString()
     };
+  });
+
+  // ── GET /api/me/growth — curator growth time series ──────────────────────
+  // Returns daily vote + author data derived from audit_events.
+  // No USD impact: historical SP/price not stored — won't fake it.
+  app.get("/api/me/growth", async (request, reply) => {
+    const token   = (request.headers as Record<string, string>)["session"];
+    const session = token ? getSession(token) : null;
+    if (!session) return reply.code(401).send({ error: "unauthorized" });
+
+    const rawPeriod = (request.query as Record<string, string>)["period"] ?? "30d";
+    const period    = (["30d", "90d", "all"] as const).includes(rawPeriod as "30d" | "90d" | "all")
+      ? rawPeriod as "30d" | "90d" | "all"
+      : "30d";
+
+    return getGrowthData(session.user.username, period);
   });
 }

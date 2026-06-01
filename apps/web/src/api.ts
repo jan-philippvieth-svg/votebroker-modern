@@ -883,3 +883,37 @@ export async function checkPostingAuthority(username: string, broadcastAccount =
   if (!account) return false;
   return account.posting.account_auths.some(([name]) => name === broadcastAccount);
 }
+
+// ── Growth data ───────────────────────────────────────────────────────────────
+
+export interface GrowthDataPoint {
+  day:        string;
+  votes:      number;
+  cumVotes:   number;
+  newAuthors: number;
+  cumAuthors: number;
+}
+
+export interface GrowthSummary {
+  totalVotes:         number;
+  totalUniqueAuthors: number;
+  activeDays:         number;
+  currentStreak:      number;
+  longestStreak:      number;
+  firstVoteAt:        string | null;
+  lastVoteAt:         string | null;
+}
+
+export interface GrowthData {
+  period:     "30d" | "90d" | "all";
+  dataPoints: GrowthDataPoint[];
+  summary:    GrowthSummary;
+}
+
+export async function fetchGrowthData(token: string, period: "30d" | "90d" | "all"): Promise<GrowthData> {
+  const res = await fetch(`${API_BASE}/api/me/growth?period=${period}`, {
+    headers: { session: token },
+  });
+  if (!res.ok) throw new Error("growth_fetch_failed");
+  return res.json();
+}

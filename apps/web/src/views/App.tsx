@@ -842,6 +842,7 @@ export function App() {
       {activeTab === "dashboard" && (
         <UserDashboard
           session={session}
+          locale={locale}
           snapshot={accountSnapshot}
           snapshotLoading={snapshotLoading}
           snapshotRefreshedAt={snapshotRefreshedAt ?? undefined}
