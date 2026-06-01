@@ -14,8 +14,8 @@ export function isAdmin(session: AuthSession | null): boolean {
 }
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
-const C = { ok: "#3fb950", warn: "#f0a500", err: "#f85149", info: "#58a6ff", purple: "#a371f7", dim: "#8b949e", bg1: "#0d1117", bg2: "#161b22", border: "#30363d", text: "#e6edf3" };
-const card: React.CSSProperties = { background: C.bg2, border: `1px solid ${C.border}`, borderRadius: "8px", padding: "1rem 1.15rem" };
+const C = { ok: "#16a34a", warn: "#d97706", err: "#dc2626", info: "#2563eb", purple: "#7c3aed", dim: "#607078", bg1: "#f4f7f8", bg2: "#ffffff", border: "#dde8ed", text: "#17202a" };
+const card: React.CSSProperties = { background: C.bg2, border: `1px solid ${C.border}`, borderRadius: "12px", padding: "1rem 1.25rem", boxShadow: "0 2px 8px rgba(17,37,45,0.06)" };
 const lbl: React.CSSProperties  = { color: C.dim, fontSize: "0.71rem", textTransform: "uppercase" as const, letterSpacing: "0.5px", fontWeight: 600 };
 const tagStyle = (col: string): React.CSSProperties => ({ background: col + "22", color: col, border: `1px solid ${col}55`, borderRadius: "4px", padding: "0.05rem 0.4rem", fontSize: "0.68rem", fontWeight: 600, whiteSpace: "nowrap" as const });
 const btnStyle = (col = C.border): React.CSSProperties => ({ background: col + "22", border: `1px solid ${col}`, borderRadius: "5px", color: col === C.border ? C.dim : col, cursor: "pointer" as const, fontSize: "0.77rem", padding: "0.25rem 0.6rem", fontWeight: 500 });
@@ -556,9 +556,9 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
             {selectedDraft?.failedReason && <div style={{ color: C.err, fontSize: "0.75rem", marginBottom: "0.4rem" }}>✗ {selectedDraft.failedReason}</div>}
             {editMode ? (
               <textarea value={editContent} onChange={e => setEditContent(e.target.value)}
-                style={{ flex: 1, background: C.bg1, border: `1px solid ${C.border}`, borderRadius: "4px", color: C.text, fontFamily: "monospace", fontSize: "0.77rem", lineHeight: 1.5, padding: "0.75rem", resize: "none" as const, outline: "none" }} />
+                style={{ flex: 1, background: "#1e2733", border: `1px solid ${C.border}`, borderRadius: "4px", color: "#e2eaf4", fontFamily: "monospace", fontSize: "0.77rem", lineHeight: 1.5, padding: "0.75rem", resize: "none" as const, outline: "none" }} />
             ) : (
-              <pre style={{ flex: 1, background: C.bg1, border: `1px solid ${C.border}`, borderRadius: "4px", color: "#c9d1d9", fontFamily: "monospace", fontSize: "0.74rem", lineHeight: 1.5, margin: 0, overflow: "auto", padding: "0.75rem", whiteSpace: "pre-wrap" as const, wordBreak: "break-word" as const, maxHeight: "480px" }}>
+              <pre style={{ flex: 1, background: C.bg1, border: `1px solid ${C.border}`, borderRadius: "4px", color: "#2d3a42", fontFamily: "monospace", fontSize: "0.74rem", lineHeight: 1.5, margin: 0, overflow: "auto", padding: "0.75rem", whiteSpace: "pre-wrap" as const, wordBreak: "break-word" as const, maxHeight: "480px" }}>
                 {preview?.content ?? "No content"}
               </pre>
             )}
