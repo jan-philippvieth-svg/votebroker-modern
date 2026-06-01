@@ -848,6 +848,7 @@ export function App() {
           strategyRules={strategyRules}
           opportunities={opportunities}
           opportunitiesLoading={opportunitiesLoading}
+          opportunitiesMeta={opportunitiesMeta}
           votePlan={votePlan}
           curationProfile={curationProfile}
           recentVotes={recentVotes}
