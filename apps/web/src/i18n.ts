@@ -61,7 +61,7 @@ const translations = {
     kpiVotingPower:     "Voting Power",
     kpiVoteValueNow:    "Vote-Wert jetzt",
     kpiOpenOpps:        "Offene Chancen",
-    kpiSessionImpact:   "Session Impact",
+    kpiSessionImpact:   "Heutige Wirkung",
 
     // ── Dashboard — Sections ──────────────────────────────────────────────────
     secCuratedAuthors:  "Kuratierte Autoren",
@@ -72,9 +72,9 @@ const translations = {
     secVotesLastDays:   "Votes – letzte 7 Tage",
     secActivityPattern: "Aktivitätsmuster (UTC)",
     secTopAuthors:      "Top-Autoren nach Anteil",
-    secGrowth:          "Wachstum",
-    secImpact:          "Community Impact",
-    secCuratorLevel:    "Curator Level",
+    secGrowth:          "Mein Wachstum",
+    secImpact:          "Community-Einfluss",
+    secCuratorLevel:    "Kurator-Level",
 
     // ── Dashboard — Buttons ───────────────────────────────────────────────────
     btnEditStrategy:    "Strategie bearbeiten →",
@@ -156,15 +156,32 @@ const translations = {
     growthDailyVotes:      "Tägliche Votes",
 
     // ── Dashboard — Curator Levels ────────────────────────────────────────────
-    levelNewCurator:         "New Curator",
-    levelActiveSup:          "Active Supporter",
+    levelNewCurator:         "Neuer Kurator",
+    levelActiveSup:          "Aktiver Unterstützer",
     levelCommunityBuilder:   "Community Builder",
-    levelTrustedCurator:     "Trusted Curator",
-    levelEcosystemSup:       "Ecosystem Supporter",
-    levelLegend:             "Legend",
+    levelTrustedCurator:     "Vertrauenswürdiger Kurator",
+    levelEcosystemSup:       "Ökosystem-Unterstützer",
+    levelLegend:             "Legende",
     levelProgressLabel:      "Votes bis zum nächsten Level",
     levelMaxReached:         "Maximales Level erreicht",
     levelImpactNote:         "Votes verteilt · Autoren unterstützt",
+
+    // ── Impact / Bond ─────────────────────────────────────────────────────────
+    strongestBond:           "Stärkste Verbindung",
+    growthEmptyZero:         "Deine Kurator-Geschichte beginnt hier",
+    growthEmptyZeroSub:      "Jeder Vote, den du vergibst, wird dauerhaft auf der Blockchain aufgezeichnet und hier sichtbar.",
+    growthEmptyFew:          "Dein Verlauf wächst mit jedem Vote",
+    growthEmptyFewSub:       "Verteile weitere Votes um deinen Wachstumsverlauf zu sehen.",
+
+    // ── DNA Labels (vom Backend, müssen übersetzt werden) ─────────────────────
+    dnaRegularCurator:       "Regelmäßiger Kurator",
+    dnaBroadExplorer:        "Breiter Entdecker",
+    dnaLoyalCommunity:       "Treuer Community-Kurator",
+    dnaLoyalInner:           "Treuer Inner Circle",
+    dnaHighFreq:             "Hochfrequenz-Kurator",
+    dnaNiche:                "Nischen-Spezialist",
+    dnaLabelSelfVoter:       "Ich-fokussierter Voter",
+    dnaStrategicWeight:      "Strategischer Gewichts-Voter",
 
     // ── Time helpers ──────────────────────────────────────────────────────────
     timeJustNow:        "gerade eben",
@@ -331,6 +348,23 @@ const translations = {
     levelProgressLabel:      "votes to next level",
     levelMaxReached:         "Maximum level reached",
     levelImpactNote:         "votes cast · authors supported",
+
+    // ── Impact / Bond ─────────────────────────────────────────────────────────
+    strongestBond:           "Strongest Bond",
+    growthEmptyZero:         "Your curator story starts here",
+    growthEmptyZeroSub:      "Every vote you cast is permanently recorded on the blockchain and will appear here.",
+    growthEmptyFew:          "Your story is growing with every vote",
+    growthEmptyFewSub:       "Cast more votes to see your growth chart.",
+
+    // ── DNA Labels (from backend, need translation) ───────────────────────────
+    dnaRegularCurator:       "Regular Curator",
+    dnaBroadExplorer:        "Broad Explorer",
+    dnaLoyalCommunity:       "Loyal Community Curator",
+    dnaLoyalInner:           "Loyal Inner Circle",
+    dnaHighFreq:             "High-Frequency Curator",
+    dnaNiche:                "Niche Specialist",
+    dnaLabelSelfVoter:       "Self-Focused Voter",
+    dnaStrategicWeight:      "Strategic Weight Voter",
 
     // ── Time helpers ──────────────────────────────────────────────────────────
     timeJustNow:        "just now",
