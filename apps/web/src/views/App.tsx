@@ -1554,170 +1554,82 @@ function CurationDnaPanel(props: {
 
   const noStrategyYet = !strategyRules;
 
+  // ── Shared section divider ───────────────────────────────────────────────
+  const divider: React.CSSProperties = { marginTop: "1.5rem", borderTop: "1px solid #e8eef2", paddingTop: "1.25rem" };
+  const inputStyle: React.CSSProperties = { background: "#f4f7f8", border: "1px solid #dde8ed", borderRadius: "6px", color: "#17202a", padding: "0.35rem 0.6rem", fontSize: "0.82rem" };
+
   return (
     <section style={{ background: "#ffffff", border: "1px solid #dde8ed", borderRadius: "14px", padding: "1.5rem 1.75rem", boxShadow: "0 2px 8px rgba(17,37,45,0.06)" }}>
 
-      {/* ── Onboarding-Flow für neue Nutzer ─────────────────── */}
-      {noStrategyYet && (
-        <div style={{
-          background: "linear-gradient(135deg, #f0eafe, #ffffff)",
-          border: "1px solid #2563eb25",
-          borderRadius: "10px",
-          padding: "1rem 1.25rem",
-          marginBottom: "1.25rem",
-          display: "flex",
-          flexDirection: "column" as const,
-          gap: "0.6rem",
-        }}>
-          <p style={{ color: "#2563eb", fontSize: "0.72rem", textTransform: "uppercase" as const, letterSpacing: "0.5px", fontWeight: 700, margin: 0 }}>
-            Dein Einstieg
-          </p>
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" as const }}>
-            {[
-              { n: "1", label: "Vote-Historie analysiert", done: true },
-              { n: "2", label: "Autoren-Strategie generieren", done: false, active: true },
-              { n: "3", label: "Posts finden & voten", done: false },
-            ].map(step => (
-              <div key={step.n} style={{
-                display: "flex", alignItems: "center", gap: "0.4rem",
-                padding: "0.35rem 0.65rem",
-                borderRadius: "6px",
-                background: step.active ? "#2563eb14" : step.done ? "#16a34a10" : "transparent",
-                border: `1px solid ${step.active ? "#2563eb" : step.done ? "#16a34a30" : "#c5d3da"}`,
-              }}>
-                <span style={{
-                  width: "18px", height: "18px", borderRadius: "50%", fontSize: "0.68rem", fontWeight: 700,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  background: step.done ? "#16a34a" : step.active ? "#2563eb" : "#dde8ed",
-                  color: step.done || step.active ? "#ffffff" : "#607078",
-                  flexShrink: 0,
-                }}>
-                  {step.done ? "✓" : step.n}
-                </span>
-                <span style={{ fontSize: "0.78rem", color: step.active ? "#17202a" : step.done ? "#16a34a" : "#607078", fontWeight: step.active ? 600 : 400 }}>
-                  {step.label}
-                </span>
-              </div>
-            ))}
+      {/* ── 1. DNA Hero — kompakt, kontextuell ────────────────── */}
+      <div style={{ display: "flex", alignItems: "center", gap: "1rem", padding: "1rem 1.25rem", background: "linear-gradient(135deg, #f5f0ff 0%, #ffffff 60%, #edfbf9 100%)", borderRadius: "12px", border: "1px solid #e0d4fc", marginBottom: "1.5rem", flexWrap: "wrap" as const }}>
+        <span style={{ fontSize: "2rem", lineHeight: 1, flexShrink: 0 }}>{emoji}</span>
+        <div style={{ flex: 1, minWidth: "200px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.15rem" }}>
+            <span style={{ color: "#7c3aed", fontWeight: 800, fontSize: "1rem" }}>{p.dnaLabel}</span>
+            <span style={{ color: "#8fa4b0", fontSize: "0.72rem" }}>· Dein Kurator-Typ</span>
           </div>
-          <p style={{ color: "#607078", fontSize: "0.78rem", margin: 0, lineHeight: 1.5 }}>
-            VoteBroker hat deine letzten Votes analysiert und deine Lieblingsautoren erkannt.
-            Generiere jetzt deine Curation-Strategie — du kannst danach alles anpassen.
-          </p>
+          <p style={{ color: "#607078", fontSize: "0.78rem", margin: 0, lineHeight: 1.45, maxWidth: "520px" }}>{p.dnaDescription}</p>
         </div>
-      )}
+        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" as const, fontSize: "0.8rem" }}>
+          {[
+            { val: p.votesAnalyzed, lbl: "Votes" },
+            { val: p.uniqueAuthors, lbl: "Autoren" },
+            { val: p.periodDays,    lbl: "Tage"   },
+            { val: `${p.votesPerDay}`, lbl: "/Tag"   },
+          ].map(s => (
+            <div key={s.lbl} style={{ textAlign: "center" as const }}>
+              <div style={{ color: "#17202a", fontWeight: 800, fontSize: "1.1rem", lineHeight: 1 }}>{s.val}</div>
+              <div style={{ color: "#8fa4b0", fontSize: "0.65rem", marginTop: "2px" }}>{s.lbl}</div>
+            </div>
+          ))}
+        </div>
+      </div>
 
-      {/* ── DNA Profil-Header ──── */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1.25rem" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-          <span style={{ fontSize: "1.75rem", lineHeight: 1 }}>{emoji}</span>
+      {/* ── 2. Strategie — Hauptbereich, prominente Platzierung ── */}
+      <div>
+        {/* Header mit Aktions-Buttons */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" as const, gap: "0.75rem", marginBottom: "1rem" }}>
           <div>
-            <span style={{ fontSize: "0.75rem", color: "#607078", textTransform: "uppercase", letterSpacing: "0.5px" }}>Dein Kurator-Typ</span>
-            <div style={{ color: "#2563eb", fontSize: "1.05rem", fontWeight: 700, marginTop: "0.1rem" }}>{p.dnaLabel}</div>
-            <p style={{ color: "#607078", fontSize: "0.82rem", margin: "0.25rem 0 0", maxWidth: "480px" }}>{p.dnaDescription}</p>
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", fontSize: "0.82rem", color: "#607078" }}>
-          <span><b style={{ color: "#17202a" }}>{p.votesAnalyzed}</b> Votes</span>
-          <span><b style={{ color: "#17202a" }}>{p.periodDays}</b> Tage</span>
-          <span><b style={{ color: "#17202a" }}>{p.votesPerDay}</b>/Tag</span>
-          <span><b style={{ color: "#17202a" }}>{p.uniqueAuthors}</b> Autoren</span>
-          <span><b style={{ color: "#17202a" }}>{p.selfVotePct}%</b> Self</span>
-        </div>
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-
-        {/* Top Autoren */}
-        <div>
-          <p style={sectionLabel}>Deine stärksten Beziehungen</p>
-          {topAuthors.slice(0, 10).map(a => (
-            <div key={a.username} style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.3rem" }}>
-              <span style={{ color: "#607078", fontSize: "0.78rem", minWidth: "130px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>@{a.username}</span>
-              <div style={{ flex: 1, height: "6px", background: "#dde8ed", borderRadius: "3px" }}>
-                <div style={{ width: `${a.voteCount / maxBar * 100}%`, height: "100%", background: "#2563eb", borderRadius: "3px" }} />
-              </div>
-              <span style={{ color: "#607078", fontSize: "0.73rem", minWidth: "70px", textAlign: "right", whiteSpace: "nowrap" }}>
-                {a.sharePct}% · ⌀{a.avgWeightPct}%
-              </span>
-            </div>
-          ))}
-        </div>
-
-        {/* Power-Stable + Aktivität */}
-        <div>
-          <div style={{ padding: "0.75rem", background: "#f0f5f7", borderRadius: "6px", border: "1px solid #30363d", marginBottom: "1rem" }}>
-            <p style={{ ...sectionLabel, margin: "0 0 0.5rem" }}>Deine nachhaltige Strategie</p>
-            <p style={{ color: "#17202a", fontSize: "0.87rem", fontWeight: 600, margin: "0 0 0.25rem" }}>
-              {p.powerStable.relevantAuthors} Autoren erkannt, die du regelmäßig supportest
-            </p>
-            <p style={{ color: "#607078", fontSize: "0.79rem", margin: "0 0 0.6rem", lineHeight: 1.5 }}>
-              Voting Power regeneriert sich täglich um ca. 20%. Wer jeden Tag zu schwer votet,
-              startet den nächsten Tag mit einer schwächeren VP — und kann weniger Autoren
-              sinnvoll unterstützen. Das Ziel: VP nie unter ~80% fallen lassen.
-            </p>
-            <p style={{ color: "#2d3a42", fontSize: "0.79rem", fontWeight: 600, margin: "0 0 0.3rem" }}>Empfohlene Strategie für dich</p>
-            <ul style={{ color: "#607078", fontSize: "0.79rem", margin: "0 0 0.5rem", paddingLeft: "1.1rem" }}>
-              <li>Durchschnittlich <b style={{ color: "#17202a" }}>{p.powerStable.maxAvgWeightPct}%</b> pro Vote — merkbarer Support, ohne VP zu zerstören</li>
-              <li>VP-Zielbereich <b style={{ color: "#17202a" }}>80–95%</b> — so bleibst du täglich handlungsfähig</li>
-              <li>Vollständige tägliche Regeneration möglich</li>
-            </ul>
-          </div>
-          <p style={sectionLabel}>Aktivität UTC</p>
-          {peakHours.map(h => (
-            <div key={h.hour} style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.3rem" }}>
-              <span style={{ color: "#607078", fontSize: "0.78rem", minWidth: "40px" }}>{String(h.hour).padStart(2, "0")}:00</span>
-              <div style={{ flex: 1, height: "6px", background: "#dde8ed", borderRadius: "3px" }}>
-                <div style={{ width: `${h.voteCount / maxHour * 100}%`, height: "100%", background: "#16a34a", borderRadius: "3px" }} />
-              </div>
-              <span style={{ color: "#607078", fontSize: "0.75rem", minWidth: "32px", textAlign: "right" }}>{h.voteCount}×</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Strategie ──────────────────────────────────────── */}
-      <div style={{ marginTop: "1.25rem", borderTop: "1px solid #21262d", paddingTop: "1rem" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.5rem", marginBottom: "0.75rem" }}>
-          <p style={{ ...sectionLabel, margin: 0 }}>
-            Autoren-Strategie
+            <h3 style={{ color: "#17202a", fontSize: "1.1rem", fontWeight: 800, margin: 0, letterSpacing: "-0.3px" }}>
+              Deine Autoren-Strategie
+            </h3>
             {strategyRules && (
-              <span style={{ color: "#8fa4b0", fontWeight: 400, textTransform: "none", marginLeft: "0.5rem" }}>
-                {strategyRules.filter(r => r.enabled).length} aktiv · {strategyRules.filter(r => r.manuallyModified).length} manuell
-              </span>
-            )}
-          </p>
-          <div style={{ display: "flex", gap: "0.4rem" }}>
-            {strategyRules && (
-              <>
-                <button style={chipBtn} type="button" onClick={regenerate}>
-                  Regenerieren
-                </button>
-                <button
-                  style={{ ...chipBtn, background: "#2563eb14", borderColor: "#2563eb", color: "#2563eb", fontWeight: 600 }}
-                  type="button"
-                  onClick={generateStrategy}
-                >
-                  Aus DNA neu generieren
-                </button>
-              </>
+              <p style={{ color: "#8fa4b0", fontSize: "0.75rem", margin: "0.2rem 0 0" }}>
+                {strategyRules.filter(r => r.enabled).length} aktiv · {strategyRules.filter(r => r.manuallyModified).length} manuell angepasst
+              </p>
             )}
           </div>
+          {strategyRules && (
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" as const }}>
+              <button style={{ ...chipBtn, fontSize: "0.8rem", padding: "0.4rem 0.85rem" }} type="button" onClick={regenerate}>
+                ↺ Anpassen
+              </button>
+              <button
+                style={{ background: "#2563eb", border: "none", borderRadius: "7px", color: "#fff", cursor: "pointer", fontSize: "0.8rem", fontWeight: 700, padding: "0.4rem 0.85rem" }}
+                type="button"
+                onClick={generateStrategy}
+              >
+                ✦ Aus DNA neu generieren
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Manuell hinzufügen */}
-        <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
+        {/* Autor manuell hinzufügen */}
+        <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" as const, marginBottom: "1rem", padding: "0.65rem 0.85rem", background: "#f8fbfc", border: "1px solid #dde8ed", borderRadius: "8px", alignItems: "center" }}>
+          <span style={{ color: "#607078", fontSize: "0.75rem", fontWeight: 600 }}>+ Autor hinzufügen:</span>
           <input
             placeholder="@username"
             value={addUsername}
             onChange={e => setAddUsername(e.target.value)}
             onKeyDown={e => e.key === "Enter" && addManually()}
-            style={{ background: "#dde8ed", border: "1px solid #30363d", borderRadius: "5px", color: "#17202a", padding: "0.3rem 0.6rem", fontSize: "0.82rem", width: "160px" }}
+            style={{ ...inputStyle, width: "160px" }}
           />
           <select
             value={addCategory}
             onChange={e => setAddCategory(e.target.value as StrategyCategory)}
-            style={{ background: "#dde8ed", border: "1px solid #30363d", borderRadius: "5px", color: "#17202a", padding: "0.3rem 0.5rem", fontSize: "0.82rem", cursor: "pointer" }}
+            style={{ ...inputStyle, cursor: "pointer" }}
           >
             {(Object.keys(categoryLabel) as StrategyCategory[]).filter(k => k !== "ignorieren").map(k => (
               <option key={k} value={k}>{categoryLabel[k]}</option>
@@ -1726,33 +1638,24 @@ function CurationDnaPanel(props: {
           <button
             onClick={addManually}
             type="button"
-            style={{ background: "#dde8ed", border: "1px solid #30363d", borderRadius: "5px", color: "#2d3a42", cursor: "pointer", fontSize: "0.78rem", padding: "0.3rem 0.65rem" }}
+            style={{ background: "#2563eb14", border: "1px solid #2563eb40", borderRadius: "6px", color: "#2563eb", cursor: "pointer", fontSize: "0.8rem", fontWeight: 600, padding: "0.35rem 0.75rem" }}
           >
-            + Hinzufügen
+            Hinzufügen
           </button>
         </div>
 
+        {/* Strategie-Inhalt */}
         {!strategyRules ? (
-          <div style={{
-            border: "1px dashed #1f6feb88",
-            borderRadius: "8px",
-            padding: "1.1rem 1.25rem",
-            background: "#1f6feb08",
-          }}>
-            <p style={{ color: "#17202a", fontSize: "0.88rem", fontWeight: 600, margin: "0 0 0.4rem" }}>
-              Schritt 2: Autoren-Strategie generieren
+          <div style={{ border: "1px dashed #2563eb44", borderRadius: "10px", padding: "1.5rem", background: "#f0f5ff", textAlign: "center" as const }}>
+            <div style={{ fontSize: "2rem", marginBottom: "0.6rem" }}>🧬</div>
+            <p style={{ color: "#17202a", fontSize: "0.95rem", fontWeight: 700, margin: "0 0 0.4rem" }}>
+              Deine Autoren-Strategie ist noch leer
             </p>
-            <p style={{ color: "#607078", fontSize: "0.8rem", margin: "0 0 0.85rem", lineHeight: 1.55 }}>
-              VoteBroker ordnet deine Lieblingsautoren automatisch in Kategorien ein
-              (Lieblingsautor, Bevorzugt, Normal) und berechnet nachhaltige Vote-Gewichte.
-              Du kannst danach alles frei anpassen oder Autoren manuell hinzufügen.
+            <p style={{ color: "#607078", fontSize: "0.82rem", margin: "0 0 1rem", lineHeight: 1.55, maxWidth: "420px", marginLeft: "auto", marginRight: "auto" }}>
+              VoteBroker ordnet deine Lieblingsautoren automatisch ein und berechnet nachhaltige Vote-Gewichte. Du kannst danach alles frei anpassen.
             </p>
             <button
-              style={{
-                background: "#2563eb", border: "none", borderRadius: "6px",
-                color: "#fff", cursor: "pointer", fontSize: "0.85rem",
-                fontWeight: 700, padding: "0.55rem 1.1rem",
-              }}
+              style={{ background: "#2563eb", border: "none", borderRadius: "8px", color: "#fff", cursor: "pointer", fontSize: "0.9rem", fontWeight: 700, padding: "0.65rem 1.4rem" }}
               type="button"
               onClick={generateStrategy}
             >
@@ -1769,9 +1672,9 @@ function CurationDnaPanel(props: {
         )}
       </div>
 
-      {/* ── Vote Plan generieren ──────────────────────────── */}
+      {/* ── 3. Vote Plan + Chancen ────────────────────────────── */}
       {strategyRules && props.accountSnapshot && (
-        <div style={{ marginTop: "1.25rem", borderTop: "1px solid #21262d", paddingTop: "1rem" }}>
+        <div style={divider}>
           <VotePlanSection
             plan={props.votePlan}
             loading={props.planLoading}
@@ -1783,9 +1686,8 @@ function CurationDnaPanel(props: {
         </div>
       )}
 
-      {/* ── Offene Votes ──────────────────────────────────── */}
       {strategyRules && (
-        <div style={{ marginTop: "1.25rem", borderTop: "1px solid #21262d", paddingTop: "1rem" }}>
+        <div style={divider}>
           <OpenVoteOpportunities
             opportunities={props.opportunities}
             meta={props.opportunitiesMeta}
@@ -1798,6 +1700,58 @@ function CurationDnaPanel(props: {
           />
         </div>
       )}
+
+      {/* ── 4. Sekundäre Insights — Beziehungen, Muster, Empfehlungen ── */}
+      <div style={{ ...divider, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.25rem" }}>
+
+        {/* Stärkste Beziehungen */}
+        {topAuthors.length > 0 && (
+          <div style={{ background: "#f8fbfc", border: "1px solid #dde8ed", borderRadius: "10px", padding: "1rem 1.1rem" }}>
+            <p style={{ ...sectionLabel, marginBottom: "0.75rem" }}>Deine stärksten Beziehungen</p>
+            {topAuthors.slice(0, 8).map(a => (
+              <div key={a.username} style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.35rem" }}>
+                <span style={{ color: "#2563eb", fontSize: "0.77rem", minWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, fontWeight: 600 }}>@{a.username}</span>
+                <div style={{ flex: 1, height: "5px", background: "#dde8ed", borderRadius: "3px" }}>
+                  <div style={{ width: `${a.voteCount / maxBar * 100}%`, height: "100%", background: "#7c3aed", borderRadius: "3px" }} />
+                </div>
+                <span style={{ color: "#8fa4b0", fontSize: "0.72rem", minWidth: "65px", textAlign: "right" as const, whiteSpace: "nowrap" as const }}>
+                  {a.sharePct}% · ⌀{a.avgWeightPct}%
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Aktivitätsmuster + Nachhaltige Strategie */}
+        <div style={{ display: "flex", flexDirection: "column" as const, gap: "0.75rem" }}>
+          {peakHours.length > 0 && (
+            <div style={{ background: "#f8fbfc", border: "1px solid #dde8ed", borderRadius: "10px", padding: "1rem 1.1rem" }}>
+              <p style={{ ...sectionLabel, marginBottom: "0.6rem" }}>Wann bist du aktiv (UTC)</p>
+              {peakHours.slice(0, 5).map(h => (
+                <div key={h.hour} style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.28rem" }}>
+                  <span style={{ color: "#607078", fontSize: "0.76rem", minWidth: "40px" }}>{String(h.hour).padStart(2, "0")}:00</span>
+                  <div style={{ flex: 1, height: "5px", background: "#dde8ed", borderRadius: "3px" }}>
+                    <div style={{ width: `${h.voteCount / maxHour * 100}%`, height: "100%", background: "#0d9488", borderRadius: "3px" }} />
+                  </div>
+                  <span style={{ color: "#8fa4b0", fontSize: "0.72rem", minWidth: "28px", textAlign: "right" as const }}>{h.voteCount}×</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ background: "#f0f5f7", border: "1px solid #dde8ed", borderRadius: "10px", padding: "1rem 1.1rem" }}>
+            <p style={{ ...sectionLabel, marginBottom: "0.5rem" }}>Nachhaltige Strategie-Empfehlung</p>
+            <p style={{ color: "#17202a", fontSize: "0.82rem", fontWeight: 600, margin: "0 0 0.2rem" }}>
+              {p.powerStable.relevantAuthors} regelmäßig unterstützte Autoren
+            </p>
+            <ul style={{ color: "#607078", fontSize: "0.76rem", margin: "0", paddingLeft: "1rem", lineHeight: 1.6 }}>
+              <li>Empfohlen: ⌀ <b style={{ color: "#17202a" }}>{p.powerStable.maxAvgWeightPct}%</b> pro Vote</li>
+              <li>VP-Zielbereich: <b style={{ color: "#17202a" }}>80–95%</b></li>
+              <li>So bleibst du täglich aktiv</li>
+            </ul>
+          </div>
+        </div>
+      </div>
 
     </section>
   );
