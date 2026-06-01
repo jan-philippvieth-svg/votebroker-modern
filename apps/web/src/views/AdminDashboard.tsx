@@ -347,14 +347,18 @@ function VotesSection({ broadcasts }: { broadcasts: BroadcastEntry[] }) {
 
 function SystemSection({ d, session }: { d: AdminCockpit; session: AuthSession }) {
   const { health, feePostLog } = d;
-  const [triggering, setTriggering] = useState(false);
-  const [triggerMsg, setTriggerMsg] = useState<string | null>(null);
+  const [triggering, setTriggering]     = useState(false);
+  const [triggerMsg, setTriggerMsg]     = useState<string | null>(null);
+  const [retroDate, setRetroDate]       = useState("");   // YYYY-MM-DD for retroactive publish
 
-  async function doTrigger() {
+  async function doTrigger(dateStr?: string) {
     setTriggering(true); setTriggerMsg(null);
     try {
-      const r = await triggerFeePost(session.token);
-      setTriggerMsg(r.alreadyExisted ? `✓ Already exists: @votebroker/${r.permlink}` : `✓ Published: @votebroker/${r.permlink}`);
+      const r = await triggerFeePost(session.token, dateStr);
+      setTriggerMsg(r.alreadyExisted
+        ? `✓ Already exists: @votebroker/${r.permlink}`
+        : `✓ Published: @votebroker/${r.permlink}${dateStr ? ` (retroactive ${dateStr})` : ""}`);
+      if (dateStr) setRetroDate("");
     } catch (e) { setTriggerMsg(`✗ ${e instanceof Error ? e.message : "failed"}`); }
     finally { setTriggering(false); }
   }
@@ -383,13 +387,40 @@ function SystemSection({ d, session }: { d: AdminCockpit; session: AuthSession }
 
       {/* Fee Post Scheduler */}
       <div style={card}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.6rem" }}>
-          <p style={{ ...lbl, margin: 0 }}>Daily Fee Post — Execution Log</p>
-          <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
-            {triggerMsg && <span style={{ color: triggerMsg.startsWith("✓") ? C.ok : C.err, fontSize: "0.77rem" }}>{triggerMsg}</span>}
-            <button style={btnStyle(C.info)} type="button" disabled={triggering} onClick={() => void doTrigger()}>
-              {triggering ? "Running…" : "Run now"}
+        <div style={{ marginBottom: "0.75rem" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
+            <div>
+              <p style={{ ...lbl, margin: "0 0 0.15rem" }}>Daily Fee Settlement Post</p>
+              <p style={{ color: C.dim, fontSize: "0.71rem", margin: 0 }}>
+                Automated at 01:00 UTC · generates <code style={{ fontSize: "0.69rem" }}>daily-fees-YYYY-MM-DD</code> · title: "VoteBroker Fee Settlement — …"
+              </p>
+            </div>
+            <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+              {triggerMsg && <span style={{ color: triggerMsg.startsWith("✓") ? C.ok : C.err, fontSize: "0.77rem", maxWidth: "280px" }}>{triggerMsg}</span>}
+              <button style={btnStyle(C.info)} type="button" disabled={triggering} onClick={() => void doTrigger()}>
+                {triggering ? "Running…" : "Run today"}
+              </button>
+            </div>
+          </div>
+          {/* Retroactive publish row */}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", paddingTop: "0.4rem", borderTop: `1px solid ${C.border}` }}>
+            <span style={{ color: C.dim, fontSize: "0.71rem", whiteSpace: "nowrap" as const }}>Retroactive publish:</span>
+            <input
+              type="date"
+              value={retroDate}
+              onChange={e => setRetroDate(e.target.value)}
+              max={new Date().toISOString().slice(0, 10)}
+              style={{ background: C.bg2, border: `1px solid ${C.border}`, borderRadius: "4px", color: C.text, fontSize: "0.75rem", padding: "0.2rem 0.4rem" }}
+            />
+            <button
+              type="button"
+              disabled={!retroDate || triggering}
+              onClick={() => void doTrigger(retroDate)}
+              style={{ ...btnStyle(C.warn), opacity: retroDate ? 1 : 0.4 }}
+            >
+              Publish for {retroDate || "…"}
             </button>
+            <span style={{ color: C.dim, fontSize: "0.68rem" }}>Use this if the scheduler missed a day</span>
           </div>
         </div>
         <FeePostLogTable rows={feePostLog} />

@@ -7,7 +7,10 @@ export type AuditEventType =
   | "vote_broadcast_blocked"
   | "fee_vote_broadcast_attempt"
   | "fee_vote_broadcast_success"
-  | "fee_vote_broadcast_blocked";
+  | "fee_vote_broadcast_blocked"
+  | "fee_post_published"
+  | "fee_post_skipped"
+  | "fee_post_failed";
 
 export interface AuditEvent {
   id: string;

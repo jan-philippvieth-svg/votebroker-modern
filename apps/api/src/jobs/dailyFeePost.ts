@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { getDb } from "../db/index.js";
 import { ensureDailyFeePost } from "../chain/steemFeePost.js";
+import { writeAuditEvent } from "../audit/auditLog.js";
+import { broadcastConfig } from "../config.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -80,12 +82,20 @@ function msUntilNextRun(): number {
 
 // ── Core job ──────────────────────────────────────────────────────────────────
 
-export async function runDailyFeePost(log: typeof console = console): Promise<FeePostLogEntry> {
-  const now     = new Date();
+/**
+ * @param date  Override the target date (default: today UTC). Pass a past date to retroactively
+ *              publish a missing fee post without affecting tomorrow's scheduled run.
+ */
+export async function runDailyFeePost(
+  log: typeof console = console,
+  date?: Date,
+): Promise<FeePostLogEntry> {
+  const now     = date ?? new Date();
   const dateStr = now.toISOString().slice(0, 10);
   const nextRun = nextRunTime();
+  const account = broadcastConfig.account;
 
-  log.info(`[DailyFeePost] Running for ${dateStr} — next run at ${nextRun.toISOString()}`);
+  log.info(`[DailyFeePost] Running for ${dateStr}${date ? " (retroactive)" : ""} — next scheduled run at ${nextRun.toISOString()}`);
 
   try {
     const result = await ensureDailyFeePost({ newUsers: [], date: now });
@@ -102,8 +112,24 @@ export async function runDailyFeePost(log: typeof console = console): Promise<Fe
 
     if (result.alreadyExisted) {
       log.info(`[DailyFeePost] Post already exists: @${result.author}/${result.permlink}`);
+      writeAuditEvent({
+        type:      "fee_post_skipped",
+        username:  account,
+        author:    result.author,
+        permlink:  result.permlink,
+        weightBps: 0,
+        detail:    `Fee settlement post already exists for ${dateStr}`,
+      });
     } else {
       log.info(`[DailyFeePost] ✓ Published @${result.author}/${result.permlink}`);
+      writeAuditEvent({
+        type:      "fee_post_published",
+        username:  account,
+        author:    result.author,
+        permlink:  result.permlink,
+        weightBps: 0,
+        detail:    `Fee settlement post published for ${dateStr}${date ? " (manual retroactive trigger)" : ""}`,
+      });
     }
 
     return { ...entry, id: "latest", executedAt: now.toISOString() };
@@ -111,6 +137,15 @@ export async function runDailyFeePost(log: typeof console = console): Promise<Fe
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
     log.error(`[DailyFeePost] ✗ Failed for ${dateStr}: ${error}`);
+
+    writeAuditEvent({
+      type:      "fee_post_failed",
+      username:  account,
+      author:    account,
+      permlink:  `daily-fees-${dateStr}`,
+      weightBps: 0,
+      detail:    `Fee settlement post failed for ${dateStr}: ${error}`,
+    });
 
     const entry: Omit<FeePostLogEntry, "id" | "executedAt"> = {
       dateStr,

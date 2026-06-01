@@ -772,10 +772,12 @@ export async function editDraftContent(token: string, filename: string, content:
   if (!res.ok) throw new Error("edit_failed");
 }
 
-export async function triggerFeePost(token: string): Promise<FeePostLogEntry> {
+/** Trigger a fee settlement post. Pass `date` (YYYY-MM-DD) to retroactively publish a missing post. */
+export async function triggerFeePost(token: string, date?: string): Promise<FeePostLogEntry> {
   const res = await fetch(`${API_BASE}/api/admin/fee-post/trigger`, {
     method: "POST",
-    headers: { session: token }
+    headers: { session: token, "content-type": "application/json" },
+    body: date ? JSON.stringify({ date }) : undefined,
   });
   if (!res.ok) {
     const data = (await res.json().catch(() => ({}))) as { error?: string; detail?: string };

@@ -15,9 +15,8 @@ const RETRY_BASE_MS = 4_000;
 
 async function checkRcPreflight(client: Client, account: string): Promise<void> {
   try {
-    const result = await client.database.call("rc_api.find_rc_accounts", {
-      accounts: [account]
-    }) as { rc_accounts?: Array<{ max_rc: string; rc_manabar: { current_mana: string } }> };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await client.database.call("rc_api.find_rc_accounts", { accounts: [account] } as any) as { rc_accounts?: Array<{ max_rc: string; rc_manabar: { current_mana: string } }> };
 
     const rc = result?.rc_accounts?.[0];
     if (!rc) return;
@@ -37,7 +36,7 @@ async function checkRcPreflight(client: Client, account: string): Promise<void> 
   }
 }
 
-async function broadcastWithRetry(fn: () => Promise<void>): Promise<void> {
+async function broadcastWithRetry(fn: () => Promise<unknown>): Promise<void> {
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       await fn();
@@ -123,7 +122,7 @@ export async function ensureDailyFeePost(params: {
         title,
         body,
         json_metadata: JSON.stringify({
-          tags: ["votebroker", "fees", "curation"],
+          tags: ["votebroker", "fees", "settlement"],
           app: "votebroker/1.0"
         })
       },
