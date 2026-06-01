@@ -162,16 +162,43 @@ const translations = {
     levelTrustedCurator:     "Vertrauenswürdiger Kurator",
     levelEcosystemSup:       "Ökosystem-Unterstützer",
     levelLegend:             "Legende",
-    levelProgressLabel:      "Votes bis zum nächsten Level",
-    levelMaxReached:         "Maximales Level erreicht",
+    levelProgressLabel:      "Autoren bis zum nächsten Level",
+    levelMaxReached:         "Maximales Level erreicht – du bist eine Legende! 🏆",
     levelImpactNote:         "Votes verteilt · Autoren unterstützt",
+    levelMoreAuthors:        "weitere Autoren bis",
+    levelAuthorsOf:          "Autoren",
+
+    // ── Community Growth ──────────────────────────────────────────────────────
+    secCommunityGrowth:      "Community-Wachstum",
+    secCuratorJourney:       "Kurator-Reise",
+    secRelationships:        "Deine Beziehungen",
+    secTechnical:            "Voting-Status",
+    secYourImpact:           "Dein Beitrag",
+
+    growthChartTitle:        "Unterstützte Autoren im Zeitverlauf",
+    growthChartNote:         "Jeder Schritt nach oben steht für einen weiteren Menschen, den du unterstützt hast.",
+    growthEmptyBuildingNote: "Dein Wachstumsgraph erscheint hier, sobald du deine ersten Votes durch VoteBroker vergibst.",
 
     // ── Impact / Bond ─────────────────────────────────────────────────────────
     strongestBond:           "Stärkste Verbindung",
+    impactAuthors:           "Unterstützte Autoren",
+    impactVotes:             "Votes verteilt",
+    impactActiveDays:        "Aktive Tage",
+    impactStreak:            "Längste Serie",
+    impactCurrentStreak:     "Aktuelle Serie",
+
     growthEmptyZero:         "Deine Kurator-Geschichte beginnt hier",
     growthEmptyZeroSub:      "Jeder Vote, den du vergibst, wird dauerhaft auf der Blockchain aufgezeichnet und hier sichtbar.",
     growthEmptyFew:          "Dein Verlauf wächst mit jedem Vote",
     growthEmptyFewSub:       "Verteile weitere Votes um deinen Wachstumsverlauf zu sehen.",
+
+    // ── Relationships ─────────────────────────────────────────────────────────
+    relVotesTogether:        "Votes gemeinsam",
+    relShareCuration:        "deiner Kuration",
+    relLastVoted:            "Zuletzt vor",
+    relDays:                 "Tagen",
+    relStrongestNote:        "deine engste Verbindung",
+    relMostVotes:            "meistgevoteter Autor",
 
     // ── DNA Labels (vom Backend, müssen übersetzt werden) ─────────────────────
     dnaRegularCurator:       "Regelmäßiger Kurator",
@@ -345,16 +372,43 @@ const translations = {
     levelTrustedCurator:     "Trusted Curator",
     levelEcosystemSup:       "Ecosystem Supporter",
     levelLegend:             "Legend",
-    levelProgressLabel:      "votes to next level",
-    levelMaxReached:         "Maximum level reached",
+    levelProgressLabel:      "authors to next level",
+    levelMaxReached:         "Max level reached — you are a legend! 🏆",
     levelImpactNote:         "votes cast · authors supported",
+    levelMoreAuthors:        "more authors until",
+    levelAuthorsOf:          "authors",
+
+    // ── Community Growth ──────────────────────────────────────────────────────
+    secCommunityGrowth:      "Community Growth",
+    secCuratorJourney:       "Curator Journey",
+    secRelationships:        "Your Relationships",
+    secTechnical:            "Voting Status",
+    secYourImpact:           "Your Impact",
+
+    growthChartTitle:        "Authors Supported Over Time",
+    growthChartNote:         "Every step up represents another person you've supported.",
+    growthEmptyBuildingNote: "Your growth chart will appear here once you start casting votes through VoteBroker.",
 
     // ── Impact / Bond ─────────────────────────────────────────────────────────
     strongestBond:           "Strongest Bond",
+    impactAuthors:           "Authors Supported",
+    impactVotes:             "Votes Cast",
+    impactActiveDays:        "Active Days",
+    impactStreak:            "Longest Streak",
+    impactCurrentStreak:     "Current Streak",
+
     growthEmptyZero:         "Your curator story starts here",
     growthEmptyZeroSub:      "Every vote you cast is permanently recorded on the blockchain and will appear here.",
     growthEmptyFew:          "Your story is growing with every vote",
     growthEmptyFewSub:       "Cast more votes to see your growth chart.",
+
+    // ── Relationships ─────────────────────────────────────────────────────────
+    relVotesTogether:        "votes together",
+    relShareCuration:        "of your curation",
+    relLastVoted:            "Last voted",
+    relDays:                 "days ago",
+    relStrongestNote:        "your strongest connection",
+    relMostVotes:            "most voted author",
 
     // ── DNA Labels (from backend, need translation) ───────────────────────────
     dnaRegularCurator:       "Regular Curator",
