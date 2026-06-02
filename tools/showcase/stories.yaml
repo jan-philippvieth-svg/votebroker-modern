@@ -1,0 +1,169 @@
+# VoteBroker Showcase — Story-driven Screenshot Annotations
+# ============================================================
+# Jede Section = ein Textabschnitt des Posts + ein Screenshot.
+# Marker dürfen NUR Elemente markieren, die im Absatz erklärt werden.
+# "find_text" sucht den echten DOM-Text; kein Marker ohne Textbezug.
+#
+# UI-Navigation:
+#   tab: dna | dashboard | community
+#   actions: Liste von Schritten vor dem Screenshot
+#
+# Marker-Positionierung:
+#   find_text:  Browser-Text der genau so im DOM stehen muss
+#   fallback:   Alternatives Textfragment wenn Haupttext nicht gefunden
+#   anchor:     Wo der Marker relativ zum Element sitzt
+#               center | top_left | top_right | below | above
+
+sections:
+
+  # ── 1. Chancen finden ─────────────────────────────────────────────────────
+  - id: find_votes
+    filename: "01_find_votes"
+    title: "Chancen finden"
+    story: |
+      VoteBroker durchsucht alle Beiträge deiner Autoren-Strategie
+      und findet neue Voting-Chancen – vollautomatisch.
+    tab: dna
+    actions:
+      - type: wait_ms
+        ms: 1500
+    markers:
+      - label: "① Jetzt scannen"
+        find_text: "Offene Posts suchen"
+        fallback: "Scann"
+        anchor: center
+      - label: "② Kurator-Profil"
+        find_text: "Regular Curator"
+        fallback: "Regelmäßiger Kurator"
+        anchor: top_right
+      - label: "③ VP jetzt"
+        find_text: "VP JETZT"
+        fallback: "73."
+        anchor: below
+
+  # ── 2. Vote-Plan erstellen ────────────────────────────────────────────────
+  - id: vote_plan
+    filename: "02_vote_plan"
+    title: "Vote-Plan erstellen"
+    story: |
+      Nach dem Scan berechnet VoteBroker automatisch einen VP-schonenden Plan:
+      welche Posts, in welcher Reihenfolge, mit welchem VP-Effekt morgen.
+    tab: dna
+    actions:
+      - type: click_text
+        text: "Offene Posts suchen"
+        wait_after_ms: 3000
+      - type: click_text
+        text: "Vote-Plan generieren"
+        wait_after_ms: 3500
+    markers:
+      - label: "① Plan generieren"
+        find_text: "Vote-Plan generieren"
+        fallback: "Plan aktualisieren"
+        anchor: center
+      - label: "② VP nach Plan"
+        find_text: "NACH PLAN"
+        fallback: "Nach Plan"
+        anchor: below
+      - label: "③ VP morgen"
+        find_text: "VP MORGEN"
+        fallback: "VP morgen"
+        anchor: below
+
+  # ── 3. Gewichtungen anpassen ──────────────────────────────────────────────
+  - id: edit_weights
+    filename: "03_edit_weights"
+    title: "Gewichtungen anpassen"
+    story: |
+      Jeder Autor hat ein Kategorien-Tag und einen Vote-Status.
+      Gewichtungen lassen sich jederzeit manuell korrigieren.
+    tab: dna
+    scroll_y: 250
+    actions:
+      - type: wait_ms
+        ms: 500
+    markers:
+      - label: "① Kategorie"
+        find_text: "Lieblingsautor"
+        fallback: "lieblingsautor"
+        anchor: center
+      - label: "② Vote-Status"
+        find_text: "gevoted"
+        anchor: center
+      - label: "③ Strategie"
+        find_text: "Autoren-Strategie"
+        fallback: "Strategie"
+        anchor: top_right
+
+  # ── 4. Votes bestätigen & absenden ────────────────────────────────────────
+  - id: confirm_votes
+    filename: "04_confirm_votes"
+    title: "Votes absenden"
+    story: |
+      VoteBroker zeigt alle geplanten Votes und wartet auf deine Bestätigung.
+      Keine automatische Ausführung – du entscheidest immer selbst.
+    tab: dna
+    actions:
+      - type: wait_ms
+        ms: 500
+    markers:
+      - label: "① Plan prüfen"
+        find_text: "Votes bestätigen"
+        fallback: "bestätigen"
+        anchor: center
+
+  # ── 5. Dashboard – Auswirkungen ────────────────────────────────────────────
+  - id: dashboard_results
+    filename: "05_dashboard"
+    title: "Dashboard – was es gebracht hat"
+    story: |
+      Nach der Ausführung zeigt das Dashboard alle Auswirkungen auf einen Blick:
+      Votes heute, Pending Curation der nächsten 7 Tage und das verdiente SP
+      der letzten 30 Tage.
+    tab: dashboard
+    scroll_y: 0
+    actions:
+      - type: wait_ms
+        ms: 2000
+    markers:
+      - label: "① Votes heute"
+        find_text: "HEUTE"
+        fallback: "Votes"
+        anchor: top_right
+      - label: "② Pending 7 Tage"
+        find_text: "PENDING"
+        fallback: "7 Tage"
+        anchor: top_right
+      - label: "③ Verdient 30 Tage"
+        find_text: "VERDIENT"
+        fallback: "30 Tage"
+        anchor: top_right
+      - label: "④ VP-Verlauf"
+        find_text: "VP HEUTE"
+        fallback: "VP-Verlauf"
+        anchor: above
+
+  # ── 6. Community – neue Autoren entdecken ─────────────────────────────────
+  - id: community
+    filename: "06_community"
+    title: "Neue Autoren entdecken"
+    story: |
+      Der Community-Tab zeigt Autoren, die andere VoteBroker-Kuratoren bereits
+      unterstützen – aber noch nicht in deiner Strategie sind.
+      Ein Klick fügt sie direkt hinzu.
+    tab: community
+    actions:
+      - type: wait_ms
+        ms: 3500
+    markers:
+      - label: "① Entdeckungen"
+        find_text: "ENTDECKUNGEN FÜR DICH"
+        fallback: "Entdeckungen"
+        anchor: top_right
+      - label: "② Neuer Autor"
+        find_text: "@gtg"
+        fallback: "@kingscrown"
+        anchor: center
+      - label: "③ Zur Strategie"
+        find_text: "+ Zur Strategie"
+        anchor: center
