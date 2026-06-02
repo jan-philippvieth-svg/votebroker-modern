@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  captureScreenshots, ContentValidationError, editDraftContent, generateDevlogContent,
-  getAdminCockpit, getContentDrafts, getContentPreview, injectScreenshots,
-  listScreenshots, publishDraft, triggerFeePost, updateDraftStatus,
+  captureScreenshots, ContentValidationError, editDraftContent, fixScreenshotUrls,
+  generateDevlogContent, getAdminCockpit, getContentDrafts, getContentPreview,
+  injectScreenshots, listScreenshots, publishDraft, triggerFeePost, updateDraftStatus,
   type AdminCockpit, type AuthSession, type BroadcastEntry,
   type ContentDraft, type ContentListResponse, type ContentQueueItem,
   type DraftStatus, type FeePostLogEntry, type PublishResult, type ScreenshotFile,
@@ -701,6 +701,25 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
                       onClick={() => void doInjectScreenshots()}
                       title="Platzhalter im Draft durch Screenshot-URLs ersetzen"
                     >⬇ Einbetten</button>
+                  )}
+                  {preview?.content?.includes("/api/admin/screenshots/") && (
+                    <button
+                      style={{ ...btnStyle(C.err), fontSize: "0.73rem", fontWeight: 700 }}
+                      type="button" disabled={saving}
+                      onClick={async () => {
+                        if (!selected) return;
+                        setSaving(true);
+                        setActionMsg("⏳ Repariere Screenshot-URLs…");
+                        try {
+                          const r = await fixScreenshotUrls(session.token, selected);
+                          setActionMsg(r.hint);
+                          if (r.changed) await openPreview(selected);
+                        } catch (e) {
+                          setActionMsg(`✗ ${e instanceof Error ? e.message : "Fehler"}`);
+                        } finally { setSaving(false); }
+                      }}
+                      title="Interne /api/admin/screenshots/ → öffentliche /screenshots/ URLs"
+                    >🔧 URLs reparieren</button>
                   )}
                   <button style={btnStyle(C.info)} type="button" onClick={() => setEditMode(true)}>Bearbeiten</button>
                   {selectedDraft?.status === "draft" && <button style={btnStyle(C.info)} type="button" disabled={saving} onClick={() => void setStatus(selected, "reviewed")}>Review ✓</button>}

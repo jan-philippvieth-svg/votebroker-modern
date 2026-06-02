@@ -332,9 +332,10 @@ export async function registerContentRoutes(app: FastifyInstance): Promise<void>
     const available = readdirSync(source).filter(f => f.endsWith(".png"));
     const screenshotMap: Record<string, string> = {};
     for (const f of available) {
-      // 01_dashboard_annotated.png → PLACEHOLDER_01_dashboard
+      // PLACEHOLDER_01_dashboard → /screenshots/01_dashboard_annotated.png (PUBLIC)
+      // Public path so Steemit / external can load the images without auth.
       const key = "PLACEHOLDER_" + f.replace(/_annotated\.png$/, "").replace(/\.png$/, "");
-      screenshotMap[key] = `/api/admin/screenshots/${f}`;
+      screenshotMap[key] = `/api/screenshots/${f}`;  // public, no auth
     }
 
     let content = readFileSync(filePath, "utf8");
@@ -354,6 +355,41 @@ export async function registerContentRoutes(app: FastifyInstance): Promise<void>
     getDb().prepare("UPDATE content_drafts SET updated_at=datetime('now') WHERE filename=?").run(filename);
     request.log.info({ filename, replaced, screenshotMap }, "Screenshots injected into draft");
     return { ok: true, replaced, screenshotMap };
+  });
+
+  // ── POST /api/admin/content/fix-screenshot-urls ────────────────────────────
+  // Replaces /api/admin/screenshots/ with /screenshots/ in any draft file.
+  // Use after publish to fix posts that went live with internal auth URLs.
+  app.post("/api/admin/content/fix-screenshot-urls", async (request, reply) => {
+    const body = z.object({ filename: z.string().min(1).max(200) }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: "invalid_request" });
+    const { filename } = body.data;
+    if (!DRAFT_PATTERN.test(filename)) return reply.code(400).send({ error: "invalid_filename" });
+
+    const filePath = resolve(CONTENT_DIR, filename);
+    if (!existsSync(filePath)) return reply.code(404).send({ error: "draft_not_found" });
+
+    const original = readFileSync(filePath, "utf8");
+    const fixed    = original.replace(/\/api\/admin\/screenshots\//g, "/api/screenshots/");
+    const changed  = original !== fixed;
+
+    if (changed) {
+      writeFileSync(filePath, fixed, "utf8");
+      getDb().prepare("UPDATE content_drafts SET updated_at=datetime('now') WHERE filename=?").run(filename);
+    }
+
+    // Count replacements
+    const count = (original.match(/\/api\/admin\/screenshots\//g) ?? []).length;
+    request.log.info({ filename, count, changed }, "fix-screenshot-urls");
+
+    return {
+      ok: true,
+      changed,
+      replacements: count,
+      hint: changed
+        ? `${count} interne URL(s) auf öffentliche /screenshots/ umgestellt. Draft neu veröffentlichen.`
+        : "Keine internen Screenshot-URLs gefunden — bereits korrekt.",
+    };
   });
 
   // List all drafts

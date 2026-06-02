@@ -17,6 +17,9 @@ import { getCachedAuthority, setCachedAuthority } from "./chain/authorityCache.j
 import { fetchSteemAccountSnapshot } from "./chain/steemAccount.js";
 import { broadcastConfig, feePolicy, operatorConfig } from "./config.js";
 import { generateDevlogDraft } from "./jobs/dailyDevlog.js";
+import { fetchVBEarnings } from "./chain/voteBrokerEarnings.js";
+import { createReadStream, existsSync, readdirSync } from "node:fs";
+import { resolve as pathResolve } from "node:path";
 import { hasConsent } from "./consent/consentStore.js";
 import { getDb } from "./db/index.js";
 import { fetchPendingCuration } from "./chain/steemPendingCuration.js";
@@ -46,11 +49,35 @@ const executeVoteSchema = z.object({
   broadcastMode: z.enum(["server", "token"]).optional()
 });
 
+// Screenshots dir (same logic as contentRoutes.ts)
+const PUBLIC_SCREENSHOTS_DIR = (() => {
+  if (process.env.VOTEBROKER_SCREENSHOTS_DIR) return process.env.VOTEBROKER_SCREENSHOTS_DIR;
+  if (existsSync("/app/data")) return "/app/data/screenshots";
+  return "docs/screenshots";
+})();
+
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   app.get("/health", async () => ({
     status: "ok",
     service: "votebroker-api"
   }));
+
+  // ── GET /api/screenshots/:filename — PUBLIC, no auth (for Steemit/external use) ──
+  // Serves annotated PNGs. Route is /api/ so Caddy proxies it; no admin hook applied.
+  // Admin gallery uses /api/admin/screenshots/ (auth). This is the public twin.
+  app.get("/api/screenshots/:filename", async (request, reply) => {
+    const { filename } = request.params as { filename: string };
+    if (!/^[\w\-]+\.png$/.test(filename)) return reply.code(400).send("invalid");
+
+    const annotated = pathResolve(PUBLIC_SCREENSHOTS_DIR, "annotated", filename);
+    const raw       = pathResolve(PUBLIC_SCREENSHOTS_DIR, filename);
+    const filePath  = existsSync(annotated) ? annotated : existsSync(raw) ? raw : null;
+    if (!filePath) return reply.code(404).send("not found");
+
+    reply.header("Cache-Control", "public, max-age=86400");
+    reply.type("image/png");
+    return reply.send(createReadStream(filePath));
+  });
 
   // ── GET /api/devlog/published-features — clusters already communicated ─────
   app.get("/api/devlog/published-features", async (request, reply) => {

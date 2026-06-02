@@ -1139,3 +1139,13 @@ export async function fetchVBEarnings(
   if (!res.ok) throw new Error("VoteBroker Earnings konnten nicht geladen werden.");
   return res.json();
 }
+
+export async function fixScreenshotUrls(token: string, filename: string): Promise<{ ok: boolean; changed: boolean; replacements: number; hint: string }> {
+  const res = await fetch(`${API_BASE}/api/admin/content/fix-screenshot-urls`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", session: token },
+    body: JSON.stringify({ filename }),
+  });
+  if (!res.ok) throw new Error(`fix-urls failed (${res.status})`);
+  return res.json();
+}
