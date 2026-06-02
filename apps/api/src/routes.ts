@@ -52,6 +52,82 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     service: "votebroker-api"
   }));
 
+  // ── GET /api/devlog/published-features — clusters already communicated ─────
+  app.get("/api/devlog/published-features", async (request, reply) => {
+    const token = (request.headers["x-operator-token"] as string | undefined) ?? "";
+    if (!token || token !== operatorConfig.token || !operatorConfig.token) {
+      return reply.code(403).send({ error: "operator_token_required" });
+    }
+    const contextType = (request.query as Record<string, string>)["context"] ?? "devlog";
+    const rows = getDb().prepare(`
+      SELECT story_key, cluster, summary, since_date, until_date, context_type, draft_filename, published_at
+      FROM published_features
+      WHERE context_type = ?
+      ORDER BY published_at DESC
+    `).all(contextType) as Array<{
+      story_key: string; cluster: string; summary: string;
+      since_date: string; until_date: string; context_type: string;
+      draft_filename: string; published_at: string;
+    }>;
+    return { features: rows };
+  });
+
+  // ── GET /api/devlog/recent-stories — new stories for fee-report/short notices ─
+  app.get("/api/devlog/recent-stories", async (request, reply) => {
+    const token = (request.headers["x-operator-token"] as string | undefined) ?? "";
+    if (!token || token !== operatorConfig.token || !operatorConfig.token) {
+      return reply.code(403).send({ error: "operator_token_required" });
+    }
+    const since = (request.query as Record<string, string>)["since"] ?? "";
+    // Returns stories published in devlog context but NOT yet in fee-report context
+    const rows = getDb().prepare(`
+      SELECT pf.story_key, pf.cluster, pf.summary, pf.published_at
+      FROM published_features pf
+      WHERE pf.context_type = 'devlog'
+        AND (? = '' OR pf.published_at >= ?)
+        AND NOT EXISTS (
+          SELECT 1 FROM published_features pf2
+          WHERE pf2.story_key = pf.story_key AND pf2.context_type = 'fee-report'
+        )
+      ORDER BY pf.published_at DESC
+    `).all(since, since) as Array<{ story_key: string; cluster: string; summary: string; published_at: string }>;
+    return { stories: rows };
+  });
+
+  // ── POST /api/devlog/record-stories — records cluster-stories as communicated ─
+  app.post("/api/devlog/record-stories", async (request, reply) => {
+    const token = (request.headers["x-operator-token"] as string | undefined) ?? "";
+    if (!token || token !== operatorConfig.token || !operatorConfig.token) {
+      return reply.code(403).send({ error: "operator_token_required" });
+    }
+    const body = z.object({
+      draftFilename: z.string().min(1),
+      contextType:   z.enum(["devlog", "product-post", "fee-report"]),
+      stories: z.array(z.object({
+        storyKey:  z.string().min(1),
+        cluster:   z.string().min(1),
+        summary:   z.string().min(1).max(300),
+        sinceDate: z.string().min(1),
+        untilDate: z.string().min(1),
+      })).min(1).max(20),
+    }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: "invalid_request" });
+
+    const { draftFilename, contextType, stories } = body.data;
+    const stmt = getDb().prepare(`
+      INSERT OR IGNORE INTO published_features
+        (story_key, cluster, summary, since_date, until_date, context_type, draft_filename)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    const insert = getDb().transaction(() => {
+      for (const s of stories) {
+        stmt.run(s.storyKey, s.cluster, s.summary, s.sinceDate, s.untilDate, contextType, draftFilename);
+      }
+    });
+    insert();
+    return { ok: true, recorded: stories.length };
+  });
+
   // ── POST /api/devlog/generate — operator-token auth (for CI/tools) ─────────
   app.post("/api/devlog/generate", async (request, reply) => {
     const token = (request.headers["x-operator-token"] as string | undefined) ?? "";

@@ -107,6 +107,24 @@ function initSchema(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_audit_username   ON audit_events(username);
     CREATE INDEX IF NOT EXISTS idx_audit_created_at ON audit_events(created_at);
     CREATE INDEX IF NOT EXISTS idx_audit_type       ON audit_events(type);
+
+    -- Feature knowledge base: tracks which cluster-stories were communicated
+    -- and in which context. This is the shared truth for devlogs, product posts
+    -- and fee reports — cluster (not commit) is the unit.
+    CREATE TABLE IF NOT EXISTS published_features (
+      story_key      TEXT NOT NULL,   -- "{cluster}-{since_date}" slug
+      cluster        TEXT NOT NULL,
+      summary        TEXT NOT NULL,   -- human-readable one-liner for this story
+      since_date     TEXT NOT NULL,   -- earliest commit date in this story
+      until_date     TEXT NOT NULL,   -- latest commit date in this story
+      context_type   TEXT NOT NULL,   -- "devlog" | "product-post" | "fee-report"
+      draft_filename TEXT NOT NULL,
+      published_at   TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (story_key, context_type)
+    );
+    CREATE INDEX IF NOT EXISTS idx_pub_features_cluster  ON published_features(cluster);
+    CREATE INDEX IF NOT EXISTS idx_pub_features_draft    ON published_features(draft_filename);
+    CREATE INDEX IF NOT EXISTS idx_pub_features_published ON published_features(published_at);
   `);
 }
 
