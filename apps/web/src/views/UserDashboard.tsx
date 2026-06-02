@@ -597,7 +597,15 @@ function OperativeKPIRow({ snapshot, snapshotLoading, snapshotRefreshedAt, oppor
       </div>
 
       {/* Offene Chancen */}
-      <div style={{ ...card, cursor:"pointer" }} onClick={()=>{onLoadOpps();onTabChange("dna");}}>
+      <div
+        style={{ ...card, cursor:"pointer" }}
+        onClick={() => {
+          // Only trigger a fresh scan if no data loaded yet — avoids overwriting
+          // locally-voted posts with stale server data (race condition after vote)
+          if (opportunities === null) onLoadOpps();
+          onTabChange("dna");
+        }}
+      >
         <p style={{ ...lbl, margin:"0 0 0.6rem" }}>{t("kpiOpenOpps")}</p>
         <div style={{ color:openOpps.length>0?C.warn:opportunities!==null?C.ok:C.muted, fontSize:"2.6rem", fontWeight:900, lineHeight:1, letterSpacing:"-1px", marginBottom:"0.5rem" }}>
           {openOpps.length>0?openOpps.length:opportunities===null?"—":"0"}

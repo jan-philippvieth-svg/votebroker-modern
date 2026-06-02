@@ -16,7 +16,7 @@ import {
   Users,
   WalletCards
 } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   checkPostingAuthority,
   completeSteemConnectCallback,
@@ -181,6 +181,8 @@ export function App() {
   const [opportunitiesMeta, setOpportunitiesMeta] = useState<import("../api").OpportunitiesMeta | null>(null);
   const [opportunitiesLoading, setOpportunitiesLoading] = useState(false);
   const [opportunitiesError, setOpportunitiesError] = useState<string | null>(null);
+  // Keys of posts voted successfully this session — prevents server re-scan from un-doing local state
+  const recentlyVotedKeysRef = useRef<Set<string>>(new Set());
   const [votePlan, setVotePlan] = useState<VotePlanResponse | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
@@ -424,7 +426,16 @@ export function App() {
     setOpportunitiesError(null);
     try {
       const result = await getVoteOpportunities(unique, session.user.username);
-      setOpportunities(result.opportunities);
+      // Apply recentlyVoted filter — prevents server scan from un-doing a successful local vote
+      const voted = recentlyVotedKeysRef.current;
+      const filtered = voted.size === 0
+        ? result.opportunities
+        : result.opportunities.map(p =>
+            voted.has(`${p.author}/${p.permlink}`)
+              ? { ...p, alreadyVoted: true, eligible: false }
+              : p
+          );
+      setOpportunities(filtered);
       setOpportunitiesMeta(result.meta);
       // Always refresh VP after a scan — user is about to vote
       refreshSnapshot();
@@ -466,6 +477,9 @@ export function App() {
         });
         ok++;
         results.push({ author: target.author, permlink: target.permlink, status: "success", transactionId: res.transactionId });
+        const key = `${target.author}/${target.permlink}`;
+        recentlyVotedKeysRef.current.add(key);
+        setTimeout(() => recentlyVotedKeysRef.current.delete(key), 90_000);
         setOpportunities(prev => prev?.map(p =>
           p.author === target.author && p.permlink === target.permlink
             ? { ...p, alreadyVoted: true, eligible: false } : p
@@ -517,7 +531,10 @@ export function App() {
       weightPct: Math.round(target.weightBps / 100 * 10) / 10,
       votedAt:   new Date().toISOString(),
     }, ...prev].slice(0, 20));
-    // Mark as voted in opportunities
+    // Mark as voted in opportunities + recentlyVoted guard
+    const key = `${target.author}/${target.permlink}`;
+    recentlyVotedKeysRef.current.add(key);
+    setTimeout(() => recentlyVotedKeysRef.current.delete(key), 90_000);
     setOpportunities(prev => prev?.map(p =>
       p.author === target.author && p.permlink === target.permlink
         ? { ...p, alreadyVoted: true, eligible: false }
