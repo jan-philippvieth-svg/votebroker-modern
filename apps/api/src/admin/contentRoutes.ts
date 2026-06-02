@@ -335,7 +335,8 @@ export async function registerContentRoutes(app: FastifyInstance): Promise<void>
       // PLACEHOLDER_01_dashboard → /screenshots/01_dashboard_annotated.png (PUBLIC)
       // Public path so Steemit / external can load the images without auth.
       const key = "PLACEHOLDER_" + f.replace(/_annotated\.png$/, "").replace(/\.png$/, "");
-      screenshotMap[key] = `/api/screenshots/${f}`;  // public, no auth
+      // Must be absolute URL — relative paths resolve to steemit.com domain on Steemit
+      screenshotMap[key] = `https://votebroker.org/api/screenshots/${f}`;
     }
 
     let content = readFileSync(filePath, "utf8");
@@ -370,7 +371,10 @@ export async function registerContentRoutes(app: FastifyInstance): Promise<void>
     if (!existsSync(filePath)) return reply.code(404).send({ error: "draft_not_found" });
 
     const original = readFileSync(filePath, "utf8");
-    const fixed    = original.replace(/\/api\/admin\/screenshots\//g, "/api/screenshots/");
+    // Fix both old internal URLs and old relative public URLs → absolute
+    const fixed    = original
+      .replace(/\/api\/admin\/screenshots\//g, "https://votebroker.org/api/screenshots/")
+      .replace(/(?<!votebroker\.org)\/api\/screenshots\//g, "https://votebroker.org/api/screenshots/");
     const changed  = original !== fixed;
 
     if (changed) {
@@ -379,7 +383,7 @@ export async function registerContentRoutes(app: FastifyInstance): Promise<void>
     }
 
     // Count replacements
-    const count = (original.match(/\/api\/admin\/screenshots\//g) ?? []).length;
+    const count = (original.match(/\/api\/(admin\/)?screenshots\//g) ?? []).length;
     request.log.info({ filename, count, changed }, "fix-screenshot-urls");
 
     return {
