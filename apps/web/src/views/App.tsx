@@ -1831,6 +1831,7 @@ function CurationDnaPanel(props: {
                 loading={props.planLoading}
                 error={props.planError}
                 session={props.session!}
+                currentVoteUsd={props.accountSnapshot?.currentVoteUsd}
                 sbdPerSteem={props.accountSnapshot?.sbdPerSteem}
                 onGenerate={props.onGenerateVotes}
                 onExecuteSingle={props.onExecuteSingle}
@@ -2394,7 +2395,8 @@ function VotePlanSection(props: {
   loading: boolean;
   error: string | null;
   session: AuthSession;
-  sbdPerSteem?: number;   // for SP conversion: expectedVoteUsd / sbdPerSteem ≈ SP
+  currentVoteUsd?: number; // dollar value of a 100% vote at current VP — for override recalc
+  sbdPerSteem?: number;    // SBD/STEEM — for SP conversion: expectedVoteUsd / sbdPerSteem ≈ SP
   onGenerate: () => void;
   onExecuteSingle: (target: { author: string; permlink: string; weightBps: number }) => Promise<{ transactionId: string }>;
   onMetricsChange?: (m: LivePlanMetrics) => void;
@@ -2416,7 +2418,8 @@ function VotePlanSection(props: {
     window.localStorage.setItem("votebroker.voteDisplayMode", m);
     setVoteModeRaw(m);
   };
-  const sbdPerSteem = props.sbdPerSteem && props.sbdPerSteem > 0 ? props.sbdPerSteem : 0.05;
+  const sbdPerSteem    = props.sbdPerSteem    && props.sbdPerSteem    > 0 ? props.sbdPerSteem    : 0.05;
+  const currentVoteUsd = props.currentVoteUsd && props.currentVoteUsd > 0 ? props.currentVoteUsd : 0;
 
   const chipBtn = {
     background: "#f0f5f7", border: "1px solid #dde8ed", borderRadius: "6px",
@@ -2434,20 +2437,28 @@ function VotePlanSection(props: {
   // ── Inline weight editor + additions helpers ─────────────────────────────
   const MANA_DIV = 5_000; // weight_bps / 5000 = VP cost %
 
-  // Base plan entries with override weights applied
+  // Base plan entries with override weights applied.
+  // expectedVoteUsd = (bps / 10_000) * currentVoteUsd  (dollar value of the vote)
+  // Bug that was here: used currentVpPct/100 instead of currentVoteUsd → off by ~100×
   const effectiveEntries = entries.map(e => {
     const key = `${e.author}/${e.permlink}`;
     const bps = overrides.get(key) ?? e.suggestedWeightBps;
+    const usd = currentVoteUsd > 0
+      ? Math.round((bps / 10_000) * currentVoteUsd * 10_000) / 10_000
+      : e.expectedVoteUsd * (bps / Math.max(1, e.suggestedWeightBps)); // fallback: scale original
     return { ...e, suggestedWeightBps: bps, suggestedWeightPct: Math.round(bps / 100 * 10) / 10,
-      expectedVoteUsd: Math.round((bps / 10_000) * (plan?.summary.currentVpPct ?? 0) / 100 * 10_000) / 10_000 };
+      expectedVoteUsd: usd };
   });
 
   // Manually added entries (also support overrides)
   const additionEntries = additions.map(e => {
     const key = `${e.author}/${e.permlink}`;
     const bps = overrides.get(key) ?? e.suggestedWeightBps;
+    const usd = currentVoteUsd > 0
+      ? Math.round((bps / 10_000) * currentVoteUsd * 10_000) / 10_000
+      : e.expectedVoteUsd * (bps / Math.max(1, e.suggestedWeightBps));
     return { ...e, suggestedWeightBps: bps, suggestedWeightPct: Math.round(bps / 100 * 10) / 10,
-      expectedVoteUsd: Math.round((bps / 10_000) * (plan?.summary.currentVpPct ?? 0) / 100 * 10_000) / 10_000 };
+      expectedVoteUsd: usd };
   });
 
   // Full plan = base + added
