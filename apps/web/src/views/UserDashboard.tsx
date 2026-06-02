@@ -1409,18 +1409,23 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, t }: {
           {/* Cause → Effect Narrative: "N Votes → X SP aufgebaut" */}
           <div style={{ display:"flex", alignItems:"stretch", gap:"0", marginBottom:"0.5rem" }}>
 
-            {/* Cause: Votes */}
+            {/* Cause: total VB Votes in period (same reference as the SP total) */}
             <div style={{
               background: "#ede9fe", borderRadius:"10px 0 0 10px",
               padding:"0.6rem 0.85rem", minWidth:"80px", textAlign:"center",
               borderRight:"2px solid #ddd6fe",
             }}>
               <div style={{ fontSize:"1.65rem", fontWeight:900, color:PURPLE, letterSpacing:"-1px", lineHeight:1 }}>
-                {data.totals.voteCount > 0 ? data.totals.voteCount : todayVotes || "—"}
+                {data.totals.voteCount > 0 ? data.totals.voteCount : "—"}
               </div>
               <div style={{ fontSize:"0.67rem", color:"#7c3aed", fontWeight:600, marginTop:"0.1rem" }}>
                 Votes
               </div>
+              {todayVotes > 0 && data.totals.voteCount > todayVotes && (
+                <div style={{ fontSize:"0.58rem", color:"#a78bfa", marginTop:"0.1rem" }}>
+                  davon {todayVotes} heute
+                </div>
+              )}
             </div>
 
             {/* Arrow */}
