@@ -2863,16 +2863,6 @@ function OpenVoteOpportunities(props: {
             </span>
           </div>
           <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginLeft: "auto" }}>
-            {totalOpen > 0 && (
-              <button
-                style={{ background: "#d97706", border: "none", borderRadius: "8px", color: "#fff", cursor: "pointer", fontSize: "0.88rem", fontWeight: 700, padding: "0.5rem 1.1rem" }}
-                type="button"
-                disabled={voting}
-                onClick={() => { setPreview(allEligible); setVoteResult(null); }}
-              >
-                Alle {totalOpen} jetzt voten
-              </button>
-            )}
             <button
               style={{ background: "#f0f5f7", border: "1px solid #dde8ed", borderRadius: "7px", color: "#607078", cursor: "pointer", fontSize: "0.82rem", padding: "0.45rem 0.9rem", fontWeight: 600 }}
               type="button"
