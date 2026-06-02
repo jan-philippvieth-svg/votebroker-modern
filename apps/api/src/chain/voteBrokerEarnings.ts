@@ -136,16 +136,56 @@ export async function fetchVBEarnings(
 
   // ── 4. Match rewards to VoteBroker votes ──────────────────────────────────
   //    Per-day: realizedSp + vote count
+  //    Also write to vb_vote_outcomes for future per-vote ROI analysis.
   const perDay = new Map<string, { sp: number; votes: number }>();
 
-  for (const [postKey, reward] of rewardsByPost) {
-    if (!vbVoteSet.has(postKey)) continue;   // not a VoteBroker vote
+  // Prepare upsert for vb_vote_outcomes — only write new matched entries
+  const upsertOutcome = db.prepare(`
+    INSERT OR IGNORE INTO vb_vote_outcomes
+      (vote_key, username, author, permlink, voted_at, weight_bps, realized_sp, realized_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const writeOutcomes = db.transaction((entries: Array<{
+    key: string; author: string; permlink: string;
+    votedAt: string; weightBps: number; sp: number; realizedAt: string;
+  }>) => {
+    for (const e of entries) {
+      upsertOutcome.run(
+        `${username}/${e.author}/${e.permlink}`,
+        username, e.author, e.permlink,
+        e.votedAt, e.weightBps, e.sp, e.realizedAt,
+      );
+    }
+  });
 
+  const newOutcomes: Array<{
+    key: string; author: string; permlink: string;
+    votedAt: string; weightBps: number; sp: number; realizedAt: string;
+  }> = [];
+
+  for (const [postKey, reward] of rewardsByPost) {
+    const vote = vbVoteSet.get(postKey);
+    if (!vote) continue;   // not a VoteBroker vote
+
+    const [author, permlink] = postKey.split("/", 2);
     const sp = Math.round((reward.rewarded_vests / vestsPerSp) * 10_000) / 10_000;
     const day = reward.date;
     const existing = perDay.get(day) ?? { sp: 0, votes: 0 };
     perDay.set(day, { sp: existing.sp + sp, votes: existing.votes });
+
+    // Queue for vb_vote_outcomes (per-vote attribution data for future ROI analysis)
+    newOutcomes.push({
+      key:       postKey,
+      author, permlink,
+      votedAt:   vote.date + "T00:00:00Z",
+      weightBps: vote.weightBps,
+      sp,
+      realizedAt: reward.date + "T00:00:00Z",
+    });
   }
+
+  // Write matched outcomes (INSERT OR IGNORE = idempotent, safe to re-run)
+  if (newOutcomes.length > 0) writeOutcomes(newOutcomes);
 
   // Add vote counts per day (from vbVoteSet)
   for (const [, vote] of vbVoteSet) {

@@ -1359,8 +1359,11 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, t }: {
   const totalSp    = realizedSp + pendingSp;   // what VoteBroker actually earned you
   const usdApprox  = totalSp * sbdPrStm;
   const todayVotes = todayStats?.totalVotes ?? 0;
-  const gameTip    = todayVotes > 0
-    ? `✅ Heute ${todayVotes} Votes verteilt durch VoteBroker`
+  const spPerVote  = data && data.totals.voteCount > 0 ? totalSp / data.totals.voteCount : 0;
+  const gameTip    = todayVotes > 0 && spPerVote > 0
+    ? `✅ ${todayVotes} Votes heute · Ø ${spPerVote.toFixed(4)} SP pro Vote`
+    : todayVotes > 0
+    ? `✅ ${todayVotes} Votes heute durch VoteBroker verteilt`
     : `🌱 Starte heute deinen ersten VoteBroker-Run`;
 
   return (
@@ -1403,34 +1406,56 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, t }: {
             </div>
           )}
 
-          {/* Main metrics — Gesamtwert (Realisiert + Pending) als primäre Zahl */}
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:"0.45rem" }}>
-            <div>
-              {/* Total SP (realized + pending) — the real value VoteBroker generated */}
-              <div style={{ fontSize:"2.2rem", fontWeight:900, color:PURPLE, letterSpacing:"-1.5px", lineHeight:1 }}>
-                {totalSp > 0 ? totalSp.toFixed(3) : "—"}
-                <span style={{ fontSize:"0.88rem", fontWeight:700, marginLeft:"0.3rem", opacity:0.75 }}>SP</span>
+          {/* Cause → Effect Narrative: "N Votes → X SP aufgebaut" */}
+          <div style={{ display:"flex", alignItems:"stretch", gap:"0", marginBottom:"0.5rem" }}>
+
+            {/* Cause: Votes */}
+            <div style={{
+              background: "#ede9fe", borderRadius:"10px 0 0 10px",
+              padding:"0.6rem 0.85rem", minWidth:"80px", textAlign:"center",
+              borderRight:"2px solid #ddd6fe",
+            }}>
+              <div style={{ fontSize:"1.65rem", fontWeight:900, color:PURPLE, letterSpacing:"-1px", lineHeight:1 }}>
+                {data.totals.voteCount > 0 ? data.totals.voteCount : todayVotes || "—"}
               </div>
-              {/* Sub: USD + breakdown */}
-              <div style={{ fontSize:"0.7rem", color:C.dim, marginTop:"0.15rem", display:"flex", gap:"0.6rem", flexWrap:"wrap" }}>
-                {totalSp > 0 && <span>≈ {usdApprox.toFixed(3)} SBD</span>}
-                {realizedSp > 0 && (
-                  <span style={{ color:"#a78bfa" }}>
-                    {realizedSp.toFixed(3)} realisiert
-                  </span>
-                )}
-                {pendingSp > 0 && (
-                  <span style={{ color:ORANGE }}>
-                    +{pendingSp.toFixed(3)} pending
-                  </span>
-                )}
+              <div style={{ fontSize:"0.67rem", color:"#7c3aed", fontWeight:600, marginTop:"0.1rem" }}>
+                Votes
               </div>
             </div>
-            {/* Subtle info */}
-            <div title={`Attribution seit: ${data.attributionStart ?? "—"}\nRealisiert (on-chain): ${realizedSp.toFixed(4)} SP\nPending (offene Posts): ${pendingSp.toFixed(4)} SP\nPayouts: ${data.totals.realizedCount}`}
-              style={{ fontSize:"0.6rem", color:C.faint, cursor:"help", lineHeight:1.5 }}>
-              ℹ {data.totals.voteCount > 0 ? `${data.totals.voteCount} Votes` : ""}
-              {data.attributionStart && <div style={{ fontSize:"0.58rem" }}>seit {data.attributionStart}</div>}
+
+            {/* Arrow */}
+            <div style={{
+              display:"flex", alignItems:"center", justifyContent:"center",
+              background:"#f5f3ff", padding:"0 0.5rem",
+              fontSize:"1rem", color:"#a78bfa",
+            }}>↓</div>
+
+            {/* Effect: SP aufgebaut */}
+            <div style={{
+              background:"#f5f3ff", borderRadius:"0 10px 10px 0",
+              padding:"0.5rem 0.85rem", flex:1,
+            }}>
+              <div style={{ fontSize:"2rem", fontWeight:900, color:PURPLE, letterSpacing:"-1.5px", lineHeight:1 }}>
+                {totalSp > 0 ? totalSp.toFixed(3) : "—"}
+                <span style={{ fontSize:"0.85rem", fontWeight:700, marginLeft:"0.25rem", opacity:0.7 }}>SP</span>
+              </div>
+              <div style={{ fontSize:"0.68rem", color:C.dim, marginTop:"0.1rem", display:"flex", gap:"0.5rem", flexWrap:"wrap" }}>
+                {totalSp > 0 && <span>≈ {usdApprox.toFixed(3)} SBD</span>}
+                {realizedSp > 0 && <span style={{ color:"#a78bfa" }}>{realizedSp.toFixed(3)} realisiert</span>}
+                {pendingSp > 0 && <span style={{ color:ORANGE }}>+{pendingSp.toFixed(3)} pending</span>}
+              </div>
+              {/* Rate: Ø SP per Vote */}
+              {data.totals.voteCount > 0 && totalSp > 0 && (
+                <div style={{ fontSize:"0.65rem", color:C.faint, marginTop:"0.08rem" }}>
+                  Ø {(totalSp / data.totals.voteCount).toFixed(4)} SP pro Vote
+                </div>
+              )}
+            </div>
+
+            {/* Detail tooltip anchor */}
+            <div title={`Attribution seit: ${data.attributionStart ?? "—"}\nRealisiert (on-chain): ${realizedSp.toFixed(4)} SP aus ${data.totals.realizedCount} Payouts\nPending: ${pendingSp.toFixed(4)} SP aus offenen Posts`}
+              style={{ display:"flex", alignItems:"flex-start", padding:"0.3rem 0.3rem 0 0.4rem", cursor:"help" }}>
+              <span style={{ fontSize:"0.6rem", color:C.faint }}>ℹ</span>
             </div>
           </div>
 
