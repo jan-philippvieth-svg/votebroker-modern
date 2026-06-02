@@ -109,23 +109,28 @@ function initSchema(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_audit_created_at ON audit_events(created_at);
     CREATE INDEX IF NOT EXISTS idx_audit_type       ON audit_events(type);
 
-    -- Per-vote ROI tracking: enables future "which authors/strategies earn most"
-    -- Populated by the earnings attribution engine when curation_reward matches a VB vote.
+    -- Per-vote ROI tracking: local index over Steem blockchain operations.
+    -- This table is a CACHE — the chain is the truth.
+    -- Can be deleted and rebuilt from get_account_history at any time.
+    -- Herkunftsfelder (trx_id, block_num) allow verification against chain.
     CREATE TABLE IF NOT EXISTS vb_vote_outcomes (
-      vote_key      TEXT PRIMARY KEY,       -- "{username}/{author}/{permlink}"
-      username      TEXT NOT NULL,
-      author        TEXT NOT NULL,
-      permlink      TEXT NOT NULL,
-      voted_at      TEXT NOT NULL,
-      weight_bps    INTEGER NOT NULL,
-      vote_value_sbd REAL,                  -- estimated vote value at cast time
-      realized_sp   REAL,                  -- actual curation_reward received (SP)
-      realized_at   TEXT,                  -- when the post paid out
-      category      TEXT,                  -- strategy category at vote time
-      recorded_at   TEXT DEFAULT (datetime('now'))
+      vote_key        TEXT PRIMARY KEY,     -- "{username}/{author}/{permlink}"
+      username        TEXT NOT NULL,
+      author          TEXT NOT NULL,
+      permlink        TEXT NOT NULL,
+      voted_at        TEXT NOT NULL,
+      weight_bps      INTEGER NOT NULL,
+      vote_value_sbd  REAL,                -- estimated vote value at cast time
+      realized_sp     REAL,               -- actual curation_reward received (SP)
+      realized_at     TEXT,               -- when the post paid out
+      category        TEXT,               -- strategy category at vote time
+      -- Chain provenance — enables rebuild verification and debugging
+      vote_trx_id     TEXT,               -- transaction_id of the vote operation
+      reward_trx_id   TEXT,               -- transaction_id of the curation_reward op
+      recorded_at     TEXT DEFAULT (datetime('now'))
     );
-    CREATE INDEX IF NOT EXISTS idx_vb_outcomes_user ON vb_vote_outcomes(username);
-    CREATE INDEX IF NOT EXISTS idx_vb_outcomes_date ON vb_vote_outcomes(voted_at);
+    CREATE INDEX IF NOT EXISTS idx_vb_outcomes_user   ON vb_vote_outcomes(username);
+    CREATE INDEX IF NOT EXISTS idx_vb_outcomes_date   ON vb_vote_outcomes(voted_at);
     CREATE INDEX IF NOT EXISTS idx_vb_outcomes_author ON vb_vote_outcomes(author);
 
     -- Feature knowledge base: tracks which cluster-stories were communicated
