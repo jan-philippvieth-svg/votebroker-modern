@@ -1325,27 +1325,42 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, t }: {
             </div>
           )}
 
-          {/* Main metrics */}
+          {/* Main metrics — Realisiert + Pending prominent, Badge nur per Tooltip */}
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:"0.5rem" }}>
             <div>
-              <div style={{ fontSize:"2.1rem", fontWeight:900, color:PURPLE, letterSpacing:"-1.5px", lineHeight:1 }}>
-                {totalSp > 0 ? totalSp.toFixed(3) : "—"}
-                <span style={{ fontSize:"0.88rem", fontWeight:700, marginLeft:"0.3rem", opacity:0.75 }}>SP</span>
+              {/* Realized SP — primary */}
+              <div style={{ display:"flex", alignItems:"baseline", gap:"0.5rem" }}>
+                <div style={{ fontSize:"2.1rem", fontWeight:900, color:PURPLE, letterSpacing:"-1.5px", lineHeight:1 }}>
+                  {totalSp > 0 ? totalSp.toFixed(3) : "—"}
+                  <span style={{ fontSize:"0.88rem", fontWeight:700, marginLeft:"0.3rem", opacity:0.75 }}>SP</span>
+                </div>
+                {pendingSp > 0 && (
+                  <div style={{ display:"flex", alignItems:"baseline", gap:"0.2rem" }}>
+                    <span style={{ color:C.faint, fontSize:"0.8rem" }}>+</span>
+                    <span style={{ fontSize:"1.15rem", fontWeight:800, color:C.warn, letterSpacing:"-0.5px" }}>
+                      {pendingSp.toFixed(3)}
+                    </span>
+                    <span style={{ fontSize:"0.75rem", color:C.warn, fontWeight:700 }}>SP pending</span>
+                  </div>
+                )}
               </div>
-              <div style={{ fontSize:"0.73rem", color:C.dim, marginTop:"0.12rem" }}>
-                {totalSp > 0 ? `≈ ${usdApprox.toFixed(4)} SBD · ${data.totals.realizedCount} Payouts` : "Noch keine attributierten Rewards"}
+              {/* Sub-line: SBD equiv + detail (no "Realisiert" badge here) */}
+              <div style={{ fontSize:"0.7rem", color:C.dim, marginTop:"0.15rem" }}>
+                {totalSp > 0
+                  ? `≈ ${usdApprox.toFixed(3)} SBD verdient · ${data.totals.realizedCount} Payouts`
+                  : "Noch keine attributierten Rewards"}
+                {pendingSp > 0 && (
+                  <span style={{ color:C.warn, marginLeft:"0.5rem" }}>
+                    + ≈ {(pendingSp * (snapshot?.sbdPerSteem ?? 0.051)).toFixed(3)} SBD pending
+                  </span>
+                )}
               </div>
             </div>
-            <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:"0.2rem" }}>
-              <span style={{ fontSize:"0.63rem", color:"#fff", background:PURPLE,
-                borderRadius:"5px", padding:"0.12rem 0.4rem", fontWeight:700 }}>
-                Realisiert
-              </span>
-              {pendingSp > 0 && (
-                <span style={{ fontSize:"0.63rem", color:C.warn, fontWeight:700, whiteSpace:"nowrap" }}>
-                  +{pendingSp.toFixed(3)} SP pending
-                </span>
-              )}
+            {/* Detail badge — subtle, only for curious users */}
+            <div title={`Realisiert: ${totalSp.toFixed(4)} SP aus ${data.totals.realizedCount} on-chain Payouts\nPending: ${pendingSp.toFixed(4)} SP aus offenen Posts`}
+              style={{ fontSize:"0.6rem", color:C.faint, cursor:"help", textAlign:"right", lineHeight:1.4 }}>
+              <div>ℹ Details</div>
+              {data.attributionStart && <div>seit {data.attributionStart}</div>}
             </div>
           </div>
 
@@ -1355,10 +1370,7 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, t }: {
               <span>7 Tage: <b style={{ color:PURPLE }}>{recent7dSp.toFixed(3)} SP</b></span>
             )}
             {data.totals.voteCount > 0 && (
-              <span>{data.totals.voteCount} VB-Votes im Zeitraum</span>
-            )}
-            {data.attributionStart && (
-              <span style={{ color:C.faint }}>seit {data.attributionStart}</span>
+              <span>{data.totals.voteCount} VB-Votes</span>
             )}
           </div>
 
