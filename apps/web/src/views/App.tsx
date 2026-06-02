@@ -44,6 +44,9 @@ import {
   signOut,
   type AuthSession,
   type CommunityPoolOverview,
+  type CommunityDiscovery,
+  type AuthorDiscoveryCard,
+  fetchCommunityDiscovery,
   type ConsentRecord,
   type ConsentState,
   type ConsentType,
@@ -162,6 +165,8 @@ export function App() {
   const [consentError, setConsentError] = useState<string | null>(null);
   const [communityOverview, setCommunityOverview] = useState<CommunityPoolOverview | null>(null);
   const [communityError, setCommunityError] = useState<string | null>(null);
+  const [communityDiscovery, setCommunityDiscovery] = useState<CommunityDiscovery | null>(null);
+  const [communityDiscoveryLoading, setCommunityDiscoveryLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [consentLoading, setConsentLoading] = useState<ConsentType | null>(null);
@@ -250,12 +255,20 @@ export function App() {
 
   useEffect(() => {
     getCommunityOverview(username)
-      .then((overview) => {
-        setCommunityOverview(overview);
-        setCommunityError(null);
-      })
+      .then((overview) => { setCommunityOverview(overview); setCommunityError(null); })
       .catch((err) => setCommunityError(err instanceof Error ? err.message : "Community pool could not be loaded"));
   }, [username]);
+
+  // Lazy-load community discovery only when tab is opened
+  useEffect(() => {
+    if (activeTab !== "community" || !session || communityDiscovery || communityDiscoveryLoading) return;
+    setCommunityDiscoveryLoading(true);
+    fetchCommunityDiscovery(session.token)
+      .then(setCommunityDiscovery)
+      .catch(() => setCommunityDiscovery(null))
+      .finally(() => setCommunityDiscoveryLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, session]);
 
   useEffect(() => {
     const callback = readSteemConnectCallback();
@@ -855,7 +868,11 @@ export function App() {
       {/* Tab: Community */}
       {activeTab === "community" && (
         <div style={{ padding: "1.25rem 1.5rem" }}>
-          <CommunityPoolSection communityError={communityError} overview={communityOverview} onAddToStrategy={addAuthorToStrategy} />
+          <CommunityDiscoverySection
+            discovery={communityDiscovery}
+            loading={communityDiscoveryLoading}
+            onAddToStrategy={addAuthorToStrategy}
+          />
         </div>
       )}
 
@@ -3250,138 +3267,256 @@ function Dashboard(props: { communityError: string | null; overview: CommunityPo
         </section>
       </div>
 
-      <CommunityPoolSection communityError={props.communityError} overview={props.overview} />
     </section>
   );
 }
 
-function CommunityPoolSection(props: {
-  communityError: string | null;
-  overview: CommunityPoolOverview | null;
-  onAddToStrategy?: (username: string, category: StrategyCategory) => void;
+// ── Community Discovery Section ───────────────────────────────────────────────
+
+const CD = {
+  bg:     "#f8fafc",
+  card:   "#ffffff",
+  border: "#e2e8f0",
+  text:   "#1e293b",
+  dim:    "#64748b",
+  faint:  "#94a3b8",
+  ok:     "#16a34a",
+  info:   "#2563eb",
+  warn:   "#d97706",
+  purple: "#7c3aed",
+  tag:    "#f1f5f9",
+};
+
+const cdCard: React.CSSProperties = {
+  background: CD.card,
+  border: `1px solid ${CD.border}`,
+  borderRadius: "10px",
+  padding: "0.85rem 1rem",
+  display: "flex",
+  flexDirection: "column",
+  gap: "0.4rem",
+};
+
+const catColor: Record<string, string> = {
+  immer_voten:    "#16a34a",
+  lieblingsautor: "#7c3aed",
+  bevorzugt:      "#2563eb",
+  normal:         "#64748b",
+  niedrig:        "#94a3b8",
+};
+
+function AuthorCard({ card, onAdd }: {
+  card: AuthorDiscoveryCard;
+  onAdd: (username: string, cat: StrategyCategory) => void;
 }) {
-  if (props.communityError) {
-    return (
-      <section className="panel pool-panel">
-        <div className="notice danger">
-          <AlertTriangle size={16} />
-          {props.communityError}
-        </div>
-      </section>
-    );
-  }
-
-  const overview = props.overview;
-  if (!overview) {
-    return (
-      <section className="panel pool-panel">
-        <div className="empty-state">Community Pool wird geladen.</div>
-      </section>
-    );
-  }
-
-  const feeRatio = overview.pool.stats.feesUsd30d / overview.pool.stats.curatedUsd30d;
-  const healthTone = overview.health.status === "excellent" || overview.health.status === "healthy"
-    ? "good"
-    : overview.health.status === "watch"
-      ? "watch"
-      : "blocked";
+  const [picking, setPicking] = useState(false);
+  const categories: { value: StrategyCategory; label: string }[] = [
+    { value: "lieblingsautor", label: "Lieblingsautor" },
+    { value: "bevorzugt",      label: "Bevorzugt" },
+    { value: "normal",         label: "Normal" },
+    { value: "niedrig",        label: "Niedrig" },
+  ];
 
   return (
-    <section className="pool-grid">
-      <section className="panel pool-panel">
-        <div className="panel-title compact-title">
-          <Users size={20} />
-          <h2>Community Pool</h2>
-        </div>
-        <div className="pool-headline">
-          <div>
-            <span>{overview.pool.name}</span>
-            <strong>{overview.pool.stats.poolPowerSp.toLocaleString("de-DE")} SP</strong>
-            <p>{overview.pool.description}</p>
-          </div>
-          <div className="pool-badge">
-            {overview.pool.stats.activeMembers}/{overview.pool.members.length} aktiv
-          </div>
-        </div>
-
-        <div className="pool-metrics">
-          <Metric label="Curated 30d" value={`$${overview.pool.stats.curatedUsd30d.toFixed(2)}`} />
-          <Metric label="Fees 30d" value={`$${overview.pool.stats.feesUsd30d.toFixed(2)}`} />
-          <Metric label="Scheduled Votes" value={`$${overview.pool.stats.scheduledVotesUsd.toFixed(2)}`} />
-          <Metric label="Fee Ratio" value={`${(feeRatio * 100).toFixed(1)}%`} />
-        </div>
-
-        <div className="policy-strip">
-          <span>Pool-Regeln</span>
-          <strong>Max ${overview.pool.policy.maxVoteUsdPerPost.toFixed(2)} pro Post</strong>
-          <strong>{overview.pool.policy.dailyVoteBudgetUsd.toFixed(2)} USD Tagesbudget</strong>
-          <strong>{(overview.pool.policy.minVotingPowerBps / 100).toFixed(0)}% min. Voting Power</strong>
-        </div>
-
-        <div className="member-list">
-          {overview.pool.members.map((member) => (
-            <div className="member-row" key={member.username}>
-              <div>
-                <strong>@{member.username}</strong>
-                <span>{member.role} - {member.delegatedSp.toLocaleString("de-DE")} SP</span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <span className={`member-status ${member.status}`}>{member.status}</span>
-                {props.onAddToStrategy && (
-                  <button
-                    type="button"
-                    onClick={() => props.onAddToStrategy!(member.username, "bevorzugt")}
-                    style={{ background: "#2563eb14", border: "1px solid #1f6feb40", borderRadius: "4px", color: "#2563eb", cursor: "pointer", fontSize: "0.7rem", padding: "0.1rem 0.4rem" }}
-                    title="Zur Strategie hinzufügen"
-                  >
-                    + Strategie
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="panel health-panel">
-        <div className="panel-title compact-title">
-          <Network size={20} />
-          <h2>Account Health Score</h2>
-        </div>
-        <div className={`health-score ${healthTone}`}>
-          <span>{overview.health.score}</span>
-          <strong>{overview.health.status}</strong>
-        </div>
-        <p className="health-summary">{overview.health.summary}</p>
-
-        <div className="factor-list">
-          {overview.health.factors.map((factor) => (
-            <div className="factor-row" key={factor.key}>
-              <div>
-                <strong>{factor.label}</strong>
-                <span>{factor.detail}</span>
-              </div>
-              <div className="factor-meter" style={{ "--score": `${factor.score}%` } as React.CSSProperties}>
-                <i />
-              </div>
-              <b>{factor.score}</b>
-            </div>
-          ))}
-        </div>
-
-        <div className="recommendations">
-          <span>Naechste sinnvolle Schritte</span>
-          {overview.health.recommendations.length === 0 ? (
-            <strong>Alles stabil. Pool-Automation kann konservativ laufen.</strong>
-          ) : (
-            overview.health.recommendations.map((recommendation) => (
-              <strong key={recommendation}>{recommendation}</strong>
-            ))
+    <div style={cdCard}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div>
+          <a
+            href={`https://steemit.com/@${card.username}`}
+            target="_blank" rel="noreferrer"
+            style={{ color: CD.info, fontWeight: 700, fontSize: "0.92rem", textDecoration: "none" }}
+          >
+            @{card.username}
+          </a>
+          {card.topCategory && (
+            <span style={{
+              marginLeft: "0.5rem", fontSize: "0.68rem", fontWeight: 600,
+              color: catColor[card.topCategory] ?? CD.dim,
+              background: (catColor[card.topCategory] ?? CD.dim) + "18",
+              borderRadius: "4px", padding: "0.1rem 0.4rem",
+            }}>
+              {card.topCategoryLabel}
+            </span>
           )}
         </div>
-      </section>
-    </section>
+        <div style={{ fontSize: "0.72rem", color: CD.dim, whiteSpace: "nowrap" }}>
+          {card.curatorCount === 1 ? "1 Kurator" : `${card.curatorCount} Kuratoren`}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.15rem" }}>
+        {card.reasons.map((r, i) => (
+          <div key={i} style={{ fontSize: "0.73rem", color: CD.dim, display: "flex", alignItems: "center", gap: "0.3rem" }}>
+            <span style={{ color: CD.ok, fontWeight: 700 }}>·</span> {r}
+          </div>
+        ))}
+      </div>
+
+      {!picking ? (
+        <button
+          onClick={() => setPicking(true)}
+          style={{
+            marginTop: "0.25rem", alignSelf: "flex-start",
+            background: CD.info + "12", border: `1px solid ${CD.info}30`,
+            borderRadius: "6px", color: CD.info, cursor: "pointer",
+            fontSize: "0.72rem", fontWeight: 600, padding: "0.2rem 0.6rem",
+          }}
+        >
+          + Zur Strategie
+        </button>
+      ) : (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.3rem", marginTop: "0.25rem" }}>
+          {categories.map(c => (
+            <button
+              key={c.value}
+              onClick={() => { onAdd(card.username, c.value); setPicking(false); }}
+              style={{
+                background: (catColor[c.value] ?? CD.dim) + "15",
+                border: `1px solid ${catColor[c.value] ?? CD.dim}40`,
+                borderRadius: "5px", color: catColor[c.value] ?? CD.dim,
+                cursor: "pointer", fontSize: "0.68rem", fontWeight: 600,
+                padding: "0.15rem 0.5rem",
+              }}
+            >
+              {c.label}
+            </button>
+          ))}
+          <button
+            onClick={() => setPicking(false)}
+            style={{ background: "none", border: "none", color: CD.faint, cursor: "pointer", fontSize: "0.68rem" }}
+          >
+            Abbrechen
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CommunityDiscoverySection({ discovery, loading, onAddToStrategy }: {
+  discovery: CommunityDiscovery | null;
+  loading: boolean;
+  onAddToStrategy: (username: string, category: StrategyCategory) => void;
+}) {
+  const hdr: React.CSSProperties = {
+    fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase",
+    letterSpacing: "0.06em", color: CD.dim, marginBottom: "0.6rem",
+  };
+
+  if (loading) {
+    return (
+      <div style={{ padding: "3rem", textAlign: "center", color: CD.dim, fontSize: "0.88rem" }}>
+        Autor-Radar wird geladen…
+      </div>
+    );
+  }
+
+  if (!discovery) {
+    return (
+      <div style={{ padding: "3rem", textAlign: "center", color: CD.dim, fontSize: "0.88rem" }}>
+        Community-Daten konnten nicht geladen werden.
+      </div>
+    );
+  }
+
+  const { communityAuthors, discoveries, meta } = discovery;
+  const hasAnything = communityAuthors.length > 0 || discoveries.length > 0;
+
+  return (
+    <div style={{ maxWidth: "960px", margin: "0 auto" }}>
+
+      {/* Header */}
+      <div style={{ marginBottom: "1.25rem" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem" }}>
+          <h2 style={{ fontSize: "1.15rem", fontWeight: 800, color: CD.text, margin: 0 }}>
+            Entdecken · Autor-Radar
+          </h2>
+          <span style={{ fontSize: "0.75rem", color: CD.dim }}>
+            {meta.totalCurators} {meta.totalCurators === 1 ? "Kurator" : "Kuratoren"} aktiv · {meta.myAuthorCount} in deiner Strategie
+          </span>
+        </div>
+        {meta.notice && (
+          <div style={{
+            marginTop: "0.6rem", padding: "0.5rem 0.75rem",
+            background: "#fef9c3", border: "1px solid #fde047",
+            borderRadius: "8px", fontSize: "0.78rem", color: "#713f12",
+          }}>
+            {meta.notice}
+          </div>
+        )}
+      </div>
+
+      {!hasAnything ? (
+        <div style={{
+          padding: "3rem", textAlign: "center", background: CD.card,
+          border: `1px solid ${CD.border}`, borderRadius: "12px",
+          color: CD.dim, fontSize: "0.88rem",
+        }}>
+          <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>🔍</div>
+          Noch nicht genug Community-Daten vorhanden.<br />
+          <span style={{ fontSize: "0.78rem" }}>
+            Sobald weitere Nutzer ihre Strategie in VoteBroker pflegen, erscheinen hier gemeinsam unterstützte Autoren.
+          </span>
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", alignItems: "start" }}>
+
+          {/* Left: Community Authors (≥2 strategies) */}
+          <div>
+            <div style={hdr}>
+              VoteBroker-Gemeinschaft
+              {communityAuthors.length > 0 && (
+                <span style={{ color: CD.ok, marginLeft: "0.4rem" }}>· {communityAuthors.length}</span>
+              )}
+            </div>
+            <p style={{ fontSize: "0.75rem", color: CD.faint, marginBottom: "0.75rem", marginTop: 0 }}>
+              Autoren, die mehrere Kuratoren gemeinsam unterstützen.
+            </p>
+            {communityAuthors.length === 0 ? (
+              <div style={{ padding: "1.5rem", background: CD.tag, borderRadius: "10px", textAlign: "center", color: CD.dim, fontSize: "0.8rem" }}>
+                Noch keine Autoren von mehreren Kuratoren gleichzeitig unterstützt.
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                {communityAuthors.map(c => (
+                  <AuthorCard key={c.username} card={c} onAdd={onAddToStrategy} />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Right: Discoveries (in other strategies, not mine) */}
+          <div>
+            <div style={hdr}>
+              Entdeckungen für dich
+              {discoveries.length > 0 && (
+                <span style={{ color: CD.info, marginLeft: "0.4rem" }}>· {discoveries.length}</span>
+              )}
+            </div>
+            <p style={{ fontSize: "0.75rem", color: CD.faint, marginBottom: "0.75rem", marginTop: 0 }}>
+              Autoren aus anderen Strategien, die noch nicht in deiner Strategie sind.
+            </p>
+            {discoveries.length === 0 ? (
+              <div style={{ padding: "1.5rem", background: CD.tag, borderRadius: "10px", textAlign: "center", color: CD.dim, fontSize: "0.8rem" }}>
+                Alle bekannten Autoren sind bereits in deiner Strategie.
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                {discoveries.map(c => (
+                  <AuthorCard key={c.username} card={c} onAdd={onAddToStrategy} />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Footer */}
+      <div style={{ marginTop: "1.25rem", fontSize: "0.68rem", color: CD.faint, textAlign: "right" }}>
+        Stand: {new Date(discovery.computedAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })} Uhr
+        {" · "}Ähnliche Autoren (basierend auf Tags/Communities) — in Entwicklung
+      </div>
+    </div>
   );
 }
 

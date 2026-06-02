@@ -267,6 +267,104 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
+  // ── Community Discovery — real data from strategy_rules + audit_events ────
+  app.get("/api/community/discovery", async (request, reply) => {
+    const session = getSession(getSessionHeader(request.headers["session"]));
+    if (!session) return reply.code(401).send({ error: "unauthorized" });
+
+    const me = session.user.username;
+    const db = getDb();
+
+    const allRows = db.prepare(
+      "SELECT username, rules_json FROM strategy_rules"
+    ).all() as Array<{ username: string; rules_json: string }>;
+
+    const myRow = allRows.find(r => r.username === me);
+    const myRules: Array<{ username: string; category: string }> =
+      myRow ? JSON.parse(myRow.rules_json) : [];
+    const myAuthors = new Set(
+      myRules.filter(r => r.category !== "ignorieren").map(r => r.username)
+    );
+
+    // Aggregate author presence across all OTHER strategies
+    const authorMap = new Map<string, { curators: string[]; categories: string[] }>();
+    for (const row of allRows) {
+      if (row.username === me) continue;
+      const rules: Array<{ username: string; category: string }> = JSON.parse(row.rules_json);
+      for (const rule of rules) {
+        if (rule.category === "ignorieren") continue;
+        if (!authorMap.has(rule.username)) authorMap.set(rule.username, { curators: [], categories: [] });
+        const e = authorMap.get(rule.username)!;
+        e.curators.push(row.username);
+        e.categories.push(rule.category);
+      }
+    }
+
+    // Vote activity from audit_events (last 30 days)
+    const since30d = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+    const activity = db.prepare(`
+      SELECT author, COUNT(*) as cnt, MAX(created_at) as last_at
+      FROM audit_events
+      WHERE type = 'vote_broadcast_attempt' AND author IS NOT NULL AND created_at >= ?
+      GROUP BY author
+    `).all(since30d) as Array<{ author: string; cnt: number; last_at: string }>;
+    const actMap = new Map(activity.map(a => [a.author, { votes: a.cnt, lastAt: a.last_at }]));
+
+    const catLabels: Record<string, string> = {
+      immer_voten: "Immer voten", lieblingsautor: "Lieblingsautor",
+      bevorzugt: "Bevorzugt", normal: "Normal", niedrig: "Niedrig",
+    };
+
+    const buildCard = (username: string, entry: { curators: string[]; categories: string[] }) => {
+      const act = actMap.get(username);
+      const catCounts = new Map<string, number>();
+      for (const c of entry.categories) catCounts.set(c, (catCounts.get(c) ?? 0) + 1);
+      const topCategory = [...catCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "normal";
+      const reasons: string[] = [];
+      if (entry.curators.length === 1) reasons.push("1 weiterer Kurator unterstützt diesen Autor");
+      else reasons.push(`${entry.curators.length} Kuratoren unterstützen diesen Autor`);
+      if (act && act.votes > 0) reasons.push(`${act.votes} Votes in den letzten 30 Tagen`);
+      return {
+        username,
+        curatorCount: entry.curators.length,
+        topCategory,
+        topCategoryLabel: catLabels[topCategory] ?? topCategory,
+        recentVotes: act?.votes ?? 0,
+        lastVotedAt: act?.lastAt ?? null,
+        reasons,
+        inMyStrategy: myAuthors.has(username),
+      };
+    };
+
+    const communityAuthors = [...authorMap.entries()]
+      .filter(([u, e]) => e.curators.length >= 2 && !myAuthors.has(u))
+      .map(([u, e]) => buildCard(u, e))
+      .sort((a, b) => b.curatorCount - a.curatorCount);
+
+    const discoveries = [...authorMap.entries()]
+      .filter(([u]) => !myAuthors.has(u))
+      .map(([u, e]) => buildCard(u, e))
+      .sort((a, b) => b.curatorCount - a.curatorCount || b.recentVotes - a.recentVotes)
+      .slice(0, 20);
+
+    const totalCurators = allRows.length;
+    const dataQuality: "rich" | "sparse" | "empty" =
+      totalCurators >= 5 ? "rich" : totalCurators >= 2 ? "sparse" : "empty";
+    const notice =
+      dataQuality === "empty"
+        ? "Noch keine anderen Kuratoren in der Community."
+        : dataQuality === "sparse"
+        ? `${totalCurators} aktive Kuratoren — Empfehlungen werden aussagekräftiger, je mehr Nutzer VoteBroker einsetzen.`
+        : null;
+
+    return {
+      communityAuthors,
+      discoveries,
+      meta: { totalCurators, myAuthorCount: myAuthors.size, dataQuality, notice },
+      computedAt: new Date().toISOString(),
+    };
+  });
+
   app.get("/api/community/overview", async (request, reply) => {
     const query = z.object({
       username: z.string().min(1).optional(),

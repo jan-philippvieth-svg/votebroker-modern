@@ -1007,3 +1007,36 @@ export async function fetchGrowthData(token: string, period: "30d" | "90d" | "al
   if (!res.ok) throw new Error("growth_fetch_failed");
   return res.json();
 }
+
+// ── Community Discovery ───────────────────────────────────────────────────────
+
+export interface AuthorDiscoveryCard {
+  username:         string;
+  curatorCount:     number;
+  topCategory:      string;
+  topCategoryLabel: string;
+  recentVotes:      number;
+  lastVotedAt:      string | null;
+  reasons:          string[];
+  inMyStrategy:     boolean;
+}
+
+export interface CommunityDiscovery {
+  communityAuthors: AuthorDiscoveryCard[];
+  discoveries:      AuthorDiscoveryCard[];
+  meta: {
+    totalCurators:  number;
+    myAuthorCount:  number;
+    dataQuality:    "rich" | "sparse" | "empty";
+    notice:         string | null;
+  };
+  computedAt: string;
+}
+
+export async function fetchCommunityDiscovery(token: string): Promise<CommunityDiscovery> {
+  const res = await fetch(`${API_BASE}/api/community/discovery`, {
+    headers: { session: token },
+  });
+  if (!res.ok) throw new Error("Community Discovery konnte nicht geladen werden.");
+  return res.json();
+}
