@@ -702,30 +702,57 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
                       title="Platzhalter im Draft durch Screenshot-URLs ersetzen"
                     >⬇ Einbetten</button>
                   )}
-                  {preview?.content?.includes("/api/admin/screenshots/") && (
-                    <button
-                      style={{ ...btnStyle(C.err), fontSize: "0.73rem", fontWeight: 700 }}
-                      type="button" disabled={saving}
-                      onClick={async () => {
-                        if (!selected) return;
-                        setSaving(true);
-                        setActionMsg("⏳ Repariere Screenshot-URLs…");
-                        try {
-                          const r = await fixScreenshotUrls(session.token, selected);
-                          setActionMsg(r.hint);
-                          if (r.changed) await openPreview(selected);
-                        } catch (e) {
-                          setActionMsg(`✗ ${e instanceof Error ? e.message : "Fehler"}`);
-                        } finally { setSaving(false); }
-                      }}
-                      title="Interne /api/admin/screenshots/ → öffentliche /screenshots/ URLs"
-                    >🔧 URLs reparieren</button>
-                  )}
+                  {/* URLs reparieren — immer sichtbar, nicht nur wenn interne URLs erkannt */}
+                  <button
+                    style={{ ...btnStyle(C.warn), fontSize: "0.73rem" }}
+                    type="button" disabled={saving}
+                    onClick={async () => {
+                      if (!selected) return;
+                      setSaving(true);
+                      setActionMsg("⏳ Repariere Screenshot-URLs…");
+                      try {
+                        const r = await fixScreenshotUrls(session.token, selected);
+                        setActionMsg(r.hint);
+                        if (r.changed) await openPreview(selected);
+                      } catch (e) {
+                        setActionMsg(`✗ ${e instanceof Error ? e.message : "Fehler"}`);
+                      } finally { setSaving(false); }
+                    }}
+                    title="Interne /api/admin/screenshots/ → öffentliche /api/screenshots/ URLs"
+                  >🔧 URLs fix</button>
+
                   <button style={btnStyle(C.info)} type="button" onClick={() => setEditMode(true)}>Bearbeiten</button>
                   {selectedDraft?.status === "draft" && <button style={btnStyle(C.info)} type="button" disabled={saving} onClick={() => void setStatus(selected, "reviewed")}>Review ✓</button>}
                   {selectedDraft?.status === "reviewed" && <button style={btnStyle(C.ok)} type="button" disabled={saving} onClick={() => void setStatus(selected, "approved")}>Freigeben</button>}
                   {selectedDraft?.status === "approved" && <button style={btnStyle(C.purple)} type="button" disabled={saving} onClick={() => void setStatus(selected, "scheduled")}>Einplanen →</button>}
                   {selectedDraft?.status === "scheduled" && <button style={{ ...btnStyle(C.ok), fontWeight: 700 }} type="button" disabled={saving} onClick={() => void doPublish(selected)}>🚀 Publizieren</button>}
+
+                  {/* Neu publizieren für bereits veröffentlichte Posts (aktualisiert Steemit-Post) */}
+                  {selectedDraft?.status === "published" && selectedDraft?.publishedPermlink && (
+                    <button
+                      style={{ ...btnStyle(C.ok), fontWeight: 700, fontSize: "0.73rem" }}
+                      type="button" disabled={saving}
+                      title="Aktualisiert den Steemit-Post mit dem korrigierten Inhalt (gleicher Permlink)"
+                      onClick={async () => {
+                        if (!window.confirm(
+                          `"${selectedDraft.publishedPermlink}" auf Steemit aktualisieren?\n\nDer veröffentlichte Post wird mit dem aktuellen Draft-Inhalt überschrieben.`
+                        )) return;
+                        setSaving(true);
+                        setActionMsg("⏳ Bereite Neu-Veröffentlichung vor…");
+                        try {
+                          // Reset to scheduled so publish endpoint accepts it
+                          await uds(session.token, selected, "scheduled");
+                          setActionMsg("⏳ Veröffentliche auf Steem…");
+                          await doPublish(selected);
+                        } catch (e) {
+                          setActionMsg(`✗ ${e instanceof Error ? e.message : "Fehler"}`);
+                          // Restore published status on error
+                          await uds(session.token, selected, "published").catch(() => {});
+                        } finally { setSaving(false); }
+                      }}
+                    >🔄 Neu veröffentlichen</button>
+                  )}
+
                   {selectedDraft?.status !== "published" && selectedDraft?.status !== "failed" && (
                     <button style={btnStyle(C.err)} type="button" disabled={saving} onClick={() => void setStatus(selected, "failed", { failedReason: "Manually rejected" })}>Ablehnen</button>
                   )}
