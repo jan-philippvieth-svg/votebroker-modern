@@ -1153,73 +1153,133 @@ function VpGraphToday({ todayStats, snapshot }: {
 
 type VBEarningsPeriod = "7d" | "30d" | "90d" | "all";
 
-function VBEarningsChart({ data, pendingSp, color }: {
+interface EnrichedDay {
+  date:         string;
+  realizedSp:   number;
+  pendingSp:    number;   // estimated pending portion for this day
+  totalSp:      number;   // realized + pending
+  cumTotalSp:   number;   // running total incl. pending
+  cumRealSp:    number;   // running total realized only
+  votes:        number;
+}
+
+function enrichWithPending(data: DailyEarnings[], pendingSp: number): EnrichedDay[] {
+  // Distribute pending proportionally across the last 7 days by vote count.
+  // Days older than 7d can't have pending (posts already paid out).
+  const last7 = data.slice(-7);
+  const totalVotes7d = last7.reduce((s, d) => s + d.votes, 0);
+  const cutoffIdx    = data.length - 7;
+
+  let cumReal = 0, cumTotal = 0;
+  return data.map((d, i) => {
+    const dailyPending = (i >= cutoffIdx && totalVotes7d > 0)
+      ? (d.votes / totalVotes7d) * pendingSp
+      : 0;
+    const totalSp = d.realizedSp + dailyPending;
+    cumReal  += d.realizedSp;
+    cumTotal += totalSp;
+    return {
+      date:       d.date,
+      realizedSp: d.realizedSp,
+      pendingSp:  Math.round(dailyPending * 10_000) / 10_000,
+      totalSp:    Math.round(totalSp * 10_000) / 10_000,
+      cumTotalSp: Math.round(cumTotal * 10_000) / 10_000,
+      cumRealSp:  Math.round(cumReal  * 10_000) / 10_000,
+      votes:      d.votes,
+    };
+  });
+}
+
+function VBEarningsChart({ data, pendingSp, sbdPerSteem }: {
   data: DailyEarnings[];
   pendingSp: number;
-  color: string;
+  sbdPerSteem: number;
 }) {
   const [hoverIdx, setHoverIdx] = useState<number|null>(null);
   if (!data.length) return null;
 
-  const maxSp   = Math.max(...data.map(d => d.realizedSp), pendingSp / data.length, 0.001);
-  const maxCum  = data[data.length - 1]?.cumRealizedSp || 0.001;
-  const W       = 400;  // internal SVG units
-  const H       = 100;
-  const BAR_W   = Math.max(1, (W / data.length) * 0.65);
-  const PAD     = 6;
+  const PURPLE  = "#7c3aed";
+  const ORANGE  = "#d97706";
+  const enriched = useMemo(() => enrichWithPending(data, pendingSp), [data, pendingSp]);
 
-  const barX  = (i: number) => PAD + (i / data.length) * (W - 2*PAD) + BAR_W * 0.1;
-  const barH  = (sp: number) => ((sp / maxSp) * (H - PAD - 10));
-  const lineX = (i: number) => PAD + ((i + 0.5) / data.length) * (W - 2*PAD);
-  const lineY = (cum: number) => H - PAD - ((cum / maxCum) * (H - PAD - 12));
+  const maxBar = Math.max(...enriched.map(d => d.totalSp), 0.001);
+  const maxCum = Math.max(enriched[enriched.length - 1]?.cumTotalSp ?? 0, 0.001);
+  const W = 400, H = 108, PAD = 6;
+  const barW  = Math.max(1, (W / enriched.length) * 0.62);
+  const barX  = (i: number) => PAD + (i / enriched.length) * (W - 2*PAD) + barW * 0.2;
+  const barH  = (sp: number) => Math.max(0, (sp / maxBar) * (H - PAD - 16));
+  const lineX = (i: number) => PAD + ((i + 0.5) / enriched.length) * (W - 2*PAD);
+  const lineY = (v: number) => H - PAD - ((v / maxCum) * (H - PAD - 16));
 
-  const linePoints = data.map((d, i) => `${lineX(i)},${lineY(d.cumRealizedSp)}`).join(" ");
-  const areaPoints = [
-    `${lineX(0)},${H - PAD}`,
-    ...data.map((d, i) => `${lineX(i)},${lineY(d.cumRealizedSp)}`),
-    `${lineX(data.length - 1)},${H - PAD}`,
-  ].join(" ");
+  const linePoints = enriched.map((d, i) => `${lineX(i)},${lineY(d.cumTotalSp)}`).join(" ");
+  const hovD = hoverIdx !== null ? enriched[hoverIdx] : null;
 
-  const hovD = hoverIdx !== null ? data[hoverIdx] : null;
+  // Tooltip position — clamp to edges
+  const tipPct = hoverIdx !== null
+    ? Math.min(85, Math.max(15, ((hoverIdx + 0.5) / enriched.length) * 100))
+    : 50;
 
   return (
     <div style={{ position:"relative", userSelect:"none" }}>
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
-        style={{ width:"100%", height:"96px", display:"block" }}
+        style={{ width:"100%", height:"108px", display:"block" }}
         onMouseLeave={() => setHoverIdx(null)}>
         <defs>
-          <linearGradient id="vb-line-grad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%"   stopColor={color} stopOpacity="0.18"/>
-            <stop offset="100%" stopColor={color} stopOpacity="0.02"/>
+          <linearGradient id="vb-cum-grad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"   stopColor={PURPLE} stopOpacity="0.12"/>
+            <stop offset="100%" stopColor={PURPLE} stopOpacity="0.0"/>
           </linearGradient>
         </defs>
 
-        {/* Daily bars */}
-        {data.map((d, i) => {
-          const bh = barH(d.realizedSp);
+        {/* Area under cumulative line */}
+        <polygon
+          points={[
+            `${lineX(0)},${H-PAD}`,
+            ...enriched.map((d,i) => `${lineX(i)},${lineY(d.cumTotalSp)}`),
+            `${lineX(enriched.length-1)},${H-PAD}`,
+          ].join(" ")}
+          fill="url(#vb-cum-grad)"/>
+
+        {/* Stacked daily bars: realized (bottom, purple) + pending (top, orange) */}
+        {enriched.map((d, i) => {
+          const realH  = barH(d.realizedSp);
+          const pendH  = barH(d.pendingSp);
+          const totalH = realH + pendH;
+          const isHov  = hoverIdx === i;
           return (
-            <rect key={i}
-              x={barX(i)} y={H - PAD - bh} width={BAR_W} height={Math.max(0, bh)}
-              fill={hoverIdx === i ? color : color + "88"}
-              rx="1.5"
-              style={{ cursor:"pointer" }}
-              onMouseEnter={() => setHoverIdx(i)}
-            />
+            <g key={i} style={{ cursor:"pointer" }} onMouseEnter={() => setHoverIdx(i)}>
+              {/* Invisible hit area */}
+              <rect x={barX(i)} y={H - PAD - totalH - 2} width={barW}
+                height={totalH + 4} fill="transparent"/>
+              {/* Pending portion (top, orange) */}
+              {pendH > 0 && (
+                <rect x={barX(i)} y={H - PAD - totalH} width={barW} height={pendH}
+                  fill={isHov ? ORANGE : ORANGE + "aa"} rx="1.5"/>
+              )}
+              {/* Realized portion (bottom, purple) */}
+              {realH > 0 && (
+                <rect x={barX(i)} y={H - PAD - realH} width={barW} height={realH}
+                  fill={isHov ? PURPLE : PURPLE + "bb"} rx="1.5"
+                  style={{ borderRadius: pendH > 0 ? "0 0 1.5px 1.5px" : "1.5px" }}/>
+              )}
+              {/* Zero-vote day marker */}
+              {totalH === 0 && (
+                <line x1={barX(i) + barW/2} y1={H-PAD-1} x2={barX(i)+barW/2} y2={H-PAD+1}
+                  stroke="#e2e8f0" strokeWidth="1"/>
+              )}
+            </g>
           );
         })}
 
-        {/* Cumulative area + line */}
-        <polygon points={areaPoints} fill="url(#vb-line-grad)"/>
+        {/* Cumulative line */}
         <polyline points={linePoints} fill="none"
-          stroke={color} strokeWidth="1.8" strokeLinejoin="round"
+          stroke={PURPLE} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round"
           style={{ pointerEvents:"none" }}/>
 
-        {/* Hover dot */}
+        {/* Hover dot on cumulative line */}
         {hoverIdx !== null && (
-          <circle
-            cx={lineX(hoverIdx)}
-            cy={lineY(data[hoverIdx].cumRealizedSp)}
-            r={3.5} fill={color} stroke="white" strokeWidth="1.5"
+          <circle cx={lineX(hoverIdx)} cy={lineY(enriched[hoverIdx].cumTotalSp)}
+            r={3.5} fill={PURPLE} stroke="white" strokeWidth="1.5"
             style={{ pointerEvents:"none" }}/>
         )}
       </svg>
@@ -1227,17 +1287,39 @@ function VBEarningsChart({ data, pendingSp, color }: {
       {/* Tooltip */}
       {hovD && (
         <div style={{
-          position:"absolute", left:`${(hoverIdx!+0.5)/data.length*100}%`,
-          bottom:"100%", transform:"translateX(-50%)",
-          background:"#1e293b", border:`1px solid ${color}55`,
-          borderRadius:"8px", padding:"0.4rem 0.6rem",
+          position:"absolute", left:`${tipPct}%`, bottom:"108px",
+          transform:"translateX(-50%)",
+          background:"#1e293b", border:`1px solid ${PURPLE}55`,
+          borderRadius:"10px", padding:"0.5rem 0.75rem",
           pointerEvents:"none", zIndex:10, whiteSpace:"nowrap",
-          fontSize:"0.7rem", color:"#e2e8f0", marginBottom:"4px",
+          fontSize:"0.7rem", color:"#e2e8f0", lineHeight:1.6,
+          boxShadow:"0 4px 12px rgba(0,0,0,0.3)",
         }}>
-          <div style={{ fontWeight:700, color, marginBottom:"0.1rem" }}>{hovD.date.slice(5)}</div>
-          <div>Realisiert: <b>{hovD.realizedSp.toFixed(4)} SP</b></div>
-          <div style={{ color:"#94a3b8" }}>Kumuliert: {hovD.cumRealizedSp.toFixed(3)} SP</div>
-          {hovD.votes > 0 && <div style={{ color:"#94a3b8" }}>{hovD.votes} VB-Votes</div>}
+          <div style={{ fontWeight:700, color:"#c4b5fd", marginBottom:"0.25rem" }}>
+            {new Date(hovD.date+"T12:00:00Z").toLocaleDateString("de-DE",{day:"numeric",month:"short"})}
+          </div>
+          {hovD.votes > 0 && (
+            <div style={{ color:"#94a3b8", marginBottom:"0.2rem" }}>
+              VoteBroker Votes: <b style={{ color:"#e2e8f0" }}>{hovD.votes}</b>
+            </div>
+          )}
+          {hovD.realizedSp > 0 && (
+            <div>Realisiert: <b style={{ color:"#a78bfa" }}>{hovD.realizedSp.toFixed(4)} SP</b></div>
+          )}
+          {hovD.pendingSp > 0 && (
+            <div>Pending: <b style={{ color:ORANGE }}>{hovD.pendingSp.toFixed(4)} SP</b></div>
+          )}
+          {hovD.totalSp > 0 && (
+            <div style={{ borderTop:"1px solid #334155", marginTop:"0.2rem", paddingTop:"0.2rem" }}>
+              Gesamt: <b style={{ color:"#fff" }}>{hovD.totalSp.toFixed(4)} SP</b>
+            </div>
+          )}
+          <div>Kumuliert: <b style={{ color:"#c4b5fd" }}>{hovD.cumTotalSp.toFixed(3)} SP</b></div>
+          {hovD.totalSp > 0 && sbdPerSteem > 0 && (
+            <div style={{ color:"#64748b" }}>
+              ≈ {(hovD.totalSp * sbdPerSteem).toFixed(4)} SBD
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1270,20 +1352,16 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, t }: {
     { id:"all", label:"All-time"},
   ];
 
-  const PURPLE = "#7c3aed";
-  const totalSp    = data?.totals.realizedSp ?? 0;
-  const usdApprox  = totalSp * sbdPrStm;
+  const PURPLE     = "#7c3aed";
+  const ORANGE     = "#d97706";
+  const realizedSp = data?.totals.realizedSp ?? 0;
   const pendingSp  = pendingCuration?.pendingSp ?? 0;
+  const totalSp    = realizedSp + pendingSp;   // what VoteBroker actually earned you
+  const usdApprox  = totalSp * sbdPrStm;
   const todayVotes = todayStats?.totalVotes ?? 0;
-  const streak     = 0; // growthData not available here; could be added
   const gameTip    = todayVotes > 0
     ? `✅ Heute ${todayVotes} Votes verteilt durch VoteBroker`
     : `🌱 Starte heute deinen ersten VoteBroker-Run`;
-
-  // 7-day realized: sum of last 7 days in current data
-  const recent7dSp = data
-    ? data.dailyData.slice(-7).reduce((s, d) => s + d.realizedSp, 0)
-    : 0;
 
   return (
     <div style={{ ...card, background:"linear-gradient(135deg,#faf5ff 0%,#f5f3ff 60%,#ede9fe 100%)" }}>
@@ -1325,69 +1403,66 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, t }: {
             </div>
           )}
 
-          {/* Main metrics — Realisiert + Pending prominent, Badge nur per Tooltip */}
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:"0.5rem" }}>
+          {/* Main metrics — Gesamtwert (Realisiert + Pending) als primäre Zahl */}
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:"0.45rem" }}>
             <div>
-              {/* Realized SP — primary */}
-              <div style={{ display:"flex", alignItems:"baseline", gap:"0.5rem" }}>
-                <div style={{ fontSize:"2.1rem", fontWeight:900, color:PURPLE, letterSpacing:"-1.5px", lineHeight:1 }}>
-                  {totalSp > 0 ? totalSp.toFixed(3) : "—"}
-                  <span style={{ fontSize:"0.88rem", fontWeight:700, marginLeft:"0.3rem", opacity:0.75 }}>SP</span>
-                </div>
-                {pendingSp > 0 && (
-                  <div style={{ display:"flex", alignItems:"baseline", gap:"0.2rem" }}>
-                    <span style={{ color:C.faint, fontSize:"0.8rem" }}>+</span>
-                    <span style={{ fontSize:"1.15rem", fontWeight:800, color:C.warn, letterSpacing:"-0.5px" }}>
-                      {pendingSp.toFixed(3)}
-                    </span>
-                    <span style={{ fontSize:"0.75rem", color:C.warn, fontWeight:700 }}>SP pending</span>
-                  </div>
-                )}
+              {/* Total SP (realized + pending) — the real value VoteBroker generated */}
+              <div style={{ fontSize:"2.2rem", fontWeight:900, color:PURPLE, letterSpacing:"-1.5px", lineHeight:1 }}>
+                {totalSp > 0 ? totalSp.toFixed(3) : "—"}
+                <span style={{ fontSize:"0.88rem", fontWeight:700, marginLeft:"0.3rem", opacity:0.75 }}>SP</span>
               </div>
-              {/* Sub-line: SBD equiv + detail (no "Realisiert" badge here) */}
-              <div style={{ fontSize:"0.7rem", color:C.dim, marginTop:"0.15rem" }}>
-                {totalSp > 0
-                  ? `≈ ${usdApprox.toFixed(3)} SBD verdient · ${data.totals.realizedCount} Payouts`
-                  : "Noch keine attributierten Rewards"}
+              {/* Sub: USD + breakdown */}
+              <div style={{ fontSize:"0.7rem", color:C.dim, marginTop:"0.15rem", display:"flex", gap:"0.6rem", flexWrap:"wrap" }}>
+                {totalSp > 0 && <span>≈ {usdApprox.toFixed(3)} SBD</span>}
+                {realizedSp > 0 && (
+                  <span style={{ color:"#a78bfa" }}>
+                    {realizedSp.toFixed(3)} realisiert
+                  </span>
+                )}
                 {pendingSp > 0 && (
-                  <span style={{ color:C.warn, marginLeft:"0.5rem" }}>
-                    + ≈ {(pendingSp * (snapshot?.sbdPerSteem ?? 0.051)).toFixed(3)} SBD pending
+                  <span style={{ color:ORANGE }}>
+                    +{pendingSp.toFixed(3)} pending
                   </span>
                 )}
               </div>
             </div>
-            {/* Detail badge — subtle, only for curious users */}
-            <div title={`Realisiert: ${totalSp.toFixed(4)} SP aus ${data.totals.realizedCount} on-chain Payouts\nPending: ${pendingSp.toFixed(4)} SP aus offenen Posts`}
-              style={{ fontSize:"0.6rem", color:C.faint, cursor:"help", textAlign:"right", lineHeight:1.4 }}>
-              <div>ℹ Details</div>
-              {data.attributionStart && <div>seit {data.attributionStart}</div>}
+            {/* Subtle info */}
+            <div title={`Attribution seit: ${data.attributionStart ?? "—"}\nRealisiert (on-chain): ${realizedSp.toFixed(4)} SP\nPending (offene Posts): ${pendingSp.toFixed(4)} SP\nPayouts: ${data.totals.realizedCount}`}
+              style={{ fontSize:"0.6rem", color:C.faint, cursor:"help", lineHeight:1.5 }}>
+              ℹ {data.totals.voteCount > 0 ? `${data.totals.voteCount} Votes` : ""}
+              {data.attributionStart && <div style={{ fontSize:"0.58rem" }}>seit {data.attributionStart}</div>}
             </div>
           </div>
 
-          {/* Quick side stats */}
-          <div style={{ display:"flex", gap:"1rem", fontSize:"0.7rem", color:C.dim, marginBottom:"0.65rem" }}>
-            {recent7dSp > 0 && (
-              <span>7 Tage: <b style={{ color:PURPLE }}>{recent7dSp.toFixed(3)} SP</b></span>
-            )}
-            {data.totals.voteCount > 0 && (
-              <span>{data.totals.voteCount} VB-Votes</span>
-            )}
-          </div>
-
-          {/* Bar + Line chart */}
-          {data.dailyData.some(d => d.realizedSp > 0) ? (
+          {/* Bar + Line chart — shown when any votes OR pending exist */}
+          {(data.dailyData.some(d => d.votes > 0) || pendingSp > 0) ? (
             <>
-              <div style={{ fontSize:"0.63rem", color:C.faint, marginBottom:"0.2rem", display:"flex", gap:"0.8rem" }}>
-                <span>▮ täglicher Ertrag</span>
-                <span>— kumuliert</span>
+              {/* Legend */}
+              <div style={{ fontSize:"0.62rem", color:C.faint, marginBottom:"0.25rem", display:"flex", gap:"1rem", alignItems:"center" }}>
+                <span style={{ display:"flex", alignItems:"center", gap:"0.25rem" }}>
+                  <span style={{ display:"inline-block", width:"8px", height:"8px", background:"#7c3aed", borderRadius:"2px" }}/>
+                  Realisiert
+                </span>
+                <span style={{ display:"flex", alignItems:"center", gap:"0.25rem" }}>
+                  <span style={{ display:"inline-block", width:"8px", height:"8px", background:"#d97706", borderRadius:"2px" }}/>
+                  Pending
+                </span>
+                <span style={{ display:"flex", alignItems:"center", gap:"0.25rem" }}>
+                  <span style={{ display:"inline-block", width:"14px", height:"2px", background:"#7c3aed", borderRadius:"1px" }}/>
+                  kumuliert
+                </span>
               </div>
-              <VBEarningsChart data={data.dailyData} pendingSp={pendingSp} color={PURPLE}/>
+              <VBEarningsChart
+                data={data.dailyData}
+                pendingSp={pendingSp}
+                sbdPerSteem={sbdPrStm}
+              />
             </>
           ) : (
             <div style={{ textAlign:"center", padding:"1.5rem 0",
               color:C.faint, fontSize:"0.8rem",
-              border:`1px dashed ${PURPLE}33`, borderRadius:"8px" }}>
-              Noch keine VoteBroker-attributierten Curation-Rewards in diesem Zeitraum.
+              border:`1px dashed #7c3aed33`, borderRadius:"8px" }}>
+              Noch keine VoteBroker-Votes in diesem Zeitraum.
               {data.attributionStart && (
                 <div style={{ marginTop:"0.3rem", fontSize:"0.7rem" }}>
                   Attribution aktiv seit {data.attributionStart}
