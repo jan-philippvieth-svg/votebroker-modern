@@ -1945,14 +1945,8 @@ function CurationDnaPanel(props: {
               )}
             </div>
 
-            {strategyRules ? (
+            {strategyRules && (
               <StrategyEditor rules={strategyRules} votesPerDay={p.votesPerDay} onUpdate={updateRule} onRemove={removeRule} />
-            ) : (
-              <div style={{ textAlign: "center" as const, padding: "1rem 0" }}>
-                <button style={{ background: "#2563eb", border: "none", borderRadius: "8px", color: "#fff", cursor: "pointer", fontSize: "0.88rem", fontWeight: 700, padding: "0.6rem 1.2rem" }} type="button" onClick={generateStrategy}>
-                  Strategie aus Vote-DNA generieren →
-                </button>
-              </div>
             )}
           </div>
         )}
@@ -2511,39 +2505,7 @@ function VotePlanSection(props: {
 
   return (
     <div>
-      {/* ── Header ─────────────────────────────────── */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" as const, gap: "0.65rem", marginBottom: "1rem" }}>
-        <div>
-          <p style={{ color: "#607078", fontSize: "0.72rem", textTransform: "uppercase" as const, letterSpacing: "0.5px", margin: "0 0 0.15rem", fontWeight: 600 }}>🗳 Vote-Plan</p>
-          {phase !== "idle" && plan && (
-            <p style={{ color: "#17202a", fontSize: "0.88rem", fontWeight: 700, margin: 0 }}>
-              {allPlanEntries.length} {allPlanEntries.length === 1 ? "Vote" : "Votes"} im Plan{additions.length > 0 ? ` (+${additions.length} hinzugefügt)` : ""}
-              <span style={{ color: "#8fa4b0", fontWeight: 400, marginLeft: "0.5rem", fontSize: "0.78rem" }}>
-                VP {plan.summary.currentVpPct.toFixed(1)}% → <span style={{ color: sustainColor }}>{plan.summary.estimatedVpAfterPct.toFixed(1)}%</span>
-              </span>
-            </p>
-          )}
-        </div>
-        <div style={{ display: "flex", gap: "0.4rem" }}>
-          {(phase === "generated" || phase === "idle") && (
-            <button
-              style={{ background: "#2563eb", border: "none", borderRadius: "8px", color: "#fff", cursor: "pointer", fontSize: "0.88rem", fontWeight: 700, padding: "0.5rem 1.1rem" }}
-              type="button" disabled={props.loading} onClick={() => { props.onGenerate(); setPhase("idle"); }}
-            >
-              {props.loading ? "Generiere..." : plan ? "↻ Plan aktualisieren" : "Plan generieren"}
-            </button>
-          )}
-        </div>
-      </div>
-
       {props.error && <p style={{ color: "#dc2626", fontSize: "0.82rem", margin: "0 0 0.5rem" }}>{props.error}</p>}
-
-      {/* ── Phase: idle ────────────────────────────── */}
-      {phase === "idle" && !props.loading && (
-        <p style={{ color: "#8fa4b0", fontSize: "0.82rem", margin: 0 }}>
-          Klicke "Vote-Plan generieren" — VoteBroker analysiert offene Posts deiner Strategie-Autoren und erstellt einen priorisierten, nachhaltigen Plan. Kein Vote wird ohne explizite Bestätigung gesendet.
-        </p>
-      )}
 
       {/* ── Phase: generated (plan view) ───────────── */}
       {phase === "generated" && (
@@ -2853,56 +2815,45 @@ function OpenVoteOpportunities(props: {
 
   return (
     <div>
-      {/* KPI-Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: "1.5rem", marginBottom: "1rem", flexWrap: "wrap" as const }}>
-        {/* Große Kennzahl */}
-        <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem" }}>
-          <span style={{
-            fontSize: "3rem", fontWeight: 900, lineHeight: 1, letterSpacing: "-2px",
-            color: props.opportunities === null ? "#8fa4b0"
-              : totalOpen > 0 ? "#d97706" : "#16a34a",
-          }}>
-            {props.opportunities === null ? "—" : totalOpen}
-          </span>
-          <span style={{ color: "#607078", fontSize: "0.85rem", fontWeight: 700 }}>
-            {props.opportunities === null ? "Noch nicht gescannt"
-              : totalOpen === 1 ? "offener Vote"
-              : totalOpen === 0 ? "✓ Alles gevoted"
-              : "offene Votes"}
-          </span>
-        </div>
-
-        {/* Aktions-Buttons */}
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginLeft: "auto" }}>
-          {totalOpen > 0 && props.opportunities !== null && (
+      {/* KPI-Header — nur wenn bereits gescannt */}
+      {props.opportunities !== null && (
+        <div style={{ display: "flex", alignItems: "center", gap: "1.5rem", marginBottom: "1rem", flexWrap: "wrap" as const }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem" }}>
+            <span style={{
+              fontSize: "3rem", fontWeight: 900, lineHeight: 1, letterSpacing: "-2px",
+              color: totalOpen > 0 ? "#d97706" : "#16a34a",
+            }}>
+              {totalOpen}
+            </span>
+            <span style={{ color: "#607078", fontSize: "0.85rem", fontWeight: 700 }}>
+              {totalOpen === 1 ? "offener Vote" : totalOpen === 0 ? "✓ Alles gevoted" : "offene Votes"}
+            </span>
+          </div>
+          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginLeft: "auto" }}>
+            {totalOpen > 0 && (
+              <button
+                style={{ background: "#d97706", border: "none", borderRadius: "8px", color: "#fff", cursor: "pointer", fontSize: "0.88rem", fontWeight: 700, padding: "0.5rem 1.1rem" }}
+                type="button"
+                disabled={voting}
+                onClick={() => { setPreview(allEligible); setVoteResult(null); }}
+              >
+                Alle {totalOpen} jetzt voten
+              </button>
+            )}
             <button
-              style={{ background: "#d97706", border: "none", borderRadius: "8px", color: "#fff", cursor: "pointer", fontSize: "0.88rem", fontWeight: 700, padding: "0.5rem 1.1rem" }}
+              style={{ background: "#f0f5f7", border: "1px solid #dde8ed", borderRadius: "7px", color: "#607078", cursor: "pointer", fontSize: "0.82rem", padding: "0.45rem 0.9rem", fontWeight: 600 }}
               type="button"
-              disabled={voting}
-              onClick={() => { setPreview(allEligible); setVoteResult(null); }}
+              disabled={props.loading}
+              onClick={props.onRefresh}
             >
-              Alle {totalOpen} jetzt voten
+              {props.loading ? "Scannt..." : "↻ Aktualisieren"}
             </button>
-          )}
-          <button
-            style={{ background: "#f0f5f7", border: "1px solid #dde8ed", borderRadius: "7px", color: "#607078", cursor: "pointer", fontSize: "0.82rem", padding: "0.45rem 0.9rem", fontWeight: 600 }}
-            type="button"
-            disabled={props.loading}
-            onClick={props.onRefresh}
-          >
-            {props.loading ? "Scannt..." : props.opportunities === null ? "Jetzt scannen" : "↻ Aktualisieren"}
-          </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {props.error && (
         <p style={{ color: "#dc2626", fontSize: "0.82rem", margin: "0 0 0.75rem" }}>{props.error}</p>
-      )}
-
-      {props.opportunities === null && !props.loading && (
-        <p style={{ color: "#8fa4b0", fontSize: "0.82rem", margin: 0 }}>
-          Klicke "Jetzt prüfen" — VoteBroker sucht nach offenen Posts deiner Strategie-Autoren.
-        </p>
       )}
 
       {/* Scan Meta — kompakt */}
@@ -3118,7 +3069,7 @@ function AccountSnapshotPanel(props: {
         <span><b>Steem Power:</b> {sp} SP</span>
         <span><b>100% Vote:</b> ~${props.snapshot.fullPowerVoteUsd.toFixed(3)}</span>
         <span><b>Aktueller Vote:</b> ~${props.snapshot.currentVoteUsd.toFixed(3)}</span>
-        <span style={{ color: "#888" }}>STEEM/USD ${props.snapshot.steemPriceUsd.toFixed(4)} (Näherung)</span>
+        <span style={{ color: "#888" }}>STEEM {props.snapshot.sbdPerSteem.toFixed(4)} SBD (Chain-Median)</span>
       </div>
     </section>
   );

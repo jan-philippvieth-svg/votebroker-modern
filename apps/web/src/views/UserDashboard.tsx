@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   AuthSession, CurationProfile, GrowthData,
-  OpportunitiesMeta, PostOpportunity, SteemAccountSnapshot, VotePlanResponse,
+  OpportunitiesMeta, PendingCuration, PendingDebugPost, PostOpportunity, SteemAccountSnapshot, TodayStats, VotePlanResponse,
 } from "../api";
-import { fetchGrowthData } from "../api";
+import { fetchGrowthData, fetchPendingCuration, fetchTodayStats } from "../api";
 import { createTranslator, type Locale, type TranslationKey } from "../i18n";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -97,8 +97,8 @@ const card: React.CSSProperties = {
   boxShadow: SHADOW, border: `1px solid ${C.border}`,
 };
 const lbl: React.CSSProperties = {
-  color: C.dim, fontSize: "0.7rem", fontWeight: 700,
-  textTransform: "uppercase" as const, letterSpacing: "1px", margin: "0 0 1rem",
+  color: C.muted, fontSize: "0.72rem", fontWeight: 700,
+  textTransform: "uppercase" as const, letterSpacing: "0.8px", margin: "0 0 1rem",
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -483,10 +483,10 @@ function ActivityTimeline({ votes, voteUsd, opps, onAction, t }: {
         <div key={i} style={{ display:"flex", alignItems:"center", gap:"0.6rem", padding:"0.55rem 0", borderBottom:i<items.length-1?`1px solid ${C.border}`:"none" }}>
           <div style={{ width:"28px", height:"28px", borderRadius:"50%", flexShrink:0, background:`${col}14`, border:`1.5px solid ${col}30`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.8rem", color:col }}>{icon}</div>
           <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ color:C.info, fontWeight:700, fontSize:"0.8rem" }}>{l1}</div>
-            <div style={{ color:C.muted, fontSize:"0.7rem" }}>{l2}</div>
+            <div style={{ color:C.info, fontWeight:700, fontSize:"0.84rem" }}>{l1}</div>
+            <div style={{ color:C.dim, fontSize:"0.76rem" }}>{l2}</div>
           </div>
-          <div style={{ color:C.muted, fontSize:"0.68rem", flexShrink:0, whiteSpace:"nowrap" as const }}>{right}</div>
+          <div style={{ color:C.dim, fontSize:"0.74rem", flexShrink:0, whiteSpace:"nowrap" as const }}>{right}</div>
         </div>
       ))}
     </div>
@@ -548,80 +548,592 @@ function VpGauge({ pct, sp, voteUsd }: { pct: number; sp?: number; voteUsd?: num
 
 // ── Operative KPI Row (Cockpit — direkt nach Hero) ────────────────────────────
 
-function OperativeKPIRow({ snapshot, snapshotLoading, snapshotRefreshedAt, opportunities, opportunitiesMeta, recentVotes, curationProfile, strategyRules, onRefresh, onLoadOpps, onTabChange, t }: {
+function OperativeKPIRow({ snapshot, snapshotLoading, snapshotRefreshedAt, opportunities, opportunitiesMeta, onRefresh, onLoadOpps, onTabChange, t }: {
   snapshot: SteemAccountSnapshot|null; snapshotLoading: boolean; snapshotRefreshedAt?: Date;
   opportunities: PostOpportunity[]|null; opportunitiesMeta: OpportunitiesMeta|null;
-  recentVotes: RecentVote[]; curationProfile: CurationProfile|null; strategyRules: StrategyRuleLite[]|null;
   onRefresh?: ()=>void; onLoadOpps: ()=>void;
   onTabChange:(tab:"dna"|"dashboard"|"community"|"billing")=>void;
   t: ReturnType<typeof createTranslator>;
 }) {
-  const vpPct   =snapshot?snapshot.votingPowerBps/100:null;
-  const openOpps=opportunities?.filter(p=>p.eligible)??[];
-  const avgW    =strategyRules&&strategyRules.length>0?strategyRules.filter(r=>r.enabled).reduce((s,r)=>s+r.maxWeightPct,0)/strategyRules.filter(r=>r.enabled).length:0;
-  const sessUsd =recentVotes.reduce((s,v)=>s+v.weightPct/100*(snapshot?.currentVoteUsd??0),0);
+  const vpPct    = snapshot ? snapshot.votingPowerBps / 100 : null;
+  const openOpps = opportunities?.filter(p => p.eligible) ?? [];
 
   return (
-    <div style={{ display:"grid", gridTemplateColumns:"1.2fr 1fr 1fr", gap:"1rem" }}>
+    <div style={{ display:"grid", gridTemplateColumns:"1.4fr 1fr", gap:"1rem" }}>
+
       {/* Voting Power */}
       <div style={card}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"0.6rem" }}>
-          <span style={{ color:C.dim, fontSize:"0.68rem", fontWeight:700, textTransform:"uppercase" as const, letterSpacing:"0.8px" }}>{t("kpiVotingPower")}</span>
+          <span style={{ color:C.muted, fontSize:"0.72rem", fontWeight:700, textTransform:"uppercase" as const, letterSpacing:"0.8px" }}>{t("kpiVotingPower")}</span>
           {onRefresh&&<button type="button" onClick={onRefresh} disabled={snapshotLoading} style={{ background:"none", border:"none", cursor:"pointer", color:snapshotLoading?C.faint:C.muted, fontSize:"0.9rem", padding:0 }}>↻</button>}
         </div>
         {vpPct!==null?(
           <>
             <div style={{ display:"flex", alignItems:"baseline", gap:"0.4rem", marginBottom:"0.4rem" }}>
-              <span style={{ color:vpCol(vpPct), fontSize:"2.2rem", fontWeight:900, lineHeight:1, letterSpacing:"-1px" }}>{vpPct.toFixed(1)}%</span>
-              <span style={{ color:C.faint, fontSize:"0.72rem" }}>VP</span>
-              {snapshot&&<span style={{ color:C.info, fontSize:"0.85rem", fontWeight:700, marginLeft:"auto" }}>{fmtUsd(snapshot.currentVoteUsd)}<span style={{ color:C.faint, fontSize:"0.65rem", fontWeight:400 }}>/vote</span></span>}
+              <span style={{ color:vpCol(vpPct), fontSize:"2.6rem", fontWeight:900, lineHeight:1, letterSpacing:"-1px" }}>{vpPct.toFixed(1)}%</span>
+              <span style={{ color:C.dim, fontSize:"0.85rem", fontWeight:600 }}>VP</span>
+              {snapshot&&<span style={{ color:C.info, fontSize:"0.9rem", fontWeight:700, marginLeft:"auto" }}>{fmtUsd(snapshot.currentVoteUsd)}<span style={{ color:C.dim, fontSize:"0.72rem", fontWeight:400 }}>/vote</span></span>}
             </div>
-            <div style={{ height:"6px", background:C.inner, borderRadius:"3px", overflow:"hidden", marginBottom:"0.35rem", border:`1px solid ${C.border}` }}>
-              <div style={{ height:"100%", width:`${vpPct}%`, background:vpCol(vpPct), borderRadius:"3px", transition:"width 0.5s" }}/>
+            <div style={{ height:"7px", background:C.inner, borderRadius:"4px", overflow:"hidden", marginBottom:"0.4rem", border:`1px solid ${C.border}` }}>
+              <div style={{ height:"100%", width:`${vpPct}%`, background:vpCol(vpPct), borderRadius:"4px", transition:"width 0.6s" }}/>
             </div>
             {(()=>{
               const regenH=vpPct>=99.9?0:(100-vpPct)/20*24;
               const to90=vpPct>=90?null:(90-vpPct)/20*24;
               return (
-                <div style={{ display:"flex", gap:"0.5rem", fontSize:"0.68rem" }}>
-                  {to90&&<span style={{ color:C.ok }}>→ 90% in {to90<1?`${Math.round(to90*60)}m`:`${to90.toFixed(1)}h`}</span>}
-                  {regenH>0&&<span style={{ color:C.faint, marginLeft:"auto" }}>full in {regenH<1?`${Math.round(regenH*60)}m`:`${regenH.toFixed(1)}h`}</span>}
-                  {regenH===0&&<span style={{ color:C.ok, marginLeft:"auto" }}>✓ fully charged</span>}
+                <div style={{ display:"flex", gap:"0.5rem", fontSize:"0.75rem" }}>
+                  {to90&&<span style={{ color:C.ok, fontWeight:600 }}>→ 90% in {to90<1?`${Math.round(to90*60)}m`:`${to90.toFixed(1)}h`}</span>}
+                  {regenH>0&&<span style={{ color:C.dim, marginLeft:"auto" }}>voll in {regenH<1?`${Math.round(regenH*60)}m`:`${regenH.toFixed(1)}h`}</span>}
+                  {regenH===0&&<span style={{ color:C.ok, marginLeft:"auto" }}>✓ voll geladen</span>}
                 </div>
               );
             })()}
-            {snapshot&&<div style={{ color:C.faint, fontSize:"0.65rem", marginTop:"0.35rem" }}>{snapshot.steemPowerSp.toFixed(0)} SP · full: {fmtUsd(snapshot.fullPowerVoteUsd)}</div>}
+            {snapshot&&<div style={{ color:C.dim, fontSize:"0.73rem", marginTop:"0.4rem" }}>{snapshot.steemPowerSp.toFixed(0)} SP · 100%: {fmtUsd(snapshot.fullPowerVoteUsd)}</div>}
           </>
         ):(
-          <div style={{ color:C.faint, fontSize:"0.82rem" }}>{snapshotLoading?"Loading…":"—"}</div>
+          <div style={{ color:C.dim, fontSize:"0.82rem" }}>{snapshotLoading?"Lädt…":"—"}</div>
         )}
-        {snapshotRefreshedAt&&<div style={{ color:C.faint, fontSize:"0.6rem", marginTop:"0.25rem" }}>{fmtAge(snapshotRefreshedAt.toISOString(),t)}</div>}
+        {snapshotRefreshedAt&&<div style={{ color:C.faint, fontSize:"0.65rem", marginTop:"0.3rem" }}>{fmtAge(snapshotRefreshedAt.toISOString(),t)}</div>}
       </div>
 
       {/* Offene Chancen */}
       <div style={{ ...card, cursor:"pointer" }} onClick={()=>{onLoadOpps();onTabChange("dna");}}>
-        <p style={{ ...lbl, margin:"0 0 0.5rem" }}>{t("kpiOpenOpps")}</p>
-        <div style={{ color:openOpps.length>0?C.warn:opportunities!==null?C.ok:C.muted, fontSize:"2.2rem", fontWeight:900, lineHeight:1, letterSpacing:"-1px", marginBottom:"0.4rem" }}>
+        <p style={{ ...lbl, margin:"0 0 0.6rem" }}>{t("kpiOpenOpps")}</p>
+        <div style={{ color:openOpps.length>0?C.warn:opportunities!==null?C.ok:C.muted, fontSize:"2.6rem", fontWeight:900, lineHeight:1, letterSpacing:"-1px", marginBottom:"0.5rem" }}>
           {openOpps.length>0?openOpps.length:opportunities===null?"—":"0"}
         </div>
-        <div style={{ fontSize:"0.72rem", display:"flex", flexDirection:"column" as const, gap:"0.12rem" }}>
-          {openOpps.length>0&&<span style={{ color:C.warn }}>{openOpps.filter(p=>p.postScore>=80).length} {t("oppOptimalWindow")}</span>}
-          {opportunitiesMeta&&<span style={{ color:C.faint }}>{opportunitiesMeta.scannedAuthors}/{opportunitiesMeta.requestedAuthors} {t("oppScanned")}</span>}
+        <div style={{ fontSize:"0.8rem", display:"flex", flexDirection:"column" as const, gap:"0.2rem" }}>
+          {openOpps.length>0&&<span style={{ color:C.warn, fontWeight:700 }}>{openOpps.filter(p=>p.postScore>=80).length} {t("oppOptimalWindow")}</span>}
+          {opportunitiesMeta&&<span style={{ color:C.dim }}>{opportunitiesMeta.scannedAuthors}/{opportunitiesMeta.requestedAuthors} {t("oppScanned")}</span>}
           {opportunities===null&&<span style={{ color:C.muted }}>{t("oppTapToDiscover")}</span>}
           {opportunities!==null&&openOpps.length===0&&<span style={{ color:C.info }}>{t("oppVotedRescan")}</span>}
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* Heutige Wirkung */}
-      <div style={card}>
-        <p style={{ ...lbl, margin:"0 0 0.5rem" }}>{t("kpiSessionImpact")}</p>
-        <div style={{ color:recentVotes.length>0?C.ok:C.purple, fontSize:"2.2rem", fontWeight:900, lineHeight:1, letterSpacing:"-1px", marginBottom:"0.4rem" }}>
-          {recentVotes.length>0?fmtUsd(sessUsd):"—"}
+// ── Curation Timeline (Heute | Pending 7d | 30 Tage) ─────────────────────────
+
+function PendingDebugPanel({ data }: { data: PendingCuration }) {
+  const [open, setOpen] = useState(false);
+  const db = data.debug;
+  const skipped = db.skipped;
+  const totalSkipped = skipped.alreadyPaidOut + skipped.payoutZero + skipped.noVoteFound + skipped.weightZero + skipped.limitReached;
+
+  const tdR: React.CSSProperties = { textAlign: "right", padding: "0.15rem 0.4rem", fontVariantNumeric: "tabular-nums" };
+  const tdL: React.CSSProperties = { textAlign: "left",  padding: "0.15rem 0.4rem", color: C.dim };
+
+  return (
+    <div style={{ marginTop: "1rem", borderTop: `1px solid ${C.border}`, paddingTop: "0.6rem" }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, fontSize: "0.72rem", padding: 0, display: "flex", alignItems: "center", gap: "0.3rem" }}
+      >
+        <span>{open ? "▾" : "▸"}</span>
+        <span>Debug-Ansicht</span>
+        <span style={{ color: C.faint }}>· {data.sbdPerSteemUsed.toFixed(4)} SBD/STEEM · {totalSkipped} übersprungen</span>
+      </button>
+
+      {open && (
+        <div style={{ marginTop: "0.6rem", fontSize: "0.73rem", color: C.text }}>
+
+          {/* ── Coverage + Preis ── */}
+          <div style={{ marginBottom: "0.5rem", padding: "0.3rem 0.5rem", background: "#fffbe6", borderRadius: "6px", border: "1px solid #f5d000" }}>
+            <div>
+              <strong>Coverage:</strong>&nbsp;
+              {db.uniqueTotal} unique Posts gefunden&nbsp;·&nbsp;
+              {db.fetched} abgerufen&nbsp;·&nbsp;
+              {data.postCount} offen (mit Wert)
+              {db.skipped.limitReached > 0 && (
+                <span style={{ color: "#c00", fontWeight: 700 }}>&nbsp;· ⚠ {db.skipped.limitReached} durch Limit übersprungen</span>
+              )}
+            </div>
+            <div style={{ marginTop: "0.2rem" }}>
+              Gerechnet mit&nbsp;<strong>{data.sbdPerSteemUsed.toFixed(4)} SBD/STEEM</strong>
+              &nbsp;·&nbsp;Summe pending_payout: <strong>{db.totalPayoutUsd.toFixed(4)} USD</strong>
+            </div>
+          </div>
+
+          {/* ── Übersprungene Posts ── */}
+          {totalSkipped > 0 && (
+            <div style={{ marginBottom: "0.5rem" }}>
+              <div style={{ fontWeight: 700, marginBottom: "0.25rem", color: C.warn }}>Übersprungen ({totalSkipped})</div>
+              <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                <tbody>
+                  {skipped.alreadyPaidOut > 0 && <tr><td style={tdL}>Bereits ausgezahlt</td><td style={tdR}>{skipped.alreadyPaidOut}</td></tr>}
+                  {skipped.payoutZero     > 0 && <tr><td style={tdL}>pending_payout = 0</td><td style={tdR}>{skipped.payoutZero}</td></tr>}
+                  {skipped.noVoteFound    > 0 && <tr><td style={tdL}>Kein eigener Vote in active_votes</td><td style={tdR}>{skipped.noVoteFound}</td></tr>}
+                  {skipped.weightZero     > 0 && <tr><td style={tdL}>Curation-Weight = 0 (Early-Vote-Penalty)</td><td style={tdR}>{skipped.weightZero}</td></tr>}
+                  {skipped.limitReached   > 0 && <tr><td style={tdL}>Limit überschritten</td><td style={tdR}>{skipped.limitReached}</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* ── Top-10 Breakdown ── */}
+          {db.top10.length > 0 && (
+            <div>
+              <div style={{ fontWeight: 700, marginBottom: "0.25rem" }}>
+                Top {db.top10.length} Posts · Methode: Curation-Weight
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ borderCollapse: "collapse", width: "100%", minWidth: "580px" }}>
+                  <thead>
+                    <tr style={{ background: C.border + "55" }}>
+                      <th style={{ ...tdL, fontWeight: 600 }}>Autor/Permlink</th>
+                      <th style={{ ...tdR, fontWeight: 600 }}>Pool SBD</th>
+                      <th style={{ ...tdR, fontWeight: 600 }}>Weight %</th>
+                      <th style={{ ...tdR, fontWeight: 600, color: C.ok }}>≈ SP (weight)</th>
+                      <th style={{ ...tdR, fontWeight: 600, color: C.dim }}>SP (rshares)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {db.top10.map((p: PendingDebugPost, i: number) => (
+                      <tr key={i} style={{ borderTop: `1px solid ${C.border}` }}>
+                        <td style={{ ...tdL, maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          <a
+                            href={`https://steemit.com/@${p.author}/${p.permlink}`}
+                            target="_blank" rel="noreferrer"
+                            style={{ color: C.info, textDecoration: "none" }}
+                            title={`@${p.author}/${p.permlink}`}
+                          >@{p.author}</a>
+                          <span style={{ color: C.faint }}>&nbsp;/{p.permlink.slice(0,20)}{p.permlink.length>20?"…":""}</span>
+                        </td>
+                        <td style={tdR}>{p.pendingPayoutSbd.toFixed(3)}</td>
+                        <td style={tdR}>{p.sharePctWeight.toFixed(3)}%</td>
+                        <td style={{ ...tdR, color: C.ok, fontWeight: 700 }}>{p.estimatedSp.toFixed(4)}</td>
+                        <td style={{ ...tdR, color: C.dim }}>{p.estimatedSpRshares.toFixed(4)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
-        <div style={{ fontSize:"0.72rem", color:C.muted }}>
-          {recentVotes.length>0?`${recentVotes.length} ${t("actVotesInSession")}`:t("emptyNoVotesToday")}
-          {curationProfile&&snapshot&&<div style={{ color:C.purple, marginTop:"2px" }}>~{fmtUsd(curationProfile.votesPerDay*30*snapshot.currentVoteUsd*avgW/100)}/mo est.</div>}
+      )}
+    </div>
+  );
+}
+
+function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, pendingLoading, t }: {
+  snapshot: SteemAccountSnapshot|null;
+  todayStats: TodayStats|null; todayLoading: boolean;
+  pendingCuration: PendingCuration|null; pendingLoading: boolean;
+  t: ReturnType<typeof createTranslator>;
+}) {
+  const voteUsd       = snapshot?.currentVoteUsd ?? 0;
+  const estCuration   = todayStats
+    ? todayStats.votes.reduce((s, v) => s + (v.weightBps / 10000) * voteUsd * 0.25, 0) : 0;
+  const vpConsumedPct = todayStats ? todayStats.totalWeightBps / 5000 : 0;
+
+  // Big hero number + unit
+  const Hero = ({ val, unit, col, sub }: { val: string; unit: string; col: string; sub?: string }) => (
+    <div style={{ marginBottom:"0.7rem" }}>
+      <div>
+        <span style={{ color:col, fontSize:"2.8rem", fontWeight:900, lineHeight:1, letterSpacing:"-1.5px" }}>{val}</span>
+        <span style={{ color:col, fontSize:"1rem", fontWeight:700, marginLeft:"0.35rem", opacity:0.75 }}>{unit}</span>
+      </div>
+      {sub && <div style={{ color:C.dim, fontSize:"0.82rem", marginTop:"0.15rem" }}>{sub}</div>}
+    </div>
+  );
+
+  const Row = ({ label, value, col, bold }: { label: string; value: string; col?: string; bold?: boolean }) => (
+    <div style={{ display:"flex", justifyContent:"space-between", fontSize:"0.8rem", padding:"0.12rem 0" }}>
+      <span style={{ color:C.dim }}>{label}</span>
+      <span style={{ color:col ?? C.text, fontWeight:bold ? 700 : 600 }}>{value}</span>
+    </div>
+  );
+
+  const Divider = () => <div style={{ borderTop:`1px solid ${C.border}`, margin:"0.5rem 0" }}/>;
+
+  const nextPayout = pendingCuration?.nextPayout;
+  const nextPayoutLabel = nextPayout ? (() => {
+    const h = (new Date(nextPayout.cashoutTime + "Z").getTime() - Date.now()) / 3_600_000;
+    return h < 24 ? `in ${h.toFixed(0)}h` : `in ${(h/24).toFixed(1)}d`;
+  })() : null;
+
+  return (
+    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"1rem" }}>
+
+      {/* ── Heute ── */}
+      <div style={{
+        ...card,
+        borderTop:`4px solid ${C.info}`,
+        background:"linear-gradient(160deg,#f0f9ff 0%,#ffffff 55%)",
+      }}>
+        <p style={{ ...lbl, margin:"0 0 0.85rem", color:C.info }}>Heute</p>
+        {todayLoading ? (
+          <div style={{ color:C.dim, fontSize:"0.88rem" }}>Lädt…</div>
+        ) : !todayStats || todayStats.totalVotes === 0 ? (
+          <div style={{ color:C.dim, fontSize:"0.88rem" }}>{t("emptyNoVotesToday")}</div>
+        ) : (
+          <>
+            <Hero val={String(todayStats.totalVotes)} unit="Votes" col={C.info}/>
+            <Row label="Durchläufe"    value={String(todayStats.runsCount)}/>
+            <Row label="Autoren"        value={String(todayStats.uniqueAuthors)}/>
+            <Divider/>
+            <Row label="VP verbraucht"   value={`−${vpConsumedPct.toFixed(1)}%`} col={C.warn} bold/>
+            <Row label="→ Pending Pool" value={`+${fmtUsd(estCuration)}`}        col={C.ok}  bold/>
+          </>
+        )}
+      </div>
+
+      {/* ── Pending 7 Tage ── */}
+      <div style={{
+        ...card,
+        borderTop:`4px solid ${C.ok}`,
+        background:"linear-gradient(160deg,#f0fdf4 0%,#ffffff 55%)",
+      }}>
+        <p style={{ ...lbl, margin:"0 0 0.85rem", color:C.ok }}>Pending · 7 Tage</p>
+        {pendingLoading ? (
+          <div style={{ color:C.dim, fontSize:"0.88rem" }}>Lädt…</div>
+        ) : !pendingCuration || pendingCuration.pendingUsd <= 0 ? (
+          <div style={{ color:C.dim, fontSize:"0.88rem" }}>Keine offenen Curations</div>
+        ) : (
+          <>
+            <Hero
+              val={pendingCuration.pendingSp.toFixed(3)}
+              unit="SP"
+              col={C.ok}
+              sub={`≈ ${fmtUsd(pendingCuration.pendingUsd)}`}
+            />
+            <Row label="Offene Posts"   value={String(pendingCuration.postCount)}/>
+            <Row label="Votes (7d)"     value={String(pendingCuration.voteCount)}/>
+            {nextPayout && nextPayoutLabel && (
+              <>
+                <Divider/>
+                <div style={{ background:C.ok+"10", borderRadius:"8px", padding:"0.45rem 0.65rem", border:`1px solid ${C.ok}25` }}>
+                  <div style={{ color:C.muted, fontSize:"0.72rem", fontWeight:600, marginBottom:"0.15rem" }}>Nächster Payout</div>
+                  <div style={{ color:C.ok, fontWeight:900, fontSize:"1rem" }}>{nextPayoutLabel}</div>
+                  <div style={{ color:C.dim, fontSize:"0.78rem" }}>{nextPayout.estimatedSp.toFixed(3)} SP · {fmtUsd(nextPayout.estimatedUsd)}</div>
+                </div>
+              </>
+            )}
+            {pendingCuration.computedAt && (
+              <div style={{ color:C.faint, fontSize:"0.65rem", marginTop:"0.6rem" }}>
+                Stand: {new Date(pendingCuration.computedAt).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})} Uhr
+                {pendingCuration.sbdPerSteemUsed && (
+                  <span> · {pendingCuration.sbdPerSteemUsed.toFixed(4)} SBD/STEEM</span>
+                )}
+              </div>
+            )}
+            {pendingCuration.debug && <PendingDebugPanel data={pendingCuration} />}
+          </>
+        )}
+      </div>
+
+      {/* ── 30 Tage ── */}
+      <div style={{
+        ...card,
+        borderTop:`4px solid ${C.purple}`,
+        background:"linear-gradient(160deg,#faf5ff 0%,#ffffff 55%)",
+      }}>
+        <p style={{ ...lbl, margin:"0 0 0.85rem", color:C.purple }}>Verdient · 30 Tage</p>
+        {pendingLoading ? (
+          <div style={{ color:C.dim, fontSize:"0.88rem" }}>Lädt…</div>
+        ) : !pendingCuration ? (
+          <div style={{ color:C.dim, fontSize:"0.88rem" }}>—</div>
+        ) : (
+          <>
+            <Hero
+              val={pendingCuration.earned30dSp.toFixed(3)}
+              unit="SP"
+              col={C.purple}
+              sub={`≈ ${fmtUsd(pendingCuration.earned30dUsd)}`}
+            />
+            <Row label="Payouts"        value={String(pendingCuration.earned30dCount)}/>
+            <Divider/>
+            <Row label="Ø / Payout"
+              value={pendingCuration.earned30dCount > 0
+                ? `${(pendingCuration.earned30dSp / pendingCuration.earned30dCount).toFixed(4)} SP`
+                : "—"}/>
+            {pendingCuration.earned30dCount > 0 && (
+              <Row
+                label="Ø / Tag"
+                value={`${(pendingCuration.earned30dSp / 30).toFixed(3)} SP`}
+                col={C.purple} bold
+              />
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Alle Durchläufe heute ─────────────────────────────────────────────────────
+
+function AllRunsPanel({ todayStats, snapshot }: {
+  todayStats: TodayStats|null;
+  snapshot: SteemAccountSnapshot|null;
+}) {
+  const [expandedRun, setExpandedRun] = useState<number|null>(null);
+
+  if (!todayStats || todayStats.runs.length === 0) return null;
+
+  const voteUsd      = snapshot?.currentVoteUsd ?? 0;
+  const currentVpPct = snapshot ? snapshot.votingPowerBps / 100 : null;
+  const totalConsumed = todayStats.totalWeightBps / 5000;
+  const vpBeforeDay   = currentVpPct !== null ? Math.min(100, currentVpPct + totalConsumed) : null;
+
+  let cumConsumed = 0;
+  const runsWithVp = todayStats.runs.map(run => {
+    const vpBeforeRun = vpBeforeDay !== null ? Math.max(0, vpBeforeDay - cumConsumed) : null;
+    const consumed    = run.weightBps / 5000;
+    cumConsumed      += consumed;
+    const vpAfterRun  = vpBeforeDay !== null ? Math.max(0, vpBeforeDay - cumConsumed) : null;
+    return { run, vpBeforeRun, vpAfterRun, consumed };
+  });
+
+  const totalValue = (todayStats.totalWeightBps / 10000) * voteUsd;
+
+  return (
+    <div style={{ ...card, borderLeft:`3px solid ${C.ok}` }}>
+      <p style={{ ...lbl, margin:"0 0 0.75rem" }}>Durchläufe heute</p>
+
+      <div style={{ display:"flex", flexDirection:"column" as const, gap:"0.5rem" }}>
+        {runsWithVp.map(({ run, vpBeforeRun, vpAfterRun, consumed }, i) => {
+          const time      = new Date(run.startedAt).toLocaleTimeString("de-DE", { hour:"2-digit", minute:"2-digit" });
+          const val       = (run.weightBps / 10000) * voteUsd;
+          const expanded  = expandedRun === i;
+          // Votes belonging to this run
+          const runVotes  = todayStats.votes.filter(v =>
+            v.votedAt >= run.startedAt && v.votedAt <= run.endedAt
+          );
+          return (
+            <div key={i} style={{ background:C.inner, borderRadius:"10px", border:`1px solid ${expanded ? C.ok+"50" : C.border}`, overflow:"hidden" }}>
+              {/* Run header — clickable */}
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => setExpandedRun(expanded ? null : i)}
+                onKeyDown={e => e.key==="Enter" && setExpandedRun(expanded ? null : i)}
+                style={{ padding:"0.75rem 1rem", cursor:"pointer", display:"flex", flexDirection:"column" as const, gap:"0.35rem" }}
+              >
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <span style={{ color:C.text, fontWeight:800, fontSize:"0.9rem" }}>
+                    Durchlauf {i + 1}
+                    <span style={{ color:C.dim, fontWeight:500, marginLeft:"0.5rem", fontSize:"0.82rem" }}>{time} Uhr</span>
+                  </span>
+                  <div style={{ display:"flex", alignItems:"center", gap:"0.6rem" }}>
+                    <span style={{ color:C.ok, fontWeight:800, fontSize:"0.9rem" }}>{fmtUsd(val)}</span>
+                    <span style={{ color:C.faint, fontSize:"0.78rem" }}>{expanded ? "▲" : "▼"}</span>
+                  </div>
+                </div>
+                <div style={{ display:"flex", gap:"1.25rem", fontSize:"0.8rem", flexWrap:"wrap" as const }}>
+                  <span style={{ color:C.info, fontWeight:700 }}>{run.voteCount} {run.voteCount===1?"Vote":"Votes"}</span>
+                  <span style={{ color:C.text, fontWeight:600 }}>{run.authors.length} Autoren</span>
+                  {vpBeforeRun !== null && vpAfterRun !== null
+                    ? <span style={{ color:C.warn, fontWeight:700 }}>{vpBeforeRun.toFixed(1)}% → {vpAfterRun.toFixed(1)}% (−{consumed.toFixed(1)}%)</span>
+                    : <span style={{ color:C.warn, fontWeight:700 }}>−{consumed.toFixed(1)}% VP</span>
+                  }
+                </div>
+                {!expanded && (
+                  <div style={{ fontSize:"0.73rem", color:C.dim }}>
+                    {run.authors.map(a => <span key={a} style={{ marginRight:"0.45rem" }}>@{a}</span>)}
+                  </div>
+                )}
+              </div>
+              {/* Expanded vote list */}
+              {expanded && (
+                <div style={{ borderTop:`1px solid ${C.border}`, background:"#fff" }}>
+                  {runVotes.map((v, vi) => (
+                    <div key={vi} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0.45rem 1rem", borderBottom: vi < runVotes.length - 1 ? `1px solid ${C.border}` : "none", fontSize:"0.78rem" }}>
+                      <div>
+                        <span style={{ color:C.info, fontWeight:700 }}>@{v.author}</span>
+                        <span style={{ color:C.faint, marginLeft:"0.4rem" }}>{(v.weightBps / 100).toFixed(1)}%</span>
+                      </div>
+                      <div style={{ display:"flex", gap:"0.75rem", color:C.dim }}>
+                        <span>{fmtUsd((v.weightBps / 10000) * voteUsd)}</span>
+                        <span style={{ color:C.ok }}>+{fmtUsd((v.weightBps / 10000) * voteUsd * 0.25)}</span>
+                        <span style={{ color:C.faint }}>{new Date(v.votedAt).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})}</span>
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{ padding:"0.4rem 1rem", background:C.inner, fontSize:"0.75rem", display:"flex", gap:"1.5rem", color:C.dim }}>
+                    <span style={{ fontWeight:700, color:C.text }}>Gesamt</span>
+                    <span style={{ color:C.ok, fontWeight:700 }}>+{fmtUsd(val * 0.25)} Curation</span>
+                    <span>{fmtUsd(val)} verteilt</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Gesamt-Zeile */}
+        <div style={{ borderTop:`2px solid ${C.border}`, paddingTop:"0.65rem", display:"flex", gap:"1.5rem", fontSize:"0.82rem", flexWrap:"wrap" as const, alignItems:"center" }}>
+          <span style={{ color:C.text, fontWeight:800 }}>Gesamt heute</span>
+          <span style={{ color:C.ok, fontWeight:700 }}>{todayStats.totalVotes} Votes</span>
+          <span style={{ color:C.info, fontWeight:600 }}>{todayStats.uniqueAuthors} Autoren</span>
+          <span style={{ color:C.warn, fontWeight:700 }}>−{totalConsumed.toFixed(1)}% VP</span>
+          <span style={{ color:C.dim, fontWeight:600 }}>Vote-Wert: {fmtUsd(totalValue)}</span>
+          <span style={{ color:C.ok, fontWeight:700 }}>+{fmtUsd(totalValue * 0.25)} Curation</span>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── VP-Graph mit Tooltip (heute, aus Vote-Events rekonstruiert) ───────────────
+
+function VpGraphToday({ todayStats, snapshot }: {
+  todayStats: TodayStats|null;
+  snapshot: SteemAccountSnapshot|null;
+}) {
+  const [hoverIdx, setHoverIdx] = useState<number|null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+
+  const voteUsd = snapshot?.currentVoteUsd ?? 0;
+
+  if (!todayStats || todayStats.votes.length === 0 || !snapshot) return null;
+
+  // Build VP curve: work backwards from current VP
+  const currentVp = snapshot.votingPowerBps / 100;
+  // Accumulate total VP consumed today
+  const totalConsumed = todayStats.votes.reduce((s, v) => s + v.weightBps / 5000, 0);
+  // VP at start of day ≈ current + all consumed (minus regen — ignore regen for simplicity)
+  const vpAtStart = Math.min(100, currentVp + totalConsumed);
+
+  // Map each vote to its run number
+  const votes = todayStats.votes;
+  const runs  = todayStats.runs;
+  function runIdxForVote(votedAt: string): number {
+    for (let i = 0; i < runs.length; i++) {
+      if (votedAt >= runs[i].startedAt && votedAt <= runs[i].endedAt) return i;
+    }
+    return -1;
+  }
+
+  // Pre-compute VP before/after per run for tooltip
+  const runVpMap = new Map<number, { vpBefore: number; vpAfter: number }>();
+  {
+    let acc = vpAtStart;
+    for (let i = 0; i < runs.length; i++) {
+      const vpBefore = acc;
+      const consumed = runs[i].weightBps / 5000;
+      acc = Math.max(0, acc - consumed);
+      runVpMap.set(i, { vpBefore, vpAfter: acc });
+    }
+  }
+
+  type Point = { time: string; vp: number; weightBps: number; runIdx: number; runVotes: number; runAuthors: number; runVpBefore: number; runVpAfter: number };
+  const points: Point[] = [];
+  let vp = vpAtStart;
+  for (let i = 0; i < votes.length; i++) {
+    const v = votes[i];
+    const consumed = v.weightBps / 5000;
+    const ri = runIdxForVote(v.votedAt);
+    const run = ri >= 0 ? runs[ri] : null;
+    const rvp = ri >= 0 ? (runVpMap.get(ri) ?? { vpBefore: vp, vpAfter: vp }) : { vpBefore: vp, vpAfter: vp };
+    points.push({
+      time: v.votedAt, vp: Math.max(0, vp - consumed),
+      weightBps: v.weightBps, runIdx: ri,
+      runVotes: run?.voteCount ?? 1, runAuthors: run?.authors.length ?? 1,
+      runVpBefore: rvp.vpBefore, runVpAfter: rvp.vpAfter,
+    });
+    vp = Math.max(0, vp - consumed);
+  }
+  // Add current point (no vote)
+  points.push({ time: new Date().toISOString(), vp: currentVp, weightBps: 0, runIdx: -1, runVotes: 0, runAuthors: 0, runVpBefore: currentVp, runVpAfter: currentVp });
+
+  const W = 400, H = 80;
+  const pad = { l:8, r:8, t:8, b:8 };
+  const vpMin = Math.max(0, Math.min(...points.map(p=>p.vp)) - 5);
+  const vpMax = Math.min(100, vpAtStart + 2);
+  const xScale = (i: number) => pad.l + (i / (points.length - 1)) * (W - pad.l - pad.r);
+  const yScale = (v: number) => H - pad.b - ((v - vpMin) / (vpMax - vpMin || 1)) * (H - pad.t - pad.b);
+
+  const pathD = points.map((p, i) => `${i===0?"M":"L"}${xScale(i).toFixed(1)},${yScale(p.vp).toFixed(1)}`).join(" ");
+  const fillD = pathD + ` L${xScale(points.length-1).toFixed(1)},${H-pad.b} L${pad.l},${H-pad.b} Z`;
+
+  const hovered = hoverIdx !== null ? points[hoverIdx] : null;
+
+  return (
+    <div style={{ ...card, paddingBottom:"0.5rem" }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"0.4rem" }}>
+        <p style={{ ...lbl, margin:0 }}>VP heute</p>
+        <span style={{ color:C.dim, fontSize:"0.75rem", fontWeight:600 }}>{votes.length} Votes · {vpAtStart.toFixed(1)}% → {currentVp.toFixed(1)}%</span>
+      </div>
+      <div style={{ position:"relative" }}>
+        <svg
+          ref={svgRef}
+          width="100%" viewBox={`0 0 ${W} ${H}`}
+          style={{ display:"block", overflow:"visible" }}
+          onMouseLeave={() => setHoverIdx(null)}
+          onMouseMove={e => {
+            const rect = svgRef.current?.getBoundingClientRect();
+            if (!rect) return;
+            const x = (e.clientX - rect.left) / rect.width * W;
+            let closest = 0;
+            let closestDist = Infinity;
+            points.forEach((_, i) => { const d = Math.abs(xScale(i) - x); if (d < closestDist) { closestDist = d; closest = i; } });
+            setHoverIdx(closest);
+          }}
+        >
+          <defs>
+            <linearGradient id="vpFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={C.ok} stopOpacity="0.25"/>
+              <stop offset="100%" stopColor={C.ok} stopOpacity="0.02"/>
+            </linearGradient>
+          </defs>
+          <path d={fillD} fill="url(#vpFill)"/>
+          <path d={pathD} fill="none" stroke={C.ok} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          {hoverIdx !== null && (
+            <line
+              x1={xScale(hoverIdx)} y1={pad.t} x2={xScale(hoverIdx)} y2={H-pad.b}
+              stroke={C.faint} strokeWidth="1" strokeDasharray="3,2"
+            />
+          )}
+          {points.map((p, i) => p.weightBps > 0 && (
+            <circle key={i} cx={xScale(i)} cy={yScale(p.vp)} r={hoverIdx===i?4:2.5}
+              fill={hoverIdx===i?C.ok:C.ok+"99"} stroke="#fff" strokeWidth="1"/>
+          ))}
+        </svg>
+        {hovered && hoverIdx !== null && (
+          <div style={{
+            position:"absolute",
+            left: Math.min(Math.max(xScale(hoverIdx) / W * 100, 14), 70) + "%",
+            top: "-4px",
+            transform: "translateX(-50%)",
+            background: "#0f172a", color:"#e2e8f0",
+            borderRadius:"12px", padding:"0.7rem 1rem",
+            fontSize:"0.8rem", lineHeight:1.75,
+            pointerEvents:"none",
+            boxShadow:"0 8px 24px rgba(0,0,0,0.4)",
+            zIndex:10, minWidth:"180px",
+          }}>
+            {/* Header */}
+            <div style={{ fontWeight:800, fontSize:"0.88rem", color:"#fff", marginBottom:"0.3rem", display:"flex", justifyContent:"space-between", alignItems:"baseline" }}>
+              <span>{new Date(hovered.time).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})} Uhr</span>
+              {hovered.runIdx >= 0 && <span style={{ color:"#94a3b8", fontWeight:600, fontSize:"0.75rem" }}>Durchlauf #{hovered.runIdx+1}</span>}
+            </div>
+            {hovered.weightBps > 0 ? (
+              <>
+                {/* Run summary */}
+                <div style={{ color:"#cbd5e1", marginBottom:"0.25rem" }}>
+                  {hovered.runVotes} {hovered.runVotes===1?"Vote":"Votes"} · {hovered.runAuthors} Autoren
+                </div>
+                {/* VP before → after for whole run */}
+                <div style={{ color:"#fcd34d", fontWeight:700 }}>
+                  VP: {hovered.runVpBefore.toFixed(1)}% → {hovered.runVpAfter.toFixed(1)}%
+                </div>
+                <div style={{ color:"#94a3b8", fontSize:"0.74rem" }}>
+                  −{(hovered.runVpBefore - hovered.runVpAfter).toFixed(2)}% VP
+                </div>
+                {/* Value */}
+                <div style={{ borderTop:"1px solid #1e293b", marginTop:"0.35rem", paddingTop:"0.35rem" }}>
+                  <div style={{ color:"#93c5fd" }}>Vote-Wert: {fmtUsd((hovered.weightBps/10000)*voteUsd)}</div>
+                  <div style={{ color:"#6ee7b7", fontWeight:700 }}>+{fmtUsd((hovered.weightBps/10000)*voteUsd*0.25)} Est. Curation</div>
+                </div>
+              </>
+            ) : (
+              <div style={{ color:"#86efac", fontWeight:700 }}>VP jetzt: {hovered.vp.toFixed(1)}%</div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -734,7 +1246,7 @@ export function UserDashboard(props: {
   onGenerateVotes:()=>void; onLoadOpportunities:()=>void; onRefreshSnapshot?:()=>void;
 }) {
   const t=createTranslator(props.locale);
-  const { snapshot,strategyRules,opportunities,opportunitiesMeta,curationProfile,recentVotes }=props;
+  const { snapshot,strategyRules,opportunities,opportunitiesMeta,curationProfile }=props;
 
   const rules     =sortRules(strategyRules??[]);
   const openOpps  =opportunities?.filter(p=>p.eligible)??[];
@@ -746,11 +1258,42 @@ export function UserDashboard(props: {
   const [growthLoading,setGrowthLoading]=useState(false);
   const [growthPeriod, setGrowthPeriod] =useState<"30d"|"90d"|"all">("all");
 
+  const [todayStats,   setTodayStats]   =useState<TodayStats|null>(null);
+  const [todayLoading, setTodayLoading] =useState(true);
+
+  const [pendingCuration,  setPendingCuration]  =useState<PendingCuration|null>(null);
+  const [pendingLoading,   setPendingLoading]   =useState(true);
+
+  const loadTodayStats = () => {
+    setTodayLoading(true);
+    fetchTodayStats(props.session.token)
+      .then(setTodayStats).catch(()=>{}).finally(()=>setTodayLoading(false));
+  };
+
+  const loadPendingCuration = () => {
+    setPendingLoading(true);
+    fetchPendingCuration(props.session.token, snapshot?.sbdPerSteem)
+      .then(setPendingCuration).catch(()=>setPendingCuration(null)).finally(()=>setPendingLoading(false));
+  };
+
   useEffect(()=>{
     setGrowthLoading(true);
     fetchGrowthData(props.session.token,growthPeriod)
       .then(setGrowthData).catch(()=>{}).finally(()=>setGrowthLoading(false));
   },[props.session.token,growthPeriod]);
+
+  useEffect(()=>{
+    loadTodayStats();
+    loadPendingCuration();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[props.session.token]);
+
+  // Refresh today stats whenever recentVotes changes (= after a vote run)
+  const recentVotesLen = props.recentVotes.length;
+  useEffect(()=>{
+    if (recentVotesLen > 0) { loadTodayStats(); loadPendingCuration(); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[recentVotesLen]);
 
   return (
     <div style={{ padding:"1.5rem 2rem", display:"flex", flexDirection:"column" as const, gap:"1.5rem" }}>
@@ -767,14 +1310,29 @@ export function UserDashboard(props: {
         )
       }
 
-      {/* 2. Operative Kennzahlen — Cockpit */}
+      {/* 2. VP + Offene Chancen */}
       <OperativeKPIRow
         snapshot={snapshot} snapshotLoading={props.snapshotLoading} snapshotRefreshedAt={props.snapshotRefreshedAt}
         opportunities={opportunities} opportunitiesMeta={opportunitiesMeta}
-        recentVotes={recentVotes} curationProfile={curationProfile} strategyRules={strategyRules}
         onRefresh={props.onRefreshSnapshot} onLoadOpps={props.onLoadOpportunities}
         onTabChange={props.onTabChange} t={t}
       />
+
+      {/* 2b. Curation Timeline: Heute | Pending 7d | 30 Tage */}
+      <CurationTriple
+        snapshot={snapshot}
+        todayStats={todayStats} todayLoading={todayLoading}
+        pendingCuration={pendingCuration} pendingLoading={pendingLoading}
+        t={t}
+      />
+
+      {/* 2b. Letzter Durchlauf + VP-Graph */}
+      {(todayStats?.lastRun || (todayStats && todayStats.votes.length > 0)) && (
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"1rem" }}>
+          <AllRunsPanel todayStats={todayStats} snapshot={snapshot}/>
+          <VpGraphToday todayStats={todayStats} snapshot={snapshot}/>
+        </div>
+      )}
 
       {/* 3+4. Curator Journey | Beziehungen | Aktivität */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"1.5rem", alignItems:"start" }}>
@@ -791,9 +1349,9 @@ export function UserDashboard(props: {
         <div style={card}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"0.75rem" }}>
             <p style={{ ...lbl, margin:0 }}>{t("secRecentActivity")}</p>
-            {recentVotes.length>0&&<span style={{ color:C.faint, fontSize:"0.68rem" }}>{recentVotes.length} {t("actVotesInSession")}</span>}
+            {todayStats && todayStats.totalVotes > 0 && <span style={{ color:C.faint, fontSize:"0.68rem" }}>{todayStats.totalVotes} heute</span>}
           </div>
-          <ActivityTimeline votes={recentVotes} voteUsd={snapshot?.currentVoteUsd??0} opps={opportunities}
+          <ActivityTimeline votes={todayStats?.votes.slice(0,8).map(v=>({ author:v.author, permlink:v.permlink, title:"", weightPct:v.weightBps/100, votedAt:v.votedAt }))??[]} voteUsd={snapshot?.currentVoteUsd??0} opps={opportunities}
             onAction={{plan:()=>{props.onTabChange("dna");props.onGenerateVotes();},opps:props.onLoadOpportunities,dna:()=>props.onTabChange("dna")}} t={t}/>
         </div>
       </div>

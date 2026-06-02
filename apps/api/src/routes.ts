@@ -17,6 +17,8 @@ import { getCachedAuthority, setCachedAuthority } from "./chain/authorityCache.j
 import { fetchSteemAccountSnapshot } from "./chain/steemAccount.js";
 import { broadcastConfig, feePolicy } from "./config.js";
 import { hasConsent } from "./consent/consentStore.js";
+import { getDb } from "./db/index.js";
+import { fetchPendingCuration } from "./chain/steemPendingCuration.js";
 import { getAccount, getCommunityPool, invoices, saveAccount } from "./mockStore.js";
 import { voteBrokerWorkflow } from "./workflows.js";
 
@@ -61,6 +63,19 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
         error: "account_not_found",
         detail: err instanceof Error ? err.message : "unknown"
       });
+    }
+  });
+
+  // Pending curation (7-day window) — authenticated, per-user
+  app.get("/api/account/pending-curation", async (request, reply) => {
+    const session = getSession(getSessionHeader(request.headers["session"]));
+    if (!session) return reply.code(401).send({ error: "unauthorized" });
+    const query = z.object({ steemPriceUsd: z.coerce.number().positive().optional() }).safeParse(request.query);
+    const sbdPerSteem = query.success && query.data.steemPriceUsd ? query.data.steemPriceUsd : 0.05;
+    try {
+      return await fetchPendingCuration(session.user.username, sbdPerSteem);
+    } catch (err) {
+      return reply.code(500).send({ error: "pending_curation_failed", detail: err instanceof Error ? err.message : "unknown" });
     }
   });
 
@@ -372,4 +387,67 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
 function getSessionHeader(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
+}
+
+// ── Today's votes — for dashboard (persisted, survives tab switch / reload) ──
+export function registerTodayVotesRoute(app: FastifyInstance): void {
+  app.get("/api/votes/today", async (request, reply) => {
+    const session = getSession(getSessionHeader(request.headers["session"]));
+    if (!session) return reply.code(401).send({ error: "unauthorized" });
+
+    const db = getDb();
+    type VoteRow = { author: string; permlink: string; weight_bps: number; transaction_id: string; created_at: string };
+    const rows = db.prepare(`
+      SELECT author, permlink, weight_bps, transaction_id, created_at
+      FROM audit_events
+      WHERE type = 'vote_broadcast_success'
+        AND username = ?
+        AND date(created_at) = date('now')
+      ORDER BY created_at ASC
+    `).all(session.user.username) as VoteRow[];
+
+    // Group votes into runs (gap > 120s = new run)
+    type Run = { votes: VoteRow[]; startedAt: string; endedAt: string };
+    const runs: Run[] = [];
+    let cur: VoteRow[] = [];
+    let lastMs = 0;
+    for (const v of rows) {
+      const ms = new Date(v.created_at).getTime();
+      if (cur.length === 0 || ms - lastMs <= 120_000) {
+        cur.push(v);
+      } else {
+        runs.push({ votes: cur, startedAt: cur[0].created_at, endedAt: cur[cur.length - 1].created_at });
+        cur = [v];
+      }
+      lastMs = ms;
+    }
+    if (cur.length > 0) runs.push({ votes: cur, startedAt: cur[0].created_at, endedAt: cur[cur.length - 1].created_at });
+
+    const uniqueAuthors  = new Set(rows.map(v => v.author)).size;
+    const totalWeightBps = rows.reduce((s, v) => s + (v.weight_bps ?? 0), 0);
+
+    const allRuns = runs.map(r => ({
+      startedAt: r.startedAt,
+      endedAt:   r.endedAt,
+      voteCount: r.votes.length,
+      authors:   [...new Set(r.votes.map(v => v.author))],
+      weightBps: r.votes.reduce((s, v) => s + (v.weight_bps ?? 0), 0),
+    }));
+
+    return {
+      totalVotes:    rows.length,
+      runsCount:     runs.length,
+      uniqueAuthors,
+      totalWeightBps,
+      runs:          allRuns,
+      lastRun:       allRuns.length > 0 ? allRuns[allRuns.length - 1] : null,
+      votes: rows.map(v => ({
+        author:        v.author,
+        permlink:      v.permlink,
+        weightBps:     v.weight_bps ?? 0,
+        transactionId: v.transaction_id,
+        votedAt:       v.created_at,
+      })),
+    };
+  });
 }

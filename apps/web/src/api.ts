@@ -426,7 +426,7 @@ export interface SteemAccountSnapshot {
   steemPowerSp: number;
   fullPowerVoteUsd: number;
   currentVoteUsd: number;
-  steemPriceUsd: number;
+  sbdPerSteem: number;  // SBD per STEEM (witness median price feed, not USD/STEEM)
 }
 
 export async function getAccountSnapshot(username: string): Promise<SteemAccountSnapshot> {
@@ -777,17 +777,102 @@ export async function editDraftContent(token: string, filename: string, content:
   if (!res.ok) throw new Error("edit_failed");
 }
 
-/** Trigger a fee settlement post. Pass `date` (YYYY-MM-DD) to retroactively publish a missing post. */
-export async function triggerFeePost(token: string, date?: string): Promise<FeePostLogEntry> {
+/** Trigger a fee settlement post. Pass `date` (YYYY-MM-DD) to retroactively publish, `forceUpdate` to overwrite an existing post (fix wrong title). */
+export async function triggerFeePost(token: string, date?: string, forceUpdate?: boolean): Promise<FeePostLogEntry> {
+  const payload: Record<string, unknown> = {};
+  if (date) payload.date = date;
+  if (forceUpdate) payload.forceUpdate = true;
   const res = await fetch(`${API_BASE}/api/admin/fee-post/trigger`, {
     method: "POST",
     headers: { session: token, "content-type": "application/json" },
-    body: date ? JSON.stringify({ date }) : undefined,
+    body: Object.keys(payload).length > 0 ? JSON.stringify(payload) : undefined,
   });
   if (!res.ok) {
     const data = (await res.json().catch(() => ({}))) as { error?: string; detail?: string };
     throw new Error(data.detail ?? data.error ?? "trigger_failed");
   }
+  return res.json();
+}
+
+// ── Today's votes (persisted, from audit log) ─────────────────────────────────
+
+export interface TodayVote {
+  author: string; permlink: string; weightBps: number;
+  transactionId: string; votedAt: string;
+}
+
+export interface TodayLastRun {
+  startedAt: string; endedAt: string;
+  voteCount: number; authors: string[]; weightBps: number;
+}
+
+export interface TodayStats {
+  totalVotes: number; runsCount: number;
+  uniqueAuthors: number; totalWeightBps: number;
+  runs: TodayLastRun[];
+  lastRun: TodayLastRun | null;
+  votes: TodayVote[];
+}
+
+export interface PendingDebugPost {
+  author:             string;
+  permlink:           string;
+  cashoutTime:        string;
+  pendingPayoutSbd:   number;
+  // Primary: curation weight
+  myWeight:           number;
+  sumWeight:          number;
+  sharePctWeight:     number;
+  estimatedSp:        number;
+  // Comparison: rshares
+  myRshares:          number;
+  sumRshares:         number;
+  sharePctRshares:    number;
+  estimatedSpRshares: number;
+}
+
+export interface PendingCuration {
+  pendingUsd:   number;
+  pendingSp:    number;
+  postCount:    number;
+  voteCount:    number;
+  nextPayout:   { cashoutTime: string; estimatedSp: number; estimatedUsd: number } | null;
+  topPending:   Array<{ author: string; permlink: string; cashoutTime: string; estimatedSp: number; estimatedUsd: number }>;
+  earned30dSp:  number;
+  earned30dUsd: number;
+  earned30dCount: number;
+  sbdPerSteemUsed: number;  // SBD/STEEM price used for SP conversion
+  debug: {
+    uniqueTotal:    number;
+    fetched:        number;
+    totalPayoutUsd: number;
+    skipped: {
+      alreadyPaidOut: number;
+      payoutZero:     number;
+      noVoteFound:    number;
+      weightZero:     number;
+      limitReached:   number;
+    };
+    top10:   PendingDebugPost[];
+    method:  string;
+  };
+  computedAt:   string;
+}
+
+export async function fetchPendingCuration(token: string, sbdPerSteem?: number): Promise<PendingCuration> {
+  const qs = sbdPerSteem ? `?steemPriceUsd=${sbdPerSteem}` : "";  // query param stays for API compat
+  const res = await fetch(`${API_BASE}/api/account/pending-curation${qs}`, {
+    headers: { session: token },
+  });
+  if (!res.ok) throw new Error("Pending curation konnte nicht geladen werden.");
+  return res.json();
+}
+
+export async function fetchTodayStats(token: string): Promise<TodayStats> {
+  const res = await fetch(`${API_BASE}/api/votes/today`, {
+    headers: { session: token },
+  });
+  if (!res.ok) throw new Error("Today stats konnten nicht geladen werden.");
   return res.json();
 }
 

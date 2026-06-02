@@ -7,7 +7,7 @@ export interface SteemAccountSnapshot {
   steemPowerSp: number;
   fullPowerVoteUsd: number;
   currentVoteUsd: number;
-  steemPriceUsd: number;
+  sbdPerSteem: number;  // SBD per STEEM from witness median price feed (NOT USD/STEEM)
 }
 
 function parseAmount(value: unknown): number {
@@ -85,7 +85,7 @@ export async function fetchSteemAccountSnapshot(username: string): Promise<Steem
     : 0;
 
   // ── Price (from witness feed history, NOT get_current_median_history_price) ──
-  const steemPriceUsd = medianPriceFromHistory(feedHistory.price_history ?? []);
+  const sbdPerSteem = medianPriceFromHistory(feedHistory.price_history ?? []);
 
   // ── rshares (validated against live blockchain votes, ~3% accuracy) ────────
   //
@@ -110,8 +110,8 @@ export async function fetchSteemAccountSnapshot(username: string): Promise<Steem
   const rewardBalance = parseAmount(rewardFund.reward_balance);
   const recentClaims  = parseFloat(rewardFund.recent_claims);
 
-  const fullPowerVoteUsd = (rsharesFullPower / recentClaims) * rewardBalance * steemPriceUsd;
-  const currentVoteUsd   = (rsharesCurrent   / recentClaims) * rewardBalance * steemPriceUsd;
+  const fullPowerVoteUsd = (rsharesFullPower / recentClaims) * rewardBalance * sbdPerSteem;
+  const currentVoteUsd   = (rsharesCurrent   / recentClaims) * rewardBalance * sbdPerSteem;
 
   return {
     username,
@@ -119,7 +119,7 @@ export async function fetchSteemAccountSnapshot(username: string): Promise<Steem
     steemPowerSp:      Math.round(steemPowerSp * 1_000)   / 1_000,
     fullPowerVoteUsd:  Math.round(fullPowerVoteUsd * 10_000) / 10_000,
     currentVoteUsd:    Math.round(currentVoteUsd   * 10_000) / 10_000,
-    steemPriceUsd:     Math.round(steemPriceUsd * 1_000_000) / 1_000_000
+    sbdPerSteem:       Math.round(sbdPerSteem * 1_000_000) / 1_000_000
   };
 }
 
