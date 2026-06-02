@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   captureScreenshots, ContentValidationError, editDraftContent, generateDevlogContent,
   getAdminCockpit, getContentDrafts, getContentPreview, injectScreenshots,
@@ -443,6 +443,39 @@ function SystemSection({ d, session }: { d: AdminCockpit; session: AuthSession }
   );
 }
 
+// ── Authenticated image — fetches with session header, renders as blob URL ─────
+function AuthenticatedImage({ url, token, alt, style, onClick }: {
+  url: string; token: string; alt?: string;
+  style?: React.CSSProperties; onClick?: () => void;
+}) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [error,   setError]   = useState(false);
+  const blobRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setBlobUrl(null); setError(false);
+    fetch(url, { headers: { session: token } })
+      .then(r => { if (!r.ok) throw new Error(`${r.status}`); return r.blob(); })
+      .then(blob => {
+        if (cancelled) return;
+        const obj = URL.createObjectURL(blob);
+        blobRef.current = obj;
+        setBlobUrl(obj);
+      })
+      .catch(() => { if (!cancelled) setError(true); });
+
+    return () => {
+      cancelled = true;
+      if (blobRef.current) { URL.revokeObjectURL(blobRef.current); blobRef.current = null; }
+    };
+  }, [url, token]);
+
+  if (error)   return <div style={{ ...style, background: "#fee", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.7rem", color:"#c00" }}>Fehler</div>;
+  if (!blobUrl) return <div style={{ ...style, background:"#f0f4f8", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.7rem", color:"#aaa" }}>Lädt…</div>;
+  return <img src={blobUrl} alt={alt ?? ""} style={style} onClick={onClick} />;
+}
+
 // ── Content section (reuses existing ContentSection logic) ────────────────────
 function ContentSection({ session, queueItems }: { session: AuthSession; queueItems: ContentQueueItem[] }) {
   const [data, setData]       = useState<ContentListResponse | null>(null);
@@ -688,10 +721,15 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0.4rem" }}>
                   {screenshots.map(s => (
                     <div key={s.filename} style={{ textAlign: "center" }}>
-                      <img
-                        src={s.url} alt={s.filename}
-                        style={{ width: "100%", borderRadius: "4px", border: `1px solid ${C.border}`, cursor: "zoom-in" }}
-                        onClick={() => window.open(s.url, "_blank")}
+                      <AuthenticatedImage
+                        url={s.url} token={session.token} alt={s.filename}
+                        style={{ width: "100%", borderRadius: "4px", border: `1px solid ${C.border}`, cursor: "zoom-in", minHeight: "80px", display: "block" }}
+                        onClick={() => {
+                          // fetch blob → open in new tab (session auth required)
+                          fetch(s.url, { headers: { session: session.token } })
+                            .then(r => r.blob())
+                            .then(b => window.open(URL.createObjectURL(b), "_blank"));
+                        }}
                       />
                       <p style={{ color: C.dim, fontSize: "0.62rem", margin: "0.1rem 0 0" }}>{s.filename} · {s.sizekb} KB</p>
                     </div>
@@ -718,8 +756,10 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
                       if (imgMatch) {
                         return (
                           <div key={i} style={{ margin: "0.5rem 0", textAlign: "center" }}>
-                            <img src={imgMatch[2]} alt={imgMatch[1]}
-                              style={{ maxWidth: "100%", borderRadius: "6px", border: `1px solid ${C.border}` }} />
+                            <AuthenticatedImage
+                              url={imgMatch[2]} token={session.token} alt={imgMatch[1]}
+                              style={{ maxWidth: "100%", borderRadius: "6px", border: `1px solid ${C.border}`, display: "block", margin: "0 auto", minHeight: "100px" }}
+                            />
                             {imgMatch[1] && <p style={{ color: C.dim, fontSize: "0.7rem", margin: "0.2rem 0 0" }}>{imgMatch[1]}</p>}
                           </div>
                         );
