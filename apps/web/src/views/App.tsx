@@ -1831,6 +1831,7 @@ function CurationDnaPanel(props: {
                 loading={props.planLoading}
                 error={props.planError}
                 session={props.session!}
+                sbdPerSteem={props.accountSnapshot?.sbdPerSteem}
                 onGenerate={props.onGenerateVotes}
                 onExecuteSingle={props.onExecuteSingle}
                 onMetricsChange={setLiveMetrics}
@@ -2386,11 +2387,14 @@ interface LivePlanMetrics {
   freeBudgetPct: number;
 }
 
+type VoteDisplayMode = "pct" | "usd" | "sp";
+
 function VotePlanSection(props: {
   plan: VotePlanResponse | null;
   loading: boolean;
   error: string | null;
   session: AuthSession;
+  sbdPerSteem?: number;   // for SP conversion: expectedVoteUsd / sbdPerSteem ≈ SP
   onGenerate: () => void;
   onExecuteSingle: (target: { author: string; permlink: string; weightBps: number }) => Promise<{ transactionId: string }>;
   onMetricsChange?: (m: LivePlanMetrics) => void;
@@ -2403,6 +2407,16 @@ function VotePlanSection(props: {
   const [aborted, setAborted]       = useState(false);
   const [overrides, setOverrides]   = useState<Map<string, number>>(new Map());
   const [additions, setAdditions]   = useState<VotePlanEntry[]>([]);  // manuell hinzugefügte Kandidaten
+
+  // Display mode — persisted in localStorage
+  const [voteMode, setVoteModeRaw] = useState<VoteDisplayMode>(() =>
+    (window.localStorage.getItem("votebroker.voteDisplayMode") as VoteDisplayMode | null) ?? "pct"
+  );
+  const setVoteMode = (m: VoteDisplayMode) => {
+    window.localStorage.setItem("votebroker.voteDisplayMode", m);
+    setVoteModeRaw(m);
+  };
+  const sbdPerSteem = props.sbdPerSteem && props.sbdPerSteem > 0 ? props.sbdPerSteem : 0.05;
 
   const chipBtn = {
     background: "#f0f5f7", border: "1px solid #dde8ed", borderRadius: "6px",
@@ -2623,6 +2637,35 @@ function VotePlanSection(props: {
                 </div>
               )}
 
+              {/* ── Anzeige-Modus-Umschalter ── */}
+              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "0.4rem", gap: "0.2rem" }}>
+                {(["pct", "usd", "sp"] as VoteDisplayMode[]).map(m => {
+                  const labels: Record<VoteDisplayMode, string> = { pct: "%", usd: "$", sp: "SP" };
+                  const active = voteMode === m;
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setVoteMode(m)}
+                      style={{
+                        background:   active ? "#2563eb" : "#f1f5f9",
+                        border:       active ? "1px solid #2563eb" : "1px solid #e2e8f0",
+                        borderRadius: "5px",
+                        color:        active ? "#fff" : "#64748b",
+                        cursor:       "pointer",
+                        fontSize:     "0.68rem",
+                        fontWeight:   700,
+                        lineHeight:   1,
+                        padding:      "0.2rem 0.45rem",
+                      }}
+                      title={{ pct: "Vote-Gewicht in Prozent", usd: "Gegenwert in Dollar ($)", sp: "Gegenwert in Steem Power (SP)" }[m]}
+                    >
+                      {labels[m]}
+                    </button>
+                  );
+                })}
+              </div>
+
               {/* ── Plan-Karten mit Inline-Controls ── */}
               <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", marginBottom: "0.75rem" }}>
                 {allPlanEntries.map(e => {
@@ -2664,26 +2707,33 @@ function VotePlanSection(props: {
                       </div>
 
                       {/* Inline-Gewichts-Editor */}
-                      <div style={{ flexShrink: 0, display: "flex", flexDirection: "column" as const, alignItems: "flex-end", gap: "0.25rem", minWidth: "90px" }}>
-                        {/* Stepper */}
+                      <div style={{ flexShrink: 0, display: "flex", flexDirection: "column" as const, alignItems: "flex-end", gap: "0.25rem", minWidth: "96px" }}>
+                        {/* Stepper mit modus-abhängiger Primärwert-Anzeige */}
                         <div style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
                           <button onClick={() => adjustWeight(key, -500)} style={{ width: "26px", height: "26px", borderRadius: "7px", background: "#f1f5f9", border: "1px solid #e2e8f0", color: "#475569", cursor: "pointer", fontSize: "1.05rem", lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700 }}>−</button>
-                          <span style={{ color: isEdited ? "#2563eb" : color, fontSize: "1.15rem", fontWeight: 900, minWidth: "46px", textAlign: "center" as const }}>{e.suggestedWeightPct}%</span>
+                          <span style={{ color: isEdited ? "#2563eb" : color, fontSize: "1.1rem", fontWeight: 900, minWidth: "52px", textAlign: "center" as const }}>
+                            {voteMode === "pct" && `${e.suggestedWeightPct}%`}
+                            {voteMode === "usd" && (e.expectedVoteUsd > 0 ? `$${e.expectedVoteUsd.toFixed(3)}` : "—")}
+                            {voteMode === "sp"  && (e.expectedVoteUsd > 0 ? `${(e.expectedVoteUsd / sbdPerSteem).toFixed(3)}` : "—")}
+                          </span>
                           <button onClick={() => adjustWeight(key, +500)} style={{ width: "26px", height: "26px", borderRadius: "7px", background: "#f1f5f9", border: "1px solid #e2e8f0", color: "#475569", cursor: "pointer", fontSize: "1.05rem", lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700 }}>+</button>
                         </div>
-                        {/* VP-Kosten pro Vote */}
-                        <div style={{ textAlign: "center" as const, fontSize: "0.7rem", color: isEdited ? "#2563eb" : "#9ca3af" }}>
-                          VP-Kosten: {(e.suggestedWeightBps / 5000).toFixed(2)}%
+                        {/* Sekundärwert — das jeweils andere */}
+                        <div style={{ textAlign: "center" as const, fontSize: "0.67rem", color: isEdited ? "#93c5fd" : "#9ca3af" }}>
+                          {voteMode === "pct" && e.expectedVoteUsd > 0 && `≈$${e.expectedVoteUsd.toFixed(4)}`}
+                          {voteMode === "usd" && `${e.suggestedWeightPct}% Vote`}
+                          {voteMode === "sp"  && `${e.suggestedWeightPct}% · SP`}
                         </div>
-                        {/* USD-Wert + Reset */}
-                        <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
-                          {e.expectedVoteUsd > 0 && <span style={{ color: "#9ca3af", fontSize: "0.67rem" }}>≈${e.expectedVoteUsd.toFixed(4)}</span>}
-                          {isEdited && (
-                            <button onClick={() => resetWeight(key)} style={{ background: "none", border: "none", color: "#93c5fd", cursor: "pointer", fontSize: "0.65rem", padding: 0 }}>
-                              ↩ {(origBps / 100).toFixed(1)}%
-                            </button>
-                          )}
+                        {/* VP-Kosten — immer sichtbar */}
+                        <div style={{ textAlign: "center" as const, fontSize: "0.67rem", color: isEdited ? "#2563eb" : "#9ca3af" }}>
+                          VP: {(e.suggestedWeightBps / 5000).toFixed(2)}%
                         </div>
+                        {/* Reset wenn editiert */}
+                        {isEdited && (
+                          <button onClick={() => resetWeight(key)} style={{ background: "none", border: "none", color: "#93c5fd", cursor: "pointer", fontSize: "0.65rem", padding: 0 }}>
+                            ↩ {(origBps / 100).toFixed(1)}%
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
