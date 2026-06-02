@@ -62,21 +62,22 @@ function initSchema(db: Database): void {
     );
 
     CREATE TABLE IF NOT EXISTS content_drafts (
-      filename      TEXT PRIMARY KEY,
-      date_str      TEXT NOT NULL,
-      type          TEXT NOT NULL,
-      title         TEXT,
-      status        TEXT NOT NULL DEFAULT 'draft',
-      notes         TEXT,
-      reviewed_at   TEXT,
-      approved_at   TEXT,
-      scheduled_at  TEXT,
-      scheduled_for TEXT,
-      published_at  TEXT,
-      failed_at     TEXT,
-      failed_reason TEXT,
-      created_at    TEXT DEFAULT (datetime('now')),
-      updated_at    TEXT DEFAULT (datetime('now'))
+      filename          TEXT PRIMARY KEY,
+      date_str          TEXT NOT NULL,
+      type              TEXT NOT NULL,
+      title             TEXT,
+      status            TEXT NOT NULL DEFAULT 'draft',
+      notes             TEXT,
+      reviewed_at       TEXT,
+      approved_at       TEXT,
+      scheduled_at      TEXT,
+      scheduled_for     TEXT,
+      published_at      TEXT,
+      failed_at         TEXT,
+      failed_reason     TEXT,
+      screenshot_snap   TEXT,         -- devlog only: snapshot dir name (e.g. "snap-20260602")
+      created_at        TEXT DEFAULT (datetime('now')),
+      updated_at        TEXT DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_drafts_status  ON content_drafts(status);
     CREATE INDEX IF NOT EXISTS idx_drafts_date    ON content_drafts(date_str);
@@ -164,7 +165,8 @@ function runMigrations(db: Database): void {
     addIfMissing("scheduled_for", "TEXT");
     addIfMissing("failed_at",     "TEXT");
     addIfMissing("failed_reason", "TEXT");
-    addIfMissing("publish_tx_id", "TEXT");  // blockchain transactionId after real publish
-    addIfMissing("published_permlink", "TEXT"); // on-chain permlink for verification
+    addIfMissing("publish_tx_id", "TEXT");
+    addIfMissing("published_permlink", "TEXT");
+    addIfMissing("screenshot_snap", "TEXT");  // devlog snapshot dir, e.g. "snap-20260602"
   }
 }

@@ -60,9 +60,10 @@ export interface ContentDraft {
   scheduledFor:       string | null;
   publishedAt:        string | null;
   publishTxId:        string | null;   // blockchain transactionId
-  publishedPermlink:  string | null;   // on-chain permlink for verification
+  publishedPermlink:  string | null;
   failedAt:           string | null;
   failedReason:       string | null;
+  screenshotSnap:     string | null;   // devlog only: snapshot dir e.g. "snap-20260602"
   createdAt: string;
   updatedAt: string;
   wordCount?: number;
@@ -73,7 +74,7 @@ type DraftRow = {
   status: string; notes: string | null; reviewed_at: string | null;
   approved_at: string | null; scheduled_at: string | null; scheduled_for: string | null;
   published_at: string | null; publish_tx_id: string | null; published_permlink: string | null;
-  failed_at: string | null; failed_reason: string | null;
+  failed_at: string | null; failed_reason: string | null; screenshot_snap: string | null;
   created_at: string; updated_at: string;
 };
 
@@ -174,6 +175,7 @@ function rowToDraft(row: DraftRow): ContentDraft {
     publishedPermlink: row.published_permlink,
     failedAt:        row.failed_at,
     failedReason:    row.failed_reason,
+    screenshotSnap:  row.screenshot_snap ?? null,
     createdAt:       row.created_at,
     updatedAt:       row.updated_at,
   };
@@ -313,8 +315,9 @@ export async function registerContentRoutes(app: FastifyInstance): Promise<void>
   });
 
   // ── POST /api/admin/content/inject-screenshots — replace PLACEHOLDERs ──
-  // Scans the draft file for PLACEHOLDER_XX markers and replaces them with
-  // /api/admin/screenshots/XX_annotated.png URLs.
+  // Product posts → shared annotated dir → /api/screenshots/XX.png
+  // Devlog posts  → snapshot dir (snap-YYYYMMDD) → /api/screenshots/snap-YYYYMMDD/XX.png
+  //                 The snapshot is created once and stored immutably.
   app.post("/api/admin/content/inject-screenshots", async (request, reply) => {
     const body = z.object({ filename: z.string().min(1).max(200) }).safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: "invalid_request" });
@@ -324,19 +327,50 @@ export async function registerContentRoutes(app: FastifyInstance): Promise<void>
     const filePath = resolve(CONTENT_DIR, filename);
     if (!existsSync(filePath)) return reply.code(404).send({ error: "draft_not_found" });
 
-    // Build screenshot map: PLACEHOLDER_01_dashboard → /api/admin/screenshots/01_dashboard_annotated.png
-    const annotatedDir = resolve(SCREENSHOTS_DIR, "annotated");
-    const source = existsSync(annotatedDir) ? annotatedDir : SCREENSHOTS_DIR;
+    const draft = getDb().prepare("SELECT type, date_str, screenshot_snap FROM content_drafts WHERE filename=?")
+      .get(filename) as { type: string; date_str: string; screenshot_snap: string | null } | undefined;
+    if (!draft) return reply.code(404).send({ error: "draft_not_found" });
+
+    const isDevlog = draft.type === "devlog-post";
+
+    // Determine source dir and URL base
+    let source: string;
+    let urlBase: string;
+
+    if (isDevlog) {
+      // Use existing snapshot or create a new one
+      let snap = draft.screenshot_snap;
+      if (!snap) {
+        snap = `snap-${draft.date_str.replace(/-/g, "")}`;
+        // Copy current annotated screenshots into the snapshot dir (immutable from now on)
+        const annotatedDir = resolve(SCREENSHOTS_DIR, "annotated");
+        const snapDir      = resolve(SCREENSHOTS_DIR, snap);
+        if (existsSync(annotatedDir)) {
+          const { mkdirSync, copyFileSync } = await import("node:fs");
+          mkdirSync(snapDir, { recursive: true });
+          for (const f of readdirSync(annotatedDir).filter(f => f.endsWith(".png"))) {
+            copyFileSync(resolve(annotatedDir, f), resolve(snapDir, f));
+          }
+        }
+        // Persist snapshot name to DB
+        getDb().prepare("UPDATE content_drafts SET screenshot_snap=? WHERE filename=?").run(snap, filename);
+      }
+      source  = resolve(SCREENSHOTS_DIR, snap);
+      urlBase = `https://votebroker.org/api/screenshots/${snap}`;
+    } else {
+      // Product post — always use current annotated dir
+      const annotatedDir = resolve(SCREENSHOTS_DIR, "annotated");
+      source  = existsSync(annotatedDir) ? annotatedDir : SCREENSHOTS_DIR;
+      urlBase = "https://votebroker.org/api/screenshots";
+    }
+
     if (!existsSync(source)) return reply.code(424).send({ error: "no_screenshots", hint: "Run capture.py first" });
 
     const available = readdirSync(source).filter(f => f.endsWith(".png"));
     const screenshotMap: Record<string, string> = {};
     for (const f of available) {
-      // PLACEHOLDER_01_dashboard → /screenshots/01_dashboard_annotated.png (PUBLIC)
-      // Public path so Steemit / external can load the images without auth.
       const key = "PLACEHOLDER_" + f.replace(/_annotated\.png$/, "").replace(/\.png$/, "");
-      // Must be absolute URL — relative paths resolve to steemit.com domain on Steemit
-      screenshotMap[key] = `https://votebroker.org/api/screenshots/${f}`;
+      screenshotMap[key] = `${urlBase}/${f}`;
     }
 
     let content = readFileSync(filePath, "utf8");
@@ -349,13 +383,16 @@ export async function registerContentRoutes(app: FastifyInstance): Promise<void>
     }
 
     if (replaced === 0) {
-      return { ok: true, replaced: 0, hint: "Keine PLACEHOLDER_* Marker im Draft gefunden" };
+      return { ok: true, replaced: 0, snapDir: isDevlog ? draft.screenshot_snap : null,
+        hint: "Keine PLACEHOLDER_* Marker im Draft gefunden" };
     }
 
     writeFileSync(filePath, content, "utf8");
     getDb().prepare("UPDATE content_drafts SET updated_at=datetime('now') WHERE filename=?").run(filename);
-    request.log.info({ filename, replaced, screenshotMap }, "Screenshots injected into draft");
-    return { ok: true, replaced, screenshotMap };
+    request.log.info({ filename, replaced, isDevlog, screenshotMap }, "Screenshots injected");
+    return { ok: true, replaced, screenshotMap,
+      snapDir: isDevlog ? draft.screenshot_snap : null,
+      type: isDevlog ? "devlog-snapshot" : "product-current" };
   });
 
   // ── POST /api/admin/content/fix-screenshot-urls ────────────────────────────

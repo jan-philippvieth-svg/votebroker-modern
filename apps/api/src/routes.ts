@@ -62,18 +62,29 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     service: "votebroker-api"
   }));
 
-  // ── GET /api/screenshots/:filename — PUBLIC, no auth (for Steemit/external use) ──
-  // Serves annotated PNGs. Route is /api/ so Caddy proxies it; no admin hook applied.
-  // Admin gallery uses /api/admin/screenshots/ (auth). This is the public twin.
+  // ── GET /api/screenshots/:snap/:filename — PUBLIC, no auth ───────────────────
+  // Serves annotated PNGs for Steemit/external use. Two variants:
+  //   /api/screenshots/snap-20260602/01_find_votes_annotated.png  ← devlog snapshot
+  //   /api/screenshots/01_find_votes_annotated.png                ← current (product post)
+  app.get("/api/screenshots/:snap/:filename", async (request, reply) => {
+    const { snap, filename } = request.params as { snap: string; filename: string };
+    if (!/^snap-[\d]+$/.test(snap))        return reply.code(400).send("invalid snap");
+    if (!/^[\w\-]+\.png$/.test(filename))  return reply.code(400).send("invalid file");
+    const snapDir  = pathResolve(PUBLIC_SCREENSHOTS_DIR, snap);
+    const filePath = pathResolve(snapDir, filename);
+    if (!existsSync(filePath)) return reply.code(404).send("not found");
+    reply.header("Cache-Control", "public, max-age=31536000, immutable"); // snapshots never change
+    reply.type("image/png");
+    return reply.send(createReadStream(filePath));
+  });
+
   app.get("/api/screenshots/:filename", async (request, reply) => {
     const { filename } = request.params as { filename: string };
     if (!/^[\w\-]+\.png$/.test(filename)) return reply.code(400).send("invalid");
-
     const annotated = pathResolve(PUBLIC_SCREENSHOTS_DIR, "annotated", filename);
     const raw       = pathResolve(PUBLIC_SCREENSHOTS_DIR, filename);
     const filePath  = existsSync(annotated) ? annotated : existsSync(raw) ? raw : null;
     if (!filePath) return reply.code(404).send("not found");
-
     reply.header("Cache-Control", "public, max-age=86400");
     reply.type("image/png");
     return reply.send(createReadStream(filePath));
