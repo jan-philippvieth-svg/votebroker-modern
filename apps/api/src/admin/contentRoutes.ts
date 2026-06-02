@@ -7,6 +7,7 @@ import { getSession } from "../auth/sessionStore.js";
 import { broadcastConfig, steemNetworkConfig } from "../config.js";
 import { createSteemClient } from "../chain/steemBroadcaster.js";
 import { PrivateKey } from "dsteem";
+import { generateDevlogDraft } from "../jobs/dailyDevlog.js";
 
 const CONTENT_DIR = process.env.VOTEBROKER_CONTENT_DIR ?? resolve("docs/content");
 const DRAFT_PATTERN = /^(\d{4}-\d{2}-\d{2})-(product-post|tech-post|devlog-post)\.md$/;
@@ -184,6 +185,24 @@ function getSessionHeader2(v: string | string[] | undefined): string | undefined
 // ── Route registration ────────────────────────────────────────────────────────
 
 export async function registerContentRoutes(app: FastifyInstance): Promise<void> {
+
+  // ── POST /api/admin/content/generate-devlog ────────────────────────────────
+  // Manually trigger devlog draft generation for a specific date (default: today).
+  // Safe to call repeatedly — skips if draft already exists for that date.
+  app.post("/api/admin/content/generate-devlog", async (request, reply) => {
+    const body = z.object({
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), // override date
+    }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: "invalid_request" });
+
+    const date = body.data.date ? new Date(body.data.date + "T12:00:00Z") : new Date();
+    const result = await generateDevlogDraft(request.log as unknown as typeof console, date);
+
+    if (result.status === "failed") {
+      return reply.code(500).send({ error: "generation_failed", reason: result.reason });
+    }
+    return result;
+  });
 
   // List all drafts
   app.get("/api/admin/content", async () => {

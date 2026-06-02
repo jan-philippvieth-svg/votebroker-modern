@@ -89,16 +89,17 @@ function msUntilNextRun(): number {
 export async function runDailyFeePost(
   log: typeof console = console,
   date?: Date,
+  forceUpdate?: boolean,
 ): Promise<FeePostLogEntry> {
   const now     = date ?? new Date();
   const dateStr = now.toISOString().slice(0, 10);
   const nextRun = nextRunTime();
   const account = broadcastConfig.account;
 
-  log.info(`[DailyFeePost] Running for ${dateStr}${date ? " (retroactive)" : ""} — next scheduled run at ${nextRun.toISOString()}`);
+  log.info(`[DailyFeePost] Running for ${dateStr}${date ? " (retroactive)" : ""}${forceUpdate ? " (force-update)" : ""} — next scheduled run at ${nextRun.toISOString()}`);
 
   try {
-    const result = await ensureDailyFeePost({ newUsers: [], date: now });
+    const result = await ensureDailyFeePost({ newUsers: [], date: now, forceUpdate });
 
     const entry: Omit<FeePostLogEntry, "id" | "executedAt"> = {
       dateStr,

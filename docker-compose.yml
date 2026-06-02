@@ -33,6 +33,9 @@ services:
       VOTEBROKER_BROADCAST_ACCOUNT: ${VOTEBROKER_BROADCAST_ACCOUNT:-votebroker}
       VOTEBROKER_POSTING_WIF: ${VOTEBROKER_POSTING_WIF:-}
       VOTEBROKER_MANUAL_TOKEN_FALLBACK: ${VOTEBROKER_MANUAL_TOKEN_FALLBACK:-false}
+      VOTEBROKER_CONTENT_DIR: /app/data/content
+    volumes:
+      - votebroker_data:/app/data
     expose:
       - "3000"
     healthcheck:
@@ -80,3 +83,4 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+  votebroker_data:
