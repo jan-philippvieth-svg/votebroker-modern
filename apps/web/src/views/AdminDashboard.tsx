@@ -471,7 +471,17 @@ function AuthenticatedImage({ url, token, alt, style, onClick }: {
     };
   }, [url, token]);
 
-  if (error)   return <div style={{ ...style, background: "#fee", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.7rem", color:"#c00" }}>Fehler</div>;
+  if (error) {
+    // Neutral placeholder — not a red error block. Shows filename for easy debugging.
+    const filename = url.split("/").pop() ?? url;
+    return (
+      <div style={{ ...style, background: "#f8f9fa", border: "1px dashed #ced4da", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.25rem", padding: "0.5rem" }}>
+        <span style={{ fontSize: "1.2rem" }}>🖼</span>
+        <span style={{ fontSize: "0.68rem", color: "#6c757d", textAlign: "center" }}>Bild nicht verfügbar</span>
+        <span style={{ fontSize: "0.6rem", color: "#adb5bd", textAlign: "center", wordBreak: "break-all" }}>{filename}</span>
+      </div>
+    );
+  }
   if (!blobUrl) return <div style={{ ...style, background:"#f0f4f8", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.7rem", color:"#aaa" }}>Lädt…</div>;
   return <img src={blobUrl} alt={alt ?? ""} style={style} onClick={onClick} />;
 }
