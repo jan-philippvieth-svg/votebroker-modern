@@ -316,10 +316,10 @@ export function App() {
       .finally(() => setSnapshotLoading(false));
   }
 
-  // 60s polling for snapshot while on dashboard tab
+  // Immediately refresh snapshot when switching to dashboard tab, then poll every 60s
   useEffect(() => {
     if (!session || activeTab !== "dashboard") return;
-    setSnapshotRefreshedAt(new Date()); // mark initial load as "refreshed now"
+    refreshSnapshot(); // immediate fetch on tab switch
     const id = setInterval(refreshSnapshot, 60_000);
     return () => clearInterval(id);
   }, [session?.token, activeTab]);
@@ -358,34 +358,20 @@ export function App() {
     });
   }
 
-  async function generateVotes() {
+  async function generateVotes(targetOverride?: number) {
     if (!session || !strategyRules || !accountSnapshot) return;
+    const effectiveTarget = targetOverride ?? targetVotingPowerPct;
+    if (targetOverride !== undefined) setTargetVotingPowerPct(targetOverride);
     setPlanLoading(true);
     setPlanError(null);
     try {
-      const currentVpPct = accountSnapshot.votingPowerBps / 100;
-
-      // VP-adaptive constraints: when VP is high, allow spending more per run
-      // This enables meaningful votes without draining VP unsustainably
-      const adaptiveConstraints: typeof DEFAULT_CONSTRAINTS = {
-        ...DEFAULT_CONSTRAINTS,
-        // Floor: ensure at least 20% VP remains after this run
-        // But never go below the user's configured target (targetVotingPowerPct)
-        minVpPct: Math.max(20, Math.min(DEFAULT_CONSTRAINTS.minVpPct, currentVpPct - 30)),
-        // When VP > 90%: allow spending up to 70% of current VP in one run
-        // When VP < 80%: cap at 20% to conserve
-        maxVpSpendPct: currentVpPct >= 90 ? 70
-          : currentVpPct >= 80 ? 40
-          : currentVpPct >= 70 ? 20
-          : 10,
-      };
-
       const plan = await generateVotePlan({
-        voterUsername:  session.user.username,
-        currentVpBps:   accountSnapshot.votingPowerBps,
-        currentVoteUsd: accountSnapshot.currentVoteUsd,
-        targetVpPct:    targetVotingPowerPct,
-        constraints:    adaptiveConstraints,
+        voterUsername:       session.user.username,
+        currentVpBps:        accountSnapshot.votingPowerBps,
+        currentVoteUsd:      accountSnapshot.currentVoteUsd,
+        targetVpPct:         effectiveTarget,
+        targetTomorrowVpPct: effectiveTarget,
+        constraints:         DEFAULT_CONSTRAINTS,
         rules: strategyRules.map(r => ({
           username:         r.username,
           category:         r.category,
@@ -427,6 +413,8 @@ export function App() {
       const result = await getVoteOpportunities(unique, session.user.username);
       setOpportunities(result.opportunities);
       setOpportunitiesMeta(result.meta);
+      // Always refresh VP after a scan — user is about to vote
+      refreshSnapshot();
 
       // Log the meta summary in the browser console for easy debugging
       console.log("[VoteBroker] Opportunity scan complete:", {
@@ -497,8 +485,9 @@ export function App() {
     }
     // After batch is done, refresh VP and re-scan opportunities
     if (ok + skipped > 0) {
-      setTimeout(() => refreshSnapshot(), 4_000);
-      if (opportunities !== null) setTimeout(() => loadOpportunities(), 7_000);
+      setTimeout(() => refreshSnapshot(), 5_000);
+      setTimeout(() => refreshSnapshot(), 12_000); // second pass for slow nodes
+      if (opportunities !== null) setTimeout(() => loadOpportunities(), 9_000);
     }
     return { ok, failed, skipped, results };
   }
@@ -521,9 +510,10 @@ export function App() {
         ? { ...p, alreadyVoted: true, eligible: false }
         : p
     ) ?? null);
-    // Refresh VP after the Steem node has processed the transaction
-    setTimeout(() => refreshSnapshot(), 4_000);
-    if (opportunities !== null) setTimeout(() => loadOpportunities(), 7_000);
+    // Refresh VP after the Steem node has processed the transaction (two passes for slow nodes)
+    setTimeout(() => refreshSnapshot(), 5_000);
+    setTimeout(() => refreshSnapshot(), 12_000);
+    if (opportunities !== null) setTimeout(() => loadOpportunities(), 9_000);
     return { transactionId: result.transactionId };
   }
 
@@ -834,6 +824,8 @@ export function App() {
             planLoading={planLoading}
             planError={planError}
             onGenerateVotes={generateVotes}
+            onGenerateWithTarget={generateVotes}
+            targetVotingPowerPct={targetVotingPowerPct}
           />
         </div>
       )}
@@ -1448,9 +1440,13 @@ function CurationDnaPanel(props: {
   planLoading: boolean;
   planError: string | null;
   onGenerateVotes: () => void;
+  onGenerateWithTarget: (targetPct: number) => void;
+  targetVotingPowerPct: number;
 }) {
   const [addUsername, setAddUsername] = useState("");
   const [addCategory, setAddCategory] = useState<StrategyCategory>("bevorzugt");
+  const [strategyOpen, setStrategyOpen] = useState(false);
+  const [liveMetrics, setLiveMetrics] = useState<LivePlanMetrics | null>(null);
 
   const sectionLabel = {
     color: "#607078", fontSize: "0.75rem", textTransform: "uppercase" as const,
@@ -1551,18 +1547,58 @@ function CurationDnaPanel(props: {
   };
 
   const strategyRules = props.strategyRules;
-
   const noStrategyYet = !strategyRules;
+
+  // ── Kandidaten die nicht im Plan sind, aber aus offenen Chancen verfügbar ──
+  const CAT_PRI_MAP: Record<string, number> = {
+    immer_voten: 50, lieblingsautor: 40, bevorzugt: 30, normal: 20, niedrig: 10,
+  };
+  const planKeys = new Set((props.votePlan?.plan ?? []).map(e => `${e.author}/${e.permlink}`));
+  const additionalCandidates: VotePlanEntry[] = strategyRules
+    ? (props.opportunities ?? [])
+        .filter(p => p.eligible && !planKeys.has(`${p.author}/${p.permlink}`))
+        .flatMap(p => {
+          const rule = strategyRules.find(r => r.username === p.author && r.enabled && r.category !== "ignorieren");
+          if (!rule) return [];
+          const wBps = Math.round(rule.maxWeightPct * 100);
+          return [{
+            author:             p.author,
+            permlink:           p.permlink,
+            title:              p.title || `${p.author}/${p.permlink}`,
+            ageMinutes:         p.ageMinutes,
+            remainingHours:     p.remainingHours ?? 168,
+            postScore:          p.postScore,
+            category:           rule.category,
+            priority:           CAT_PRI_MAP[rule.category] ?? 0,
+            suggestedWeightBps: wBps,
+            suggestedWeightPct: Math.round(wBps / 100 * 10) / 10,
+            expectedVoteUsd:    Math.round((wBps / 10_000) * (props.accountSnapshot?.currentVoteUsd ?? 0) * 10_000) / 10_000,
+            reason:             `Score ${p.postScore} — aus offenen Chancen`,
+            reasons:            [`Score ${p.postScore}`, `Aus offenen Chancen`],
+            warning:            p.warning ?? null,
+          } as VotePlanEntry];
+        })
+        .sort((a, b) => b.priority !== a.priority ? b.priority - a.priority : b.postScore - a.postScore)
+    : [];
 
   // ── Shared section divider ───────────────────────────────────────────────
   const divider: React.CSSProperties = { marginTop: "1.5rem", borderTop: "1px solid #e8eef2", paddingTop: "1.25rem" };
   const inputStyle: React.CSSProperties = { background: "#f4f7f8", border: "1px solid #dde8ed", borderRadius: "6px", color: "#17202a", padding: "0.35rem 0.6rem", fontSize: "0.82rem" };
 
+  const vpPct = props.accountSnapshot ? props.accountSnapshot.votingPowerBps / 100 : null;
+
+  const heroStats = [
+    { val: p.votesAnalyzed.toLocaleString(), lbl: "Votes"   },
+    { val: p.uniqueAuthors,                  lbl: "Autoren" },
+    ...(vpPct !== null ? [{ val: `${vpPct.toFixed(1)}%`, lbl: "VP" }] : []),
+    { val: p.periodDays,                     lbl: "Akt. Tage" },
+  ];
+
   return (
     <section style={{ background: "#ffffff", border: "1px solid #dde8ed", borderRadius: "14px", padding: "1.5rem 1.75rem", boxShadow: "0 2px 8px rgba(17,37,45,0.06)" }}>
 
-      {/* ── 1. DNA Hero — kompakt, kontextuell ────────────────── */}
-      <div style={{ display: "flex", alignItems: "center", gap: "1rem", padding: "1rem 1.25rem", background: "linear-gradient(135deg, #f5f0ff 0%, #ffffff 60%, #edfbf9 100%)", borderRadius: "12px", border: "1px solid #e0d4fc", marginBottom: "1.5rem", flexWrap: "wrap" as const }}>
+      {/* ── 1. Hero ── */}
+      <div style={{ display: "flex", alignItems: "center", gap: "1rem", padding: "1rem 1.25rem", background: "linear-gradient(135deg, #f5f0ff 0%, #ffffff 60%, #edfbf9 100%)", borderRadius: "12px", border: "1px solid #e0d4fc", marginBottom: "1.25rem", flexWrap: "wrap" as const }}>
         <span style={{ fontSize: "2rem", lineHeight: 1, flexShrink: 0 }}>{emoji}</span>
         <div style={{ flex: 1, minWidth: "200px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.15rem" }}>
@@ -1571,186 +1607,355 @@ function CurationDnaPanel(props: {
           </div>
           <p style={{ color: "#607078", fontSize: "0.78rem", margin: 0, lineHeight: 1.45, maxWidth: "520px" }}>{p.dnaDescription}</p>
         </div>
-        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" as const, fontSize: "0.8rem" }}>
-          {[
-            { val: p.votesAnalyzed, lbl: "Votes" },
-            { val: p.uniqueAuthors, lbl: "Autoren" },
-            { val: p.periodDays,    lbl: "Tage"   },
-            { val: `${p.votesPerDay}`, lbl: "/Tag"   },
-          ].map(s => (
+        <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" as const }}>
+          {heroStats.map(s => (
             <div key={s.lbl} style={{ textAlign: "center" as const }}>
-              <div style={{ color: "#17202a", fontWeight: 800, fontSize: "1.1rem", lineHeight: 1 }}>{s.val}</div>
-              <div style={{ color: "#8fa4b0", fontSize: "0.65rem", marginTop: "2px" }}>{s.lbl}</div>
+              <div style={{ color: "#17202a", fontWeight: 800, fontSize: "1.15rem", lineHeight: 1 }}>{s.val}</div>
+              <div style={{ color: "#8fa4b0", fontSize: "0.67rem", marginTop: "3px" }}>{s.lbl}</div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* ── 2. Strategie — Hauptbereich, prominente Platzierung ── */}
-      <div>
-        {/* Header mit Aktions-Buttons */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" as const, gap: "0.75rem", marginBottom: "1rem" }}>
-          <div>
-            <h3 style={{ color: "#17202a", fontSize: "1.1rem", fontWeight: 800, margin: 0, letterSpacing: "-0.3px" }}>
-              Deine Autoren-Strategie
-            </h3>
-            {strategyRules && (
-              <p style={{ color: "#8fa4b0", fontSize: "0.75rem", margin: "0.2rem 0 0" }}>
-                {strategyRules.filter(r => r.enabled).length} aktiv · {strategyRules.filter(r => r.manuallyModified).length} manuell angepasst
-              </p>
-            )}
-          </div>
-          {strategyRules && (
-            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" as const }}>
-              <button style={{ ...chipBtn, fontSize: "0.8rem", padding: "0.4rem 0.85rem" }} type="button" onClick={regenerate}>
-                ↺ Anpassen
-              </button>
-              <button
-                style={{ background: "#2563eb", border: "none", borderRadius: "7px", color: "#fff", cursor: "pointer", fontSize: "0.8rem", fontWeight: 700, padding: "0.4rem 0.85rem" }}
-                type="button"
-                onClick={generateStrategy}
-              >
-                ✦ Aus DNA neu generieren
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Autor manuell hinzufügen */}
-        <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" as const, marginBottom: "1rem", padding: "0.65rem 0.85rem", background: "#f8fbfc", border: "1px solid #dde8ed", borderRadius: "8px", alignItems: "center" }}>
-          <span style={{ color: "#607078", fontSize: "0.75rem", fontWeight: 600 }}>+ Autor hinzufügen:</span>
-          <input
-            placeholder="@username"
-            value={addUsername}
-            onChange={e => setAddUsername(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && addManually()}
-            style={{ ...inputStyle, width: "160px" }}
-          />
-          <select
-            value={addCategory}
-            onChange={e => setAddCategory(e.target.value as StrategyCategory)}
-            style={{ ...inputStyle, cursor: "pointer" }}
-          >
-            {(Object.keys(categoryLabel) as StrategyCategory[]).filter(k => k !== "ignorieren").map(k => (
-              <option key={k} value={k}>{categoryLabel[k]}</option>
-            ))}
-          </select>
-          <button
-            onClick={addManually}
-            type="button"
-            style={{ background: "#2563eb14", border: "1px solid #2563eb40", borderRadius: "6px", color: "#2563eb", cursor: "pointer", fontSize: "0.8rem", fontWeight: 600, padding: "0.35rem 0.75rem" }}
-          >
-            Hinzufügen
+      {/* ── 2. Handlungsempfehlung ── */}
+      {!strategyRules ? (
+        <div style={{ border: "1px dashed #2563eb44", borderRadius: "12px", padding: "1.75rem", background: "#f0f5ff", textAlign: "center" as const, marginBottom: "1.25rem" }}>
+          <div style={{ fontSize: "2rem", marginBottom: "0.6rem" }}>🧬</div>
+          <p style={{ color: "#17202a", fontSize: "0.95rem", fontWeight: 700, margin: "0 0 0.4rem" }}>Strategie noch nicht eingerichtet</p>
+          <p style={{ color: "#607078", fontSize: "0.82rem", margin: "0 0 1rem", lineHeight: 1.55, maxWidth: "400px", marginLeft: "auto", marginRight: "auto" }}>
+            VoteBroker analysiert deine Vote-Historie und generiert eine nachhaltige Curation-Strategie.
+          </p>
+          <button style={{ background: "#2563eb", border: "none", borderRadius: "8px", color: "#fff", cursor: "pointer", fontSize: "0.9rem", fontWeight: 700, padding: "0.65rem 1.4rem" }} type="button" onClick={generateStrategy}>
+            Strategie aus Vote-DNA generieren →
           </button>
         </div>
+      ) : (
+        <div style={{ background: "linear-gradient(160deg, #f0f9ff 0%, #ffffff 60%, #f0fdf4 100%)", border: "1px solid #bae6fd", borderRadius: "18px", padding: "1.75rem 2rem", marginBottom: "1.25rem" }}>
+          {(() => {
+            const snap       = props.accountSnapshot;
+            const plan       = props.votePlan;
+            const opps       = props.opportunities;
+            const openCount  = (opps ?? []).filter(p => p.eligible).length;
+            const hasOpps    = opps !== null;
+            const vpNow      = snap ? snap.votingPowerBps / 100 : null;
+            // Live-Werte aus Inline-Editing bevorzugen — nur wenn Plan vorhanden
+            const vpPlan     = plan ? (liveMetrics?.vpAfterPct    ?? plan.report.vpAfterPlanPct)        : null;
+            const vpMorgen   = plan ? (liveMetrics?.vpMorgenPct   ?? plan.report.expectedTomorrowVpPct) : null;
+            const freeBudget = plan ? (liveMetrics?.freeBudgetPct ?? null)                              : null;
+            const recovery   = plan?.report.recoveryMode ?? false;
+            const reduction  = plan?.report.weightReductionPct ?? 0;
+            const planVotes  = liveMetrics?.entryCount ?? plan?.summary.totalPosts ?? 0;
 
-        {/* Strategie-Inhalt */}
-        {!strategyRules ? (
-          <div style={{ border: "1px dashed #2563eb44", borderRadius: "10px", padding: "1.5rem", background: "#f0f5ff", textAlign: "center" as const }}>
-            <div style={{ fontSize: "2rem", marginBottom: "0.6rem" }}>🧬</div>
-            <p style={{ color: "#17202a", fontSize: "0.95rem", fontWeight: 700, margin: "0 0 0.4rem" }}>
-              Deine Autoren-Strategie ist noch leer
-            </p>
-            <p style={{ color: "#607078", fontSize: "0.82rem", margin: "0 0 1rem", lineHeight: 1.55, maxWidth: "420px", marginLeft: "auto", marginRight: "auto" }}>
-              VoteBroker ordnet deine Lieblingsautoren automatisch ein und berechnet nachhaltige Vote-Gewichte. Du kannst danach alles frei anpassen.
-            </p>
-            <button
-              style={{ background: "#2563eb", border: "none", borderRadius: "8px", color: "#fff", cursor: "pointer", fontSize: "0.9rem", fontWeight: 700, padding: "0.65rem 1.4rem" }}
-              type="button"
-              onClick={generateStrategy}
-            >
-              Strategie aus Vote-DNA generieren →
-            </button>
+            const vpColor = (v: number | null) =>
+              v === null ? "#8fa4b0" : v >= 80 ? "#16a34a" : v >= 65 ? "#d97706" : "#dc2626";
+
+            // ── Assistenten-Botschaft ──────────────────────────────────────────
+            let msgIcon = "🧬";
+            let msgTitle = "Was empfiehlt VoteBroker?";
+            let msgBody = "Klicke auf «Votes scannen», um zu sehen was heute zu voten ist.";
+
+            if (props.opportunitiesLoading || props.planLoading) {
+              msgIcon = "⏳"; msgTitle = "Analysiere…"; msgBody = "VoteBroker prüft deine Autoren auf neue Posts.";
+            } else if (openCount > 0 && vpMorgen !== null) {
+              const sustainTxt = vpMorgen >= 80 ? `bist morgen wieder bei ${vpMorgen.toFixed(1)} % VP` : `VP morgen ca. ${vpMorgen.toFixed(1)} %`;
+              const planLine = planVotes > 0 && planVotes < openCount
+                ? ` · ${planVotes} davon im Plan` : "";
+              if (recovery && reduction > 0) {
+                msgIcon = "⚡"; msgTitle = `${openCount} offene Votes gefunden${planLine}`;
+                msgBody = `Recovery-Modus: VoteBroker hat die Gewichte um ${reduction} % reduziert. Du ${sustainTxt}. Gewichte anpassen um mehr Votes aufzunehmen.`;
+              } else {
+                msgIcon = "✅"; msgTitle = `${openCount} offene Votes gefunden${planLine}`;
+                msgBody = `Plan ausführen: ${planVotes} Votes · ${sustainTxt}.`;
+              }
+            } else if (hasOpps && openCount === 0) {
+              msgIcon = "✓"; msgTitle = "Alles gevoted";
+              msgBody = "Alle Posts deiner Autoren sind aktuell gevoted. Schau später nochmal vorbei.";
+            } else if (planVotes > 0 && !hasOpps) {
+              msgIcon = "🗳"; msgTitle = `${planVotes} Votes im Plan`;
+              msgBody = "Scanne offene Votes, um zu sehen welche Posts jetzt verfügbar sind.";
+            }
+
+            // ── KPI-Werte ──────────────────────────────────────────────────────
+            const hasEdits = liveMetrics?.hasEdits ?? false;
+            const kpis = [
+              { value: vpNow    !== null ? `${vpNow.toFixed(1)}%`    : "—", label: "VP jetzt",   sub: snap ? `${snap.steemPowerSp.toFixed(0)} SP` : "…",                                            color: vpColor(vpNow)    },
+              { value: vpPlan   !== null ? `${vpPlan.toFixed(1)}%`   : "—", label: "nach Plan",  sub: planVotes > 0 ? `${planVotes} Vote${planVotes !== 1 ? "s" : ""}${hasEdits ? " (angepasst)" : ""}` : "kein Plan", color: vpColor(vpPlan)   },
+              { value: vpMorgen !== null ? `${vpMorgen.toFixed(1)}%` : "—", label: "VP morgen",  sub: freeBudget !== null && freeBudget > 0 ? `${freeBudget.toFixed(2)}% VP frei` : vpMorgen !== null && vpMorgen >= 80 ? "Ziel ✓" : "+20% Regen", color: vpColor(vpMorgen) },
+            ];
+
+            return (
+              <>
+                {/* ── Botschaft ── */}
+                <div style={{ marginBottom: "1.5rem" }}>
+                  <p style={{ color: "#0369a1", fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "1.2px", margin: "0 0 0.3rem" }}>Curator-Assistent</p>
+                  <h3 style={{ color: "#0c4a6e", fontSize: "1.4rem", fontWeight: 900, margin: "0 0 0.5rem", letterSpacing: "-0.5px", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <span>{msgIcon}</span> {msgTitle}
+                  </h3>
+                  <p style={{ color: "#374151", fontSize: "0.95rem", margin: 0, lineHeight: 1.55, maxWidth: "600px" }}>{msgBody}</p>
+                </div>
+
+                {/* ── Haupt-CTA ── */}
+                <div style={{ display: "flex", gap: "0.75rem", marginBottom: "1.75rem", alignItems: "center", flexWrap: "wrap" as const }}>
+                  {/* Primär: offene Votes (wenn vorhanden) oder Scan */}
+                  {/* Primär-CTA: Scan oder Status */}
+                  {openCount > 0 ? (
+                    // Bereits gescannt und Votes gefunden → Status-Chip + Scroll-Hinweis
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.85rem 1.5rem", background: "#fffbeb", border: "1.5px solid #f59e0b", borderRadius: "14px" }}>
+                      <span style={{ color: "#92400e", fontSize: "1.15rem", fontWeight: 900 }}>⚡ {openCount} offene Votes gefunden</span>
+                      <span style={{ color: "#78350f", fontSize: "0.8rem" }}>→ Details unten</span>
+                      <button type="button" onClick={props.onLoadOpportunities} disabled={props.opportunitiesLoading} style={{ marginLeft: "auto", background: "none", border: "1px solid #d97706", borderRadius: "8px", color: "#d97706", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600, padding: "0.25rem 0.6rem" }}>
+                        {props.opportunitiesLoading ? "…" : "↻"}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={props.opportunitiesLoading}
+                      onClick={props.onLoadOpportunities}
+                      style={{
+                        background: hasOpps ? "#f4f7f8" : "#0ea5e9",
+                        border: "none", borderRadius: "14px",
+                        color: hasOpps ? "#607078" : "#fff",
+                        cursor: "pointer", fontSize: "0.95rem", fontWeight: 900,
+                        padding: "0.85rem 1.75rem",
+                      }}
+                    >
+                      {props.opportunitiesLoading ? "Scannt…" : hasOpps ? "↻ Neu scannen" : "Offene Posts suchen →"}
+                    </button>
+                  )}
+
+                  {/* Sekundär: Plan generieren / aktualisieren */}
+                  <button
+                    type="button"
+                    disabled={props.planLoading}
+                    onClick={() => props.onGenerateVotes()}
+                    style={{
+                      background: "transparent", border: "1.5px solid #cbd5e1",
+                      borderRadius: "12px", color: "#475569",
+                      cursor: "pointer", fontSize: "0.85rem",
+                      fontWeight: 700, padding: "0.65rem 1.25rem",
+                    }}
+                  >
+                    {props.planLoading ? "Generiere…" : plan ? "↻ Plan aktualisieren" : "Vote-Plan generieren"}
+                  </button>
+                </div>
+
+                {/* ── Strategie-Modus ── */}
+                <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.25rem", alignItems: "center", flexWrap: "wrap" as const }}>
+                  <span style={{ color: "#94a3b8", fontSize: "0.72rem", fontWeight: 600, whiteSpace: "nowrap" as const }}>Strategie:</span>
+                  {([
+                    { label: "Maximale Reichweite", pct: 70, icon: "🌐", sub: "mehr Votes, VP sinkt etwas" },
+                    { label: "Ausgewogen",           pct: 80, icon: "⚖️", sub: "Standard" },
+                    { label: "VP-Erholung",          pct: 90, icon: "🔋", sub: "weniger Votes, VP erholt sich schnell" },
+                  ] as const).map(m => {
+                    const active = props.targetVotingPowerPct === m.pct;
+                    return (
+                      <button
+                        key={m.pct}
+                        type="button"
+                        title={m.sub}
+                        onClick={() => props.onGenerateWithTarget(m.pct)}
+                        disabled={props.planLoading}
+                        style={{
+                          background: active ? "#0ea5e9" : "#f1f5f9",
+                          border: active ? "none" : "1.5px solid #e2e8f0",
+                          borderRadius: "20px", color: active ? "#fff" : "#475569",
+                          cursor: "pointer", fontSize: "0.78rem",
+                          fontWeight: active ? 800 : 600,
+                          padding: "0.35rem 0.85rem",
+                          display: "flex", alignItems: "center", gap: "0.3rem",
+                        }}
+                      >
+                        <span>{m.icon}</span> {m.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* ── KPI-Kacheln ── */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.75rem", marginBottom: "1.5rem" }}>
+                  {kpis.map(k => (
+                    <div key={k.label} style={{
+                      background: "#ffffff", border: `1.5px solid ${k.color}22`,
+                      borderRadius: "14px", padding: "1rem 1.25rem",
+                    }}>
+                      <div style={{ color: "#8fa4b0", fontSize: "0.65rem", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.8px", marginBottom: "0.3rem" }}>{k.label}</div>
+                      <div style={{ color: k.color, fontSize: "2.8rem", fontWeight: 900, lineHeight: 1, letterSpacing: "-2px", marginBottom: "0.3rem" }}>{k.value}</div>
+                      <div style={{ color: "#8fa4b0", fontSize: "0.72rem" }}>{k.sub}</div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            );
+          })()}
+
+          {/* ── Details ── */}
+          <div style={{ borderTop: "1px solid #e0f0ff", paddingTop: "1.25rem" }}>
+            {props.accountSnapshot && (
+              <VotePlanSection
+                plan={props.votePlan}
+                loading={props.planLoading}
+                error={props.planError}
+                session={props.session!}
+                onGenerate={props.onGenerateVotes}
+                onExecuteSingle={props.onExecuteSingle}
+                onMetricsChange={setLiveMetrics}
+                additionalCandidates={additionalCandidates}
+              />
+            )}
+            <div style={{ marginTop: "1.25rem" }}>
+              <OpenVoteOpportunities
+                opportunities={props.opportunities}
+                meta={props.opportunitiesMeta}
+                loading={props.opportunitiesLoading}
+                error={props.opportunitiesError}
+                strategyRules={strategyRules}
+                accountSnapshot={props.accountSnapshot}
+                onRefresh={props.onLoadOpportunities}
+                onExecuteVotes={props.onExecuteVotes}
+              />
+            </div>
           </div>
-        ) : (
-          <StrategyEditor
-            rules={strategyRules}
-            votesPerDay={p.votesPerDay}
-            onUpdate={updateRule}
-            onRemove={removeRule}
-          />
-        )}
-      </div>
-
-      {/* ── 3. Vote Plan + Chancen ────────────────────────────── */}
-      {strategyRules && props.accountSnapshot && (
-        <div style={divider}>
-          <VotePlanSection
-            plan={props.votePlan}
-            loading={props.planLoading}
-            error={props.planError}
-            session={props.session!}
-            onGenerate={props.onGenerateVotes}
-            onExecuteSingle={props.onExecuteSingle}
-          />
         </div>
       )}
 
-      {strategyRules && (
-        <div style={divider}>
-          <OpenVoteOpportunities
-            opportunities={props.opportunities}
-            meta={props.opportunitiesMeta}
-            loading={props.opportunitiesLoading}
-            error={props.opportunitiesError}
-            strategyRules={strategyRules}
-            accountSnapshot={props.accountSnapshot}
-            onRefresh={props.onLoadOpportunities}
-            onExecuteVotes={props.onExecuteVotes}
-          />
-        </div>
-      )}
-
-      {/* ── 4. Sekundäre Insights — Beziehungen, Muster, Empfehlungen ── */}
-      <div style={{ ...divider, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.25rem" }}>
+      {/* ── 3. Insights ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.85rem", marginBottom: "1.25rem" }}>
 
         {/* Stärkste Beziehungen */}
         {topAuthors.length > 0 && (
-          <div style={{ background: "#f8fbfc", border: "1px solid #dde8ed", borderRadius: "10px", padding: "1rem 1.1rem" }}>
-            <p style={{ ...sectionLabel, marginBottom: "0.75rem" }}>Deine stärksten Beziehungen</p>
-            {topAuthors.slice(0, 8).map(a => (
-              <div key={a.username} style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.35rem" }}>
-                <span style={{ color: "#2563eb", fontSize: "0.77rem", minWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, fontWeight: 600 }}>@{a.username}</span>
-                <div style={{ flex: 1, height: "5px", background: "#dde8ed", borderRadius: "3px" }}>
-                  <div style={{ width: `${a.voteCount / maxBar * 100}%`, height: "100%", background: "#7c3aed", borderRadius: "3px" }} />
+          <div style={{ background: "#f8fbfc", border: "1px solid #dde8ed", borderRadius: "10px", padding: "0.9rem 1rem" }}>
+            <p style={{ ...sectionLabel, marginBottom: "0.65rem" }}>Beziehungen</p>
+            {topAuthors.slice(0, 6).map(a => (
+              <div key={a.username} style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginBottom: "0.3rem" }}>
+                <span style={{ color: "#2563eb", fontSize: "0.74rem", minWidth: "100px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, fontWeight: 600 }}>@{a.username}</span>
+                <div style={{ flex: 1, height: "4px", background: "#dde8ed", borderRadius: "2px" }}>
+                  <div style={{ width: `${a.voteCount / maxBar * 100}%`, height: "100%", background: "#7c3aed", borderRadius: "2px" }} />
                 </div>
-                <span style={{ color: "#8fa4b0", fontSize: "0.72rem", minWidth: "65px", textAlign: "right" as const, whiteSpace: "nowrap" as const }}>
-                  {a.sharePct}% · ⌀{a.avgWeightPct}%
-                </span>
+                <span style={{ color: "#8fa4b0", fontSize: "0.68rem", minWidth: "48px", textAlign: "right" as const }}>{a.sharePct}%</span>
               </div>
             ))}
           </div>
         )}
 
-        {/* Aktivitätsmuster + Nachhaltige Strategie */}
-        <div style={{ display: "flex", flexDirection: "column" as const, gap: "0.75rem" }}>
-          {peakHours.length > 0 && (
-            <div style={{ background: "#f8fbfc", border: "1px solid #dde8ed", borderRadius: "10px", padding: "1rem 1.1rem" }}>
-              <p style={{ ...sectionLabel, marginBottom: "0.6rem" }}>Wann bist du aktiv (UTC)</p>
-              {peakHours.slice(0, 5).map(h => (
-                <div key={h.hour} style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.28rem" }}>
-                  <span style={{ color: "#607078", fontSize: "0.76rem", minWidth: "40px" }}>{String(h.hour).padStart(2, "0")}:00</span>
-                  <div style={{ flex: 1, height: "5px", background: "#dde8ed", borderRadius: "3px" }}>
-                    <div style={{ width: `${h.voteCount / maxHour * 100}%`, height: "100%", background: "#0d9488", borderRadius: "3px" }} />
-                  </div>
-                  <span style={{ color: "#8fa4b0", fontSize: "0.72rem", minWidth: "28px", textAlign: "right" as const }}>{h.voteCount}×</span>
+        {/* Aktivitätsmuster */}
+        {peakHours.length > 0 && (
+          <div style={{ background: "#f8fbfc", border: "1px solid #dde8ed", borderRadius: "10px", padding: "0.9rem 1rem" }}>
+            <p style={{ ...sectionLabel, marginBottom: "0.65rem" }}>Aktivitätsmuster (UTC)</p>
+            {peakHours.slice(0, 5).map(h => (
+              <div key={h.hour} style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginBottom: "0.25rem" }}>
+                <span style={{ color: "#607078", fontSize: "0.73rem", minWidth: "38px" }}>{String(h.hour).padStart(2, "0")}:00</span>
+                <div style={{ flex: 1, height: "4px", background: "#dde8ed", borderRadius: "2px" }}>
+                  <div style={{ width: `${h.voteCount / maxHour * 100}%`, height: "100%", background: "#0d9488", borderRadius: "2px" }} />
                 </div>
-              ))}
-            </div>
-          )}
+                <span style={{ color: "#8fa4b0", fontSize: "0.68rem", minWidth: "24px", textAlign: "right" as const }}>{h.voteCount}×</span>
+              </div>
+            ))}
+          </div>
+        )}
 
-          <div style={{ background: "#f0f5f7", border: "1px solid #dde8ed", borderRadius: "10px", padding: "1rem 1.1rem" }}>
-            <p style={{ ...sectionLabel, marginBottom: "0.5rem" }}>Nachhaltige Strategie-Empfehlung</p>
-            <p style={{ color: "#17202a", fontSize: "0.82rem", fontWeight: 600, margin: "0 0 0.2rem" }}>
-              {p.powerStable.relevantAuthors} regelmäßig unterstützte Autoren
+        {/* Kurator-Level + Nachhaltigkeit */}
+        <div style={{ display: "flex", flexDirection: "column" as const, gap: "0.75rem" }}>
+          <div style={{ background: "#f8fbfc", border: "1px solid #dde8ed", borderRadius: "10px", padding: "0.9rem 1rem", flex: 1 }}>
+            <p style={{ ...sectionLabel, marginBottom: "0.4rem" }}>Nachhaltigkeit</p>
+            <p style={{ color: "#17202a", fontSize: "0.83rem", fontWeight: 700, margin: "0 0 0.2rem" }}>
+              {p.powerStable.relevantAuthors} Autoren regelmäßig
             </p>
-            <ul style={{ color: "#607078", fontSize: "0.76rem", margin: "0", paddingLeft: "1rem", lineHeight: 1.6 }}>
-              <li>Empfohlen: ⌀ <b style={{ color: "#17202a" }}>{p.powerStable.maxAvgWeightPct}%</b> pro Vote</li>
-              <li>VP-Zielbereich: <b style={{ color: "#17202a" }}>80–95%</b></li>
-              <li>So bleibst du täglich aktiv</li>
-            </ul>
+            <p style={{ color: "#607078", fontSize: "0.73rem", margin: 0, lineHeight: 1.5 }}>
+              Empfohlen: ⌀ <b style={{ color: "#17202a" }}>{p.powerStable.maxAvgWeightPct}%</b>/Vote<br/>
+              VP-Ziel: <b style={{ color: "#17202a" }}>80–95%</b>
+            </p>
           </div>
         </div>
+      </div>
+
+      {/* ── 4. Autoren-Strategie (einklappbar) ── */}
+      <div style={{ border: "1px solid #dde8ed", borderRadius: "12px", overflow: "hidden" }}>
+        {/* Sticky toggle header */}
+        <button
+          type="button"
+          onClick={() => setStrategyOpen(o => !o)}
+          style={{
+            width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "0.85rem 1.25rem", background: strategyOpen ? "#f4f7f8" : "#f8fbfc",
+            border: "none", cursor: "pointer", textAlign: "left" as const,
+            borderBottom: strategyOpen ? "1px solid #dde8ed" : "none",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <span style={{ fontSize: "0.9rem" }}>🧬</span>
+            <div>
+              <span style={{ color: "#17202a", fontWeight: 700, fontSize: "0.9rem" }}>Autoren-Strategie</span>
+              {strategyRules && (
+                <span style={{ color: "#8fa4b0", fontSize: "0.73rem", marginLeft: "0.6rem" }}>
+                  {strategyRules.filter(r => r.enabled).length} aktiv
+                  {strategyRules.filter(r => r.manuallyModified).length > 0
+                    ? ` · ${strategyRules.filter(r => r.manuallyModified).length} manuell`
+                    : ""}
+                </span>
+              )}
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            {strategyRules && !strategyOpen && (
+              <span style={{ display: "flex", gap: "0.3rem" }}>
+                {(["immer_voten", "lieblingsautor", "bevorzugt", "normal", "niedrig"] as const)
+                  .filter(cat => strategyRules.some(r => r.category === cat && r.enabled))
+                  .map(cat => (
+                    <span key={cat} style={{ background: categoryColor[cat] + "20", color: categoryColor[cat], borderRadius: "4px", padding: "0.1rem 0.4rem", fontSize: "0.67rem", fontWeight: 700 }}>
+                      {strategyRules.filter(r => r.category === cat && r.enabled).length} {categoryLabel[cat].split(" ")[0]}
+                    </span>
+                  ))
+                }
+              </span>
+            )}
+            <span style={{ color: "#607078", fontSize: "0.85rem" }}>{strategyOpen ? "▲" : "▼"}</span>
+          </div>
+        </button>
+
+        {strategyOpen && (
+          <div style={{ padding: "1.25rem" }}>
+            {/* Action buttons */}
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" as const, marginBottom: "1rem", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" as const, alignItems: "center" }}>
+                <span style={{ color: "#607078", fontSize: "0.75rem", fontWeight: 600 }}>+ Autor:</span>
+                <input
+                  placeholder="@username"
+                  value={addUsername}
+                  onChange={e => setAddUsername(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && addManually()}
+                  style={{ ...inputStyle, width: "140px" }}
+                />
+                <select value={addCategory} onChange={e => setAddCategory(e.target.value as StrategyCategory)} style={{ ...inputStyle, cursor: "pointer" }}>
+                  {(Object.keys(categoryLabel) as StrategyCategory[]).filter(k => k !== "ignorieren").map(k => (
+                    <option key={k} value={k}>{categoryLabel[k]}</option>
+                  ))}
+                </select>
+                <button onClick={addManually} type="button" style={{ background: "#2563eb14", border: "1px solid #2563eb40", borderRadius: "6px", color: "#2563eb", cursor: "pointer", fontSize: "0.78rem", fontWeight: 600, padding: "0.3rem 0.65rem" }}>
+                  Hinzufügen
+                </button>
+              </div>
+              {strategyRules && (
+                <div style={{ display: "flex", gap: "0.4rem" }}>
+                  <button style={{ ...chipBtn, fontSize: "0.78rem" }} type="button" onClick={regenerate}>↺ Anpassen</button>
+                  <button style={{ background: "#2563eb", border: "none", borderRadius: "7px", color: "#fff", cursor: "pointer", fontSize: "0.78rem", fontWeight: 700, padding: "0.35rem 0.75rem" }} type="button" onClick={generateStrategy}>
+                    ✦ Neu generieren
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {strategyRules ? (
+              <StrategyEditor rules={strategyRules} votesPerDay={p.votesPerDay} onUpdate={updateRule} onRemove={removeRule} />
+            ) : (
+              <div style={{ textAlign: "center" as const, padding: "1rem 0" }}>
+                <button style={{ background: "#2563eb", border: "none", borderRadius: "8px", color: "#fff", cursor: "pointer", fontSize: "0.88rem", fontWeight: 700, padding: "0.6rem 1.2rem" }} type="button" onClick={generateStrategy}>
+                  Strategie aus Vote-DNA generieren →
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
     </section>
@@ -1766,16 +1971,16 @@ function StrategyEditor(props: {
   return (
     <div>
       <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.83rem" }}>
           <thead>
-            <tr style={{ color: "#607078", fontSize: "0.71rem", textTransform: "uppercase", letterSpacing: "0.4px" }}>
-              <th style={{ textAlign: "left", padding: "0.3rem 0.4rem", fontWeight: 600, width: "24px" }} />
-              <th style={{ textAlign: "left", padding: "0.3rem 0.4rem", fontWeight: 600, width: "20px" }}>An</th>
-              <th style={{ textAlign: "left", padding: "0.3rem 0.4rem", fontWeight: 600 }}>Autor</th>
-              <th style={{ textAlign: "left", padding: "0.3rem 0.4rem", fontWeight: 600 }}>Kategorie</th>
-              <th style={{ textAlign: "center", padding: "0.3rem 0.4rem", fontWeight: 600 }}>Max %</th>
-              <th style={{ textAlign: "center", padding: "0.3rem 0.4rem", fontWeight: 600 }}>Min %</th>
-              <th style={{ textAlign: "left", padding: "0.3rem 0.4rem", fontWeight: 600 }}>Quelle</th>
+            <tr style={{ color: "#607078", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.4px", borderBottom: "1px solid #dde8ed" }}>
+              <th style={{ textAlign: "left", padding: "0.2rem 0.35rem", fontWeight: 600, width: "20px" }} />
+              <th style={{ textAlign: "left", padding: "0.2rem 0.35rem", fontWeight: 600, width: "20px" }}>An</th>
+              <th style={{ textAlign: "left", padding: "0.2rem 0.35rem", fontWeight: 600 }}>Autor</th>
+              <th style={{ textAlign: "left", padding: "0.2rem 0.35rem", fontWeight: 600 }}>Kategorie</th>
+              <th style={{ textAlign: "center", padding: "0.2rem 0.35rem", fontWeight: 600 }}>Max %</th>
+              <th style={{ textAlign: "center", padding: "0.2rem 0.35rem", fontWeight: 600 }}>Min %</th>
+              <th style={{ textAlign: "left", padding: "0.2rem 0.35rem", fontWeight: 600 }}>Quelle</th>
               <th style={{ width: "20px" }} />
             </tr>
           </thead>
@@ -1821,26 +2026,26 @@ function StrategyRuleRow(props: {
         opacity: rule.enabled ? 1 : 0.4,
         background: rule.manuallyModified ? "#f4f7f8" : "transparent",
       }}>
-        <td style={{ padding: "0.3rem 0.4rem" }}>
+        <td style={{ padding: "0.18rem 0.35rem" }}>
           <button
             type="button"
             onClick={() => setExpanded(e => !e)}
-            style={{ background: "none", border: "none", color: "#607078", cursor: "pointer", fontSize: "0.75rem", padding: "0 2px", lineHeight: 1 }}
+            style={{ background: "none", border: "none", color: "#607078", cursor: "pointer", fontSize: "0.72rem", padding: "0 2px", lineHeight: 1 }}
           >
             {expanded ? "▾" : "▸"}
           </button>
         </td>
-        <td style={{ padding: "0.3rem 0.4rem" }}>
+        <td style={{ padding: "0.18rem 0.35rem" }}>
           <input
             type="checkbox" checked={rule.enabled}
             onChange={e => onUpdate(rule.username, { enabled: e.target.checked })}
             style={{ cursor: "pointer", accentColor: color }}
           />
         </td>
-        <td style={{ padding: "0.3rem 0.4rem" }}>
-          <span style={{ color: "#2563eb", fontWeight: 500 }}>@{rule.username}</span>
+        <td style={{ padding: "0.18rem 0.35rem" }}>
+          <span style={{ color: "#2563eb", fontWeight: 600, fontSize: "0.83rem" }}>@{rule.username}</span>
         </td>
-        <td style={{ padding: "0.3rem 0.4rem" }}>
+        <td style={{ padding: "0.18rem 0.35rem" }}>
           <select
             value={rule.category}
             onChange={e => onUpdate(rule.username, { category: e.target.value as StrategyCategory })}
@@ -1851,30 +2056,30 @@ function StrategyRuleRow(props: {
             ))}
           </select>
         </td>
-        <td style={{ padding: "0.3rem 0.4rem", textAlign: "center" }}>
+        <td style={{ padding: "0.18rem 0.35rem", textAlign: "center" }}>
           <input type="number" min="0" max="100" step="0.5"
             value={rule.maxWeightPct}
             onChange={e => onUpdate(rule.username, { maxWeightPct: Math.min(100, Math.max(0, Number(e.target.value))) })}
             style={inputStyle}
           />
         </td>
-        <td style={{ padding: "0.3rem 0.4rem", textAlign: "center" }}>
+        <td style={{ padding: "0.18rem 0.35rem", textAlign: "center" }}>
           <input type="number" min="0" max="100" step="0.5"
             value={rule.minWeightPct}
             onChange={e => onUpdate(rule.username, { minWeightPct: Math.min(100, Math.max(0, Number(e.target.value))) })}
             style={inputStyle}
           />
         </td>
-        <td style={{ padding: "0.3rem 0.4rem" }}>
-          <span style={{ fontSize: "0.69rem", color: rule.manuallyModified ? "#d97706" : "#8fa4b0", whiteSpace: "nowrap" }}>
-            {rule.manuallyModified ? "✎ manuell" : rule.source}
+        <td style={{ padding: "0.18rem 0.35rem" }}>
+          <span style={{ fontSize: "0.68rem", color: rule.manuallyModified ? "#d97706" : "#8fa4b0", whiteSpace: "nowrap" }}>
+            {rule.manuallyModified ? "✎" : rule.source}
           </span>
         </td>
-        <td style={{ padding: "0.3rem 0.4rem" }}>
+        <td style={{ padding: "0.18rem 0.35rem" }}>
           <button
             type="button"
             onClick={() => props.onRemove(rule.username)}
-            style={{ background: "none", border: "none", color: "#8fa4b0", cursor: "pointer", fontSize: "0.8rem", padding: "0 2px" }}
+            style={{ background: "none", border: "none", color: "#8fa4b0", cursor: "pointer", fontSize: "0.78rem", padding: "0 2px" }}
             title="Entfernen"
           >
             ✕
@@ -2048,23 +2253,57 @@ function formatAge(minutes: number): string {
 
 // ── VotePlanSection — Plan → Preview → Confirm → Execute (sequential) ─────────
 
+function RecoveryBanner({ report }: { report: ConstraintReport }) {
+  if (!report.recoveryMode && report.weightReductionPct === 0) return null;
+
+  const isRecovery = report.recoveryMode;
+  const reduced    = report.weightReductionPct;
+  const tomorrow   = report.expectedTomorrowVpPct;
+
+  if (!isRecovery && reduced === 0) return null;
+
+  let title = "";
+  let body  = "";
+
+  if (isRecovery && reduced > 0) {
+    title = "⚡ Recovery-Modus aktiv";
+    body  = `VoteBroker reduziert die Gewichte automatisch um ${reduced} %, damit deine Voting Power morgen wieder auf ca. ${tomorrow} % steigt.`;
+  } else if (isRecovery) {
+    title = "⚡ Recovery-Modus aktiv";
+    body  = `Die Voting Power ist unter dem Zielbereich. VoteBroker wählt nur Votes aus, die morgen eine VP von ca. ${tomorrow} % ermöglichen.`;
+  } else {
+    title = "ℹ Gewichte angepasst";
+    body  = `Vote-Gewichte wurden um ${reduced} % reduziert, damit dein VP-Ziel morgen (${tomorrow} %) erhalten bleibt.`;
+  }
+
+  return (
+    <div style={{
+      background: "#fffbeb", border: "1px solid #f59e0b44", borderRadius: "12px",
+      padding: "0.85rem 1.1rem", marginBottom: "0.85rem",
+    }}>
+      <div style={{ color: "#92400e", fontWeight: 800, fontSize: "0.88rem", marginBottom: "0.25rem" }}>{title}</div>
+      <div style={{ color: "#78350f", fontSize: "0.82rem", lineHeight: 1.55 }}>{body}</div>
+    </div>
+  );
+}
+
 function ConstraintBadge(props: { report: ConstraintReport }) {
   const r = props.report;
-  const stopColor = r.stoppedBy === "none" ? "#16a34a" : r.stoppedBy === "min_vp" ? "#dc2626" : "#d97706";
+  const stopColor = r.stoppedBy === "none" ? "#16a34a" : "#d97706";
+  const budget = r.dynamicBudgetPct ?? r.effectiveBudgetPct;
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", fontSize: "0.73rem", marginBottom: "0.6rem" }}>
       <span style={{ background: "#dde8ed", border: "1px solid #30363d", borderRadius: "4px", color: "#607078", padding: "0.15rem 0.5rem" }}>
-        VP-Floor: <b style={{ color: "#17202a" }}>{r.minVpPct}%</b>
+        Tages-Budget: <b style={{ color: "#17202a" }}>{budget.toFixed(1)}%</b>
       </span>
       <span style={{ background: "#dde8ed", border: "1px solid #30363d", borderRadius: "4px", color: "#607078", padding: "0.15rem 0.5rem" }}>
         Max Votes: <b style={{ color: "#17202a" }}>{r.maxVotesPerRun}</b>
       </span>
-      <span style={{ background: "#dde8ed", border: "1px solid #30363d", borderRadius: "4px", color: "#607078", padding: "0.15rem 0.5rem" }}>
-        Max VP-Verbrauch: <b style={{ color: "#17202a" }}>{r.maxVpSpendPct}%</b>
-      </span>
-      <span style={{ background: "#dde8ed", border: "1px solid #30363d", borderRadius: "4px", color: "#607078", padding: "0.15rem 0.5rem" }}>
-        Budget: <b style={{ color: "#17202a" }}>{r.effectiveBudgetPct}%</b>
-      </span>
+      {r.expectedTomorrowVpPct !== undefined && (
+        <span style={{ background: "#dde8ed", border: "1px solid #30363d", borderRadius: "4px", color: "#607078", padding: "0.15rem 0.5rem" }}>
+          VP morgen: <b style={{ color: r.expectedTomorrowVpPct >= 80 ? "#16a34a" : "#d97706" }}>{r.expectedTomorrowVpPct}%</b>
+        </span>
+      )}
       {r.excludedVotes > 0 && (
         <span style={{ background: stopColor + "22", border: `1px solid ${stopColor}55`, borderRadius: "4px", color: stopColor, padding: "0.15rem 0.5rem", fontWeight: 600 }}>
           ⚠ {r.excludedVotes} übersprungen — {r.stoppedByLabel}
@@ -2094,6 +2333,15 @@ interface VoteLogEntry {
   status: "sent" | "skipped" | "failed"; message: string;
 }
 
+interface LivePlanMetrics {
+  vpAfterPct: number;
+  vpMorgenPct: number;
+  vpCostPct: number;
+  entryCount: number;
+  hasEdits: boolean;
+  freeBudgetPct: number;
+}
+
 function VotePlanSection(props: {
   plan: VotePlanResponse | null;
   loading: boolean;
@@ -2101,12 +2349,16 @@ function VotePlanSection(props: {
   session: AuthSession;
   onGenerate: () => void;
   onExecuteSingle: (target: { author: string; permlink: string; weightBps: number }) => Promise<{ transactionId: string }>;
+  onMetricsChange?: (m: LivePlanMetrics) => void;
+  additionalCandidates?: VotePlanEntry[];
 }) {
   const [phase, setPhase]           = useState<PlanPhase>("idle");
   const [confirmed, setConfirmed]   = useState(false);
   const [execLog, setExecLog]       = useState<VoteLogEntry[]>([]);
   const [execIndex, setExecIndex]   = useState(0);
   const [aborted, setAborted]       = useState(false);
+  const [overrides, setOverrides]   = useState<Map<string, number>>(new Map());
+  const [additions, setAdditions]   = useState<VotePlanEntry[]>([]);  // manuell hinzugefügte Kandidaten
 
   const chipBtn = {
     background: "#f0f5f7", border: "1px solid #dde8ed", borderRadius: "6px",
@@ -2121,13 +2373,86 @@ function VotePlanSection(props: {
   const entries = plan?.plan ?? [];
   const sustainColor = { sustainable: "#16a34a", aggressive: "#d97706", critical: "#dc2626" }[plan?.summary.sustainability ?? "sustainable"];
 
-  // Transition to "generated" whenever a new plan arrives (reset confirms)
+  // ── Inline weight editor + additions helpers ─────────────────────────────
+  const MANA_DIV = 5_000; // weight_bps / 5000 = VP cost %
+
+  // Base plan entries with override weights applied
+  const effectiveEntries = entries.map(e => {
+    const key = `${e.author}/${e.permlink}`;
+    const bps = overrides.get(key) ?? e.suggestedWeightBps;
+    return { ...e, suggestedWeightBps: bps, suggestedWeightPct: Math.round(bps / 100 * 10) / 10,
+      expectedVoteUsd: Math.round((bps / 10_000) * (plan?.summary.currentVpPct ?? 0) / 100 * 10_000) / 10_000 };
+  });
+
+  // Manually added entries (also support overrides)
+  const additionEntries = additions.map(e => {
+    const key = `${e.author}/${e.permlink}`;
+    const bps = overrides.get(key) ?? e.suggestedWeightBps;
+    return { ...e, suggestedWeightBps: bps, suggestedWeightPct: Math.round(bps / 100 * 10) / 10,
+      expectedVoteUsd: Math.round((bps / 10_000) * (plan?.summary.currentVpPct ?? 0) / 100 * 10_000) / 10_000 };
+  });
+
+  // Full plan = base + added
+  const allPlanEntries = [...effectiveEntries, ...additionEntries];
+
+  const vpNowPct     = plan?.summary.currentVpPct ?? 0;
+  const origVpCost   = entries.reduce((s, e) => s + e.suggestedWeightBps / MANA_DIV, 0);
+  const effVpCost    = allPlanEntries.reduce((s, e) => s + e.suggestedWeightBps / MANA_DIV, 0);
+  const origVpMorgen = Math.min(100, Math.round((vpNowPct - origVpCost + 20) * 10) / 10);
+  const effVpMorgen  = Math.min(100, Math.round((vpNowPct - effVpCost  + 20) * 10) / 10);
+  const savedVpPct   = Math.round((origVpCost - effVpCost) * 100) / 100;
+  const hasEdits     = overrides.size > 0 || additions.length > 0;
+
+  // Which additional candidates actually fit in the remaining budget?
+  const dynamicBudget  = plan?.report.dynamicBudgetPct ?? 0;
+  const addedKeys      = new Set(additions.map(e => `${e.author}/${e.permlink}`));
+  let remainBudget     = Math.max(0, dynamicBudget - effVpCost);
+  const fittingCandidates: VotePlanEntry[] = [];
+  for (const c of (props.additionalCandidates ?? [])) {
+    const key = `${c.author}/${c.permlink}`;
+    if (addedKeys.has(key)) continue; // already added
+    const cost = c.suggestedWeightBps / MANA_DIV;
+    if (cost <= remainBudget + 0.001) {  // small tolerance for float rounding
+      fittingCandidates.push(c);
+      remainBudget -= cost;
+    }
+  }
+  const addlPossible = fittingCandidates.length;
+
+  function adjustWeight(key: string, deltaBps: number) {
+    const entry = entries.find(e => `${e.author}/${e.permlink}` === key);
+    if (!entry) return;
+    const current = overrides.get(key) ?? entry.suggestedWeightBps;
+    const next = Math.max(500, Math.min(10_000, current + deltaBps));
+    setOverrides(prev => new Map(prev).set(key, next));
+  }
+  function resetWeight(key: string) {
+    setOverrides(prev => { const m = new Map(prev); m.delete(key); return m; });
+  }
+
+  // Transition to "generated" whenever a new plan arrives (reset confirms + overrides)
   useEffect(() => {
     if (plan !== null) {
       setPhase("generated");
       setConfirmed(false); setExecLog([]); setExecIndex(0); setAborted(false);
+      setOverrides(new Map());
+      setAdditions([]);
     }
   }, [plan]);
+
+  // Report live metrics upward — only when a plan exists (avoid showing 0%/20% before first plan)
+  useEffect(() => {
+    if (!props.onMetricsChange || !plan) return;
+    const freeBudget = Math.max(0, Math.round((plan.report.dynamicBudgetPct - effVpCost) * 100) / 100);
+    props.onMetricsChange({
+      vpAfterPct:    Math.max(0, Math.round((vpNowPct - effVpCost) * 10) / 10),
+      vpMorgenPct:   effVpMorgen,
+      vpCostPct:     Math.round(effVpCost * 100) / 100,
+      entryCount:    effectiveEntries.length,
+      hasEdits,
+      freeBudgetPct: freeBudget,
+    });
+  }, [overrides, plan]);
 
   function reset() {
     setPhase(plan ? "generated" : "idle");
@@ -2135,16 +2460,16 @@ function VotePlanSection(props: {
   }
 
   async function startExecution() {
-    if (!confirmed || entries.length === 0) return;
+    if (!confirmed || allPlanEntries.length === 0) return;
     setPhase("executing");
     setExecLog([]);
     setAborted(false);
     const log: VoteLogEntry[] = [];
 
-    for (let i = 0; i < entries.length; i++) {
+    for (let i = 0; i < allPlanEntries.length; i++) {
       if (aborted) break;
       setExecIndex(i);
-      const e = entries[i];
+      const e = allPlanEntries[i];
       try {
         // Direct call — throws VoteBroadcastError on any failure
         const result = await props.onExecuteSingle({
@@ -2187,22 +2512,25 @@ function VotePlanSection(props: {
   return (
     <div>
       {/* ── Header ─────────────────────────────────── */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.5rem", marginBottom: "0.75rem" }}>
-        <p style={sectionLabel}>
-          🗳 Vote-Plan
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" as const, gap: "0.65rem", marginBottom: "1rem" }}>
+        <div>
+          <p style={{ color: "#607078", fontSize: "0.72rem", textTransform: "uppercase" as const, letterSpacing: "0.5px", margin: "0 0 0.15rem", fontWeight: 600 }}>🗳 Vote-Plan</p>
           {phase !== "idle" && plan && (
-            <span style={{ color: "#8fa4b0", fontWeight: 400, textTransform: "none", marginLeft: "0.5rem" }}>
-              {plan.summary.totalPosts} Posts · VP {plan.summary.currentVpPct.toFixed(1)}% → <span style={{ color: sustainColor }}>{plan.summary.estimatedVpAfterPct.toFixed(1)}%</span>
-            </span>
+            <p style={{ color: "#17202a", fontSize: "0.88rem", fontWeight: 700, margin: 0 }}>
+              {allPlanEntries.length} {allPlanEntries.length === 1 ? "Vote" : "Votes"} im Plan{additions.length > 0 ? ` (+${additions.length} hinzugefügt)` : ""}
+              <span style={{ color: "#8fa4b0", fontWeight: 400, marginLeft: "0.5rem", fontSize: "0.78rem" }}>
+                VP {plan.summary.currentVpPct.toFixed(1)}% → <span style={{ color: sustainColor }}>{plan.summary.estimatedVpAfterPct.toFixed(1)}%</span>
+              </span>
+            </p>
           )}
-        </p>
+        </div>
         <div style={{ display: "flex", gap: "0.4rem" }}>
           {(phase === "generated" || phase === "idle") && (
             <button
-              style={{ ...chipBtn, background: "#2563eb14", borderColor: "#2563eb", color: "#2563eb", fontWeight: 600 }}
+              style={{ background: "#2563eb", border: "none", borderRadius: "8px", color: "#fff", cursor: "pointer", fontSize: "0.88rem", fontWeight: 700, padding: "0.5rem 1.1rem" }}
               type="button" disabled={props.loading} onClick={() => { props.onGenerate(); setPhase("idle"); }}
             >
-              {props.loading ? "Generiere..." : plan ? "Plan aktualisieren" : "Vote-Plan generieren"}
+              {props.loading ? "Generiere..." : plan ? "↻ Plan aktualisieren" : "Plan generieren"}
             </button>
           )}
         </div>
@@ -2229,73 +2557,133 @@ function VotePlanSection(props: {
                 🔍 Dry-Run-Ansicht — noch keine Votes gesendet. Überprüfe den Plan und bestätige im nächsten Schritt.
               </div>
 
-              {/* Constraint report */}
-              {plan?.report && <ConstraintBadge report={plan.report} />}
+              {/* Recovery banner */}
+              {plan?.report && <RecoveryBanner report={plan.report} />}
 
-              {/* Plan table */}
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem", marginBottom: "0.75rem" }}>
-                {entries.map(e => {
+              {/* Transparenz: gefunden vs. im Plan */}
+              {plan?.report && plan.report.excludedVotes > 0 && (
+                <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "0.7rem 1rem", marginBottom: "0.75rem", display: "flex", alignItems: "flex-start", gap: "0.75rem" }}>
+                  <span style={{ fontSize: "1.1rem", flexShrink: 0 }}>💡</span>
+                  <div>
+                    <div style={{ color: "#1e293b", fontWeight: 700, fontSize: "0.85rem", marginBottom: "0.15rem" }}>
+                      {entries.length} im Plan · {plan.report.excludedVotes} ausgeschlossen
+                    </div>
+                    <div style={{ color: "#64748b", fontSize: "0.78rem", lineHeight: 1.5 }}>
+                      Budget heute: {plan.report.dynamicBudgetPct.toFixed(1)}% VP · Gewichte reduzieren (−) schafft Platz für weitere Votes.
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Live-Impact wenn Gewichte editiert wurden */}
+              {hasEdits && (
+                <div style={{ background: savedVpPct > 0 ? "#f0fdf4" : "#fef2f2", border: `1.5px solid ${savedVpPct > 0 ? "#86efac" : "#fca5a5"}`, borderRadius: "12px", padding: "0.85rem 1.1rem", marginBottom: "0.75rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "1.25rem", flexWrap: "wrap" as const, marginBottom: "0.4rem" }}>
+                    <span style={{ color: savedVpPct > 0 ? "#15803d" : "#dc2626", fontSize: "0.9rem", fontWeight: 800 }}>
+                      {savedVpPct > 0 ? `✓ ${savedVpPct.toFixed(2)}% VP gespart` : `+${Math.abs(savedVpPct).toFixed(2)}% VP zusätzlich`}
+                    </span>
+                    <span style={{ color: "#64748b", fontSize: "0.82rem" }}>
+                      VP morgen: <b style={{ color: origVpMorgen >= 80 ? "#15803d" : "#d97706" }}>{origVpMorgen.toFixed(1)}%</b>
+                      {" → "}<b style={{ color: effVpMorgen >= 80 ? "#15803d" : "#d97706", fontSize: "0.95rem" }}>{effVpMorgen.toFixed(1)}%</b>
+                    </span>
+                    {addlPossible > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => setAdditions(prev => {
+                          const alreadyKeys = new Set([...prev, ...entries].map(x => `${x.author}/${x.permlink}`));
+                          const toAdd = fittingCandidates.filter(c => !alreadyKeys.has(`${c.author}/${c.permlink}`));
+                          return [...prev, ...toAdd];
+                        })}
+                        style={{ background: "#dbeafe", border: "1.5px solid #3b82f6", borderRadius: "8px", color: "#1d4ed8", cursor: "pointer", fontSize: "0.82rem", fontWeight: 700, padding: "0.25rem 0.75rem" }}
+                      >
+                        + {addlPossible} weitere Vote{addlPossible !== 1 ? "s" : ""} hinzufügen
+                      </button>
+                    ) : additions.length > 0 || props.additionalCandidates?.length === 0 ? null : (
+                      <span style={{ color: "#94a3b8", fontSize: "0.78rem" }}>Keine weiteren passenden Kandidaten</span>
+                    )}
+                    {plan?.report.dynamicBudgetPct !== undefined && (
+                      <span style={{ color: "#64748b", fontSize: "0.78rem" }}>
+                        Freies Budget: <b style={{ color: "#0369a1" }}>{Math.max(0, plan.report.dynamicBudgetPct - effVpCost).toFixed(2)}% VP</b>
+                      </span>
+                    )}
+                    <button onClick={() => { setOverrides(new Map()); setAdditions([]); }} style={{ marginLeft: "auto", background: "none", border: "1px solid #94a3b8", borderRadius: "6px", color: "#64748b", cursor: "pointer", fontSize: "0.75rem", padding: "0.2rem 0.6rem" }}>↩ Alles zurücksetzen</button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Plan-Karten mit Inline-Controls ── */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", marginBottom: "0.75rem" }}>
+                {allPlanEntries.map(e => {
+                  const key = `${e.author}/${e.permlink}`;
                   const color = PLAN_CATEGORY_COLOR[e.category] ?? "#607078";
-                  const icon  = PLAN_CATEGORY_ICON[e.category] ?? "⚪";
+                  const isAdded   = addedKeys.has(key);
+                  const isEdited  = overrides.has(key);
+                  const origBps   = isAdded
+                    ? (additions.find(x => `${x.author}/${x.permlink}` === key)?.suggestedWeightBps ?? e.suggestedWeightBps)
+                    : (entries.find(x => `${x.author}/${x.permlink}` === key)?.suggestedWeightBps ?? e.suggestedWeightBps);
+                  const scoreBg    = e.postScore >= 80 ? "#dcfce7" : e.postScore >= 50 ? "#fef9c3" : "#f0f5f7";
+                  const scoreColor = e.postScore >= 80 ? "#15803d" : e.postScore >= 50 ? "#a16207" : "#607078";
                   return (
-                    <div key={`${e.author}/${e.permlink}`} style={{
-                      background: "#f0f5f7",
-                      border: `1px solid ${e.warning ? "#f0a50055" : "#c5d3da"}`,
-                      borderLeft: `3px solid ${color}`,
-                      borderRadius: "5px", padding: "0.5rem 0.75rem",
-                      display: "flex", gap: "0.75rem", alignItems: "flex-start",
+                    <div key={key} style={{
+                      background: isAdded ? "#f0fdf4" : isEdited ? "#f8faff" : "#ffffff",
+                      border: `1px solid ${isAdded ? "#86efac" : isEdited ? "#93c5fd" : e.warning ? "#fde68a" : "#e5e7eb"}`,
+                      borderLeft: `4px solid ${isAdded ? "#16a34a" : color}`,
+                      borderRadius: "10px", padding: "0.65rem 0.85rem",
+                      display: "flex", gap: "0.75rem", alignItems: "center",
                     }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap" }}>
-                          <span>{icon}</span>
-                          <span style={{ color: "#2563eb", fontWeight: 600, fontSize: "0.85rem" }}>@{e.author}</span>
-                          <span style={{ color: "#607078", fontSize: "0.73rem" }}>· {formatAge(e.ageMinutes)}</span>
-                          {/* Remaining reward window */}
-                          <span style={{ color: e.remainingHours < 24 ? "#d97706" : "#8fa4b0", fontSize: "0.71rem" }}>
-                            · {e.remainingHours.toFixed(0)}h verbleibend
-                          </span>
-                          {/* Post-score badge */}
-                          <span style={{
-                            background: e.postScore >= 80 ? "#1b4332" : e.postScore >= 50 ? "#2d2a0e" : "#dde8ed",
-                            color:      e.postScore >= 80 ? "#16a34a" : e.postScore >= 50 ? "#d97706" : "#607078",
-                            border:     `1px solid ${e.postScore >= 80 ? "#3fb95055" : "#c5d3da"}`,
-                            borderRadius: "3px", padding: "0 0.35rem", fontSize: "0.68rem", fontWeight: 600,
-                          }}>
-                            Score {e.postScore}
-                          </span>
-                        </div>
-                        <p style={{ color: "#2d3a42", fontSize: "0.79rem", margin: "0.15rem 0 0.1rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "400px" }}>
-                          {e.title}
-                        </p>
-                        <p style={{ color: "#607078", fontSize: "0.71rem", margin: "0 0 0.1rem", fontFamily: "monospace" }}>
-                          @{e.author}/{e.permlink}
-                        </p>
-                        <p style={{ color: "#607078", fontSize: "0.71rem", margin: 0 }}>{e.reasons.join(" · ")}</p>
-                        {e.warning && (
-                          <p style={{ color: "#d97706", fontSize: "0.72rem", margin: "0.15rem 0 0", fontWeight: 600 }}>{e.warning}</p>
-                        )}
+                      {/* Score-Badge (hinzugefügte: grünes +) */}
+                      <div style={{ flexShrink: 0, width: "40px", height: "40px", borderRadius: "9px", background: isAdded ? "#dcfce7" : scoreBg, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column" as const, position: "relative" as const }}>
+                        {isAdded && <span style={{ position: "absolute" as const, top: "-5px", right: "-5px", background: "#16a34a", color: "#fff", borderRadius: "50%", width: "14px", height: "14px", fontSize: "0.65rem", fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>+</span>}
+                        <span style={{ color: isAdded ? "#15803d" : scoreColor, fontSize: "0.95rem", fontWeight: 900, lineHeight: 1 }}>{e.postScore}</span>
+                        <span style={{ color: isAdded ? "#15803d" : scoreColor, fontSize: "0.52rem", fontWeight: 700, opacity: 0.6 }}>score</span>
                       </div>
-                      <div style={{ textAlign: "right", flexShrink: 0, minWidth: "70px" }}>
-                        <b style={{ color: "#17202a", fontSize: "1rem" }}>{e.suggestedWeightPct}%</b>
-                        {e.expectedVoteUsd > 0 && <div style={{ color: "#607078", fontSize: "0.72rem" }}>~${e.expectedVoteUsd.toFixed(4)}</div>}
+
+                      {/* Titel + Metadaten */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ color: "#111827", fontSize: "0.91rem", fontWeight: 700, margin: "0 0 0.18rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
+                          {e.title || `${e.author}/${e.permlink}`}
+                          {isAdded && <span style={{ marginLeft: "0.5rem", background: "#dcfce7", color: "#15803d", borderRadius: "4px", padding: "0.05rem 0.35rem", fontSize: "0.65rem", fontWeight: 700 }}>hinzugefügt</span>}
+                        </p>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.73rem", color: "#9ca3af" }}>
+                          <span style={{ color: "#2563eb", fontWeight: 600 }}>@{e.author}</span>
+                          <span>·</span><span>{formatAge(e.ageMinutes)}</span>
+                          {e.remainingHours < 48 && <><span>·</span><span style={{ color: e.remainingHours < 24 ? "#d97706" : "#9ca3af" }}>{e.remainingHours.toFixed(0)}h</span></>}
+                        </div>
+                      </div>
+
+                      {/* Inline-Gewichts-Editor */}
+                      <div style={{ flexShrink: 0, display: "flex", flexDirection: "column" as const, alignItems: "flex-end", gap: "0.25rem", minWidth: "90px" }}>
+                        {/* Stepper */}
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                          <button onClick={() => adjustWeight(key, -500)} style={{ width: "26px", height: "26px", borderRadius: "7px", background: "#f1f5f9", border: "1px solid #e2e8f0", color: "#475569", cursor: "pointer", fontSize: "1.05rem", lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700 }}>−</button>
+                          <span style={{ color: isEdited ? "#2563eb" : color, fontSize: "1.15rem", fontWeight: 900, minWidth: "46px", textAlign: "center" as const }}>{e.suggestedWeightPct}%</span>
+                          <button onClick={() => adjustWeight(key, +500)} style={{ width: "26px", height: "26px", borderRadius: "7px", background: "#f1f5f9", border: "1px solid #e2e8f0", color: "#475569", cursor: "pointer", fontSize: "1.05rem", lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700 }}>+</button>
+                        </div>
+                        {/* VP-Kosten pro Vote */}
+                        <div style={{ textAlign: "center" as const, fontSize: "0.7rem", color: isEdited ? "#2563eb" : "#9ca3af" }}>
+                          VP-Kosten: {(e.suggestedWeightBps / 5000).toFixed(2)}%
+                        </div>
+                        {/* USD-Wert + Reset */}
+                        <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+                          {e.expectedVoteUsd > 0 && <span style={{ color: "#9ca3af", fontSize: "0.67rem" }}>≈${e.expectedVoteUsd.toFixed(4)}</span>}
+                          {isEdited && (
+                            <button onClick={() => resetWeight(key)} style={{ background: "none", border: "none", color: "#93c5fd", cursor: "pointer", fontSize: "0.65rem", padding: 0 }}>
+                              ↩ {(origBps / 100).toFixed(1)}%
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
                 })}
               </div>
 
-              {plan?.summary.skippedCategories && plan.summary.skippedCategories.length > 0 && (
-                <p style={{ color: "#d97706", fontSize: "0.78rem", margin: "0 0 0.5rem" }}>
-                  ⚠ VP niedrig ({plan.summary.currentVpPct.toFixed(1)}%) — übersprungen: {plan.summary.skippedCategories.join(", ")}
-                </p>
-              )}
-
               <button
-                style={{ ...chipBtn, background: "#f0a50022", borderColor: "#d97706", color: "#d97706", fontWeight: 600 }}
+                style={{ background: "#d97706", border: "none", borderRadius: "10px", color: "#fff", cursor: "pointer", fontSize: "0.92rem", fontWeight: 800, padding: "0.65rem 1.4rem" }}
                 type="button"
                 onClick={() => { setPhase("confirming"); setConfirmed(false); }}
               >
-                Weiter → Bestätigung ({entries.length} Votes)
+                {allPlanEntries.length} Votes bestätigen →
               </button>
             </>
           )}
@@ -2306,7 +2694,7 @@ function VotePlanSection(props: {
       {phase === "confirming" && plan && (
         <div style={{ background: "#ffffff", border: "1px solid #f0a500", borderRadius: "6px", padding: "1rem" }}>
           <p style={{ color: "#d97706", fontWeight: 700, margin: "0 0 0.75rem", fontSize: "0.9rem" }}>
-            ⚠ Bestätigung erforderlich — {entries.length} Votes werden sequenziell gesendet
+            ⚠ Bestätigung erforderlich — {allPlanEntries.length} Votes werden sequenziell gesendet
           </p>
 
           <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", fontSize: "0.82rem", marginBottom: "0.75rem" }}>
@@ -2339,7 +2727,7 @@ function VotePlanSection(props: {
               disabled={!confirmed}
               onClick={() => void startExecution()}
             >
-              Jetzt {entries.length} Votes senden
+              Jetzt {allPlanEntries.length} Votes senden
             </button>
             <button style={chipBtn} type="button" onClick={reset}>Zurück</button>
           </div>
@@ -2439,10 +2827,10 @@ function OpenVoteOpportunities(props: {
   const avgWeightPct = totalOpen > 0
     ? Math.round(allEligible.reduce((s, t) => s + t.weightBps, 0) / totalOpen / 100 * 10) / 10
     : 0;
-  const currentVpBps  = props.accountSnapshot?.votingPowerBps ?? 10000;
-  const totalSpendBps = allEligible.reduce((s, t) => s + t.weightBps, 0);
-  const vpAfterBps    = Math.max(0, currentVpBps - totalSpendBps);
-  const vpAfterPct    = Math.round(vpAfterBps / 100 * 10) / 10;
+  // Steem: each vote costs weight_pct / 50 VP (100% vote = 2% VP, full regen in 5 days = 50 votes)
+  const currentVpPct   = (props.accountSnapshot?.votingPowerBps ?? 10000) / 100;
+  const totalVpCostPct = allEligible.reduce((s, t) => s + t.weightBps / 5_000, 0);
+  const vpAfterPct     = Math.max(0, Math.round((currentVpPct - totalVpCostPct) * 10) / 10);
 
   async function executePreview() {
     if (!preview || preview.length === 0) return;
@@ -2465,41 +2853,44 @@ function OpenVoteOpportunities(props: {
 
   return (
     <div>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.5rem", marginBottom: "0.75rem" }}>
-        <div>
-          <p style={sectionLabel}>
-            Offene Votes
-            {props.opportunities !== null && totalOpen > 0 && (
-              <span style={{ color: "#d97706", fontWeight: 400, textTransform: "none", marginLeft: "0.5rem" }}>
-                {totalOpen} offen
-              </span>
-            )}
-            {props.opportunities !== null && totalOpen === 0 && (
-              <span style={{ color: "#16a34a", fontWeight: 400, textTransform: "none", marginLeft: "0.5rem" }}>
-                ✓ Alles gevoted
-              </span>
-            )}
-          </p>
+      {/* KPI-Header */}
+      <div style={{ display: "flex", alignItems: "center", gap: "1.5rem", marginBottom: "1rem", flexWrap: "wrap" as const }}>
+        {/* Große Kennzahl */}
+        <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem" }}>
+          <span style={{
+            fontSize: "3rem", fontWeight: 900, lineHeight: 1, letterSpacing: "-2px",
+            color: props.opportunities === null ? "#8fa4b0"
+              : totalOpen > 0 ? "#d97706" : "#16a34a",
+          }}>
+            {props.opportunities === null ? "—" : totalOpen}
+          </span>
+          <span style={{ color: "#607078", fontSize: "0.85rem", fontWeight: 700 }}>
+            {props.opportunities === null ? "Noch nicht gescannt"
+              : totalOpen === 1 ? "offener Vote"
+              : totalOpen === 0 ? "✓ Alles gevoted"
+              : "offene Votes"}
+          </span>
         </div>
-        <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+
+        {/* Aktions-Buttons */}
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginLeft: "auto" }}>
           {totalOpen > 0 && props.opportunities !== null && (
             <button
-              style={{ ...chipBtn, background: "#2563eb14", borderColor: "#2563eb", color: "#2563eb", fontWeight: 600 }}
+              style={{ background: "#d97706", border: "none", borderRadius: "8px", color: "#fff", cursor: "pointer", fontSize: "0.88rem", fontWeight: 700, padding: "0.5rem 1.1rem" }}
               type="button"
               disabled={voting}
               onClick={() => { setPreview(allEligible); setVoteResult(null); }}
             >
-              Vote alle {totalOpen} offenen Posts
+              Alle {totalOpen} jetzt voten
             </button>
           )}
           <button
-            style={chipBtn}
+            style={{ background: "#f0f5f7", border: "1px solid #dde8ed", borderRadius: "7px", color: "#607078", cursor: "pointer", fontSize: "0.82rem", padding: "0.45rem 0.9rem", fontWeight: 600 }}
             type="button"
             disabled={props.loading}
             onClick={props.onRefresh}
           >
-            {props.loading ? "Lädt..." : props.opportunities === null ? "Jetzt prüfen" : "Aktualisieren"}
+            {props.loading ? "Scannt..." : props.opportunities === null ? "Jetzt scannen" : "↻ Aktualisieren"}
           </button>
         </div>
       </div>
@@ -2514,14 +2905,11 @@ function OpenVoteOpportunities(props: {
         </p>
       )}
 
-      {/* Scan Meta — author coverage overview */}
+      {/* Scan Meta — kompakt */}
       {props.meta && !props.loading && (
-        <div style={{ background: "#f0f5f7", border: "1px solid #30363d", borderRadius: "5px", padding: "0.6rem 0.75rem", marginBottom: "0.6rem", fontSize: "0.77rem" }}>
-          <div style={{ display: "flex", gap: "1.25rem", flexWrap: "wrap", color: "#607078", marginBottom: "0.35rem" }}>
-            <span>Autoren angefragt: <b style={{ color: "#17202a" }}>{props.meta.requestedAuthors}</b></span>
-            <span>Gescannt: <b style={{ color: "#17202a" }}>{props.meta.scannedAuthors}</b></span>
-            <span>Posts gefunden: <b style={{ color: "#17202a" }}>{props.meta.totalPosts}</b></span>
-            <span>Davon wählbar: <b style={{ color: props.meta.eligiblePosts > 0 ? "#16a34a" : "#607078" }}>{props.meta.eligiblePosts}</b></span>
+        <div style={{ background: "#f8fbfc", border: "1px solid #dde8ed", borderRadius: "8px", padding: "0.5rem 0.85rem", marginBottom: "0.75rem", fontSize: "0.73rem" }}>
+          <div style={{ display: "flex", gap: "1.25rem", flexWrap: "wrap" as const, color: "#8fa4b0" }}>
+            <span>{props.meta.scannedAuthors}/{props.meta.requestedAuthors} Autoren · {props.meta.totalPosts} Posts · <b style={{ color: props.meta.eligiblePosts > 0 ? "#16a34a" : "#8fa4b0" }}>{props.meta.eligiblePosts} wählbar</b></span>
           </div>
           {/* Per-author breakdown — highlight authors with 0 posts */}
           {(() => {
@@ -2547,54 +2935,70 @@ function OpenVoteOpportunities(props: {
 
       {/* Per-author groups */}
       {props.opportunities !== null && authorGroups.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.65rem" }}>
           {authorGroups.map(group => {
             const authorTargets = group.eligible.map(p => ({
               author: p.author, permlink: p.permlink, title: p.title, ageMinutes: p.ageMinutes,
               weightBps: Math.round(group.rule.maxWeightPct * 100), category: group.rule.category,
             }));
             const color = categoryColor[group.rule.category];
+            const hasOpen = group.eligible.length > 0;
             return (
               <div key={group.rule.username} style={{
-                background: "#f0f5f7", border: "1px solid #30363d",
-                borderLeft: `3px solid ${group.eligible.length > 0 ? color : "#c5d3da"}`,
-                borderRadius: "5px", padding: "0.6rem 0.75rem",
+                background: hasOpen ? "#fffbf0" : "#f8fbfc",
+                border: `1px solid ${hasOpen ? "#f59e0b44" : "#dde8ed"}`,
+                borderLeft: `4px solid ${hasOpen ? color : "#c5d3da"}`,
+                borderRadius: "10px", padding: "0.85rem 1rem",
               }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.4rem" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                    <span style={{ color: "#2563eb", fontWeight: 500, fontSize: "0.87rem" }}>@{group.rule.username}</span>
-                    <span style={{ color: color, fontSize: "0.73rem" }}>{categoryLabel[group.rule.category]}</span>
-                    <span style={{ color: "#607078", fontSize: "0.75rem" }}>
-                      Posts: {group.posts.length} · Gevoted: {group.voted.length} · Offen: <b style={{ color: group.eligible.length > 0 ? "#d97706" : "#16a34a" }}>{group.eligible.length}</b>
+                {/* Autor-Header */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" as const, gap: "0.5rem", marginBottom: group.eligible.length > 0 ? "0.65rem" : 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" as const }}>
+                    <span style={{ color: "#1d4ed8", fontWeight: 800, fontSize: "1.05rem" }}>@{group.rule.username}</span>
+                    <span style={{ background: color + "18", color, border: `1px solid ${color}30`, borderRadius: "5px", padding: "0.1rem 0.45rem", fontSize: "0.72rem", fontWeight: 700 }}>
+                      {categoryLabel[group.rule.category]}
                     </span>
+                    {/* Offene Votes Badge */}
+                    {hasOpen ? (
+                      <span style={{ background: "#fef3c7", color: "#92400e", border: "1px solid #f59e0b44", borderRadius: "6px", padding: "0.15rem 0.55rem", fontSize: "0.8rem", fontWeight: 800 }}>
+                        {group.eligible.length} offen
+                      </span>
+                    ) : group.voted.length > 0 ? (
+                      <span style={{ color: "#16a34a", fontSize: "0.78rem", fontWeight: 600 }}>✓ gevoted</span>
+                    ) : null}
                     {group.posts.length > 0 && (
-                      <span style={{ color: "#607078", fontSize: "0.75rem" }}>
-                        Letzter: {formatAge(Math.min(...group.posts.map(p => p.ageMinutes)))}
+                      <span style={{ color: "#8fa4b0", fontSize: "0.73rem" }}>
+                        {formatAge(Math.min(...group.posts.map(p => p.ageMinutes)))} · {group.rule.maxWeightPct}%
                       </span>
                     )}
                   </div>
-                  {group.eligible.length > 0 && (
+                  {hasOpen && (
                     <button
-                      style={{ ...chipBtn, borderColor: color + "80", color, fontSize: "0.75rem", padding: "0.2rem 0.5rem" }}
+                      style={{ background: color + "15", border: `1px solid ${color}50`, borderRadius: "7px", color, cursor: "pointer", fontSize: "0.82rem", fontWeight: 700, padding: "0.35rem 0.8rem" }}
                       type="button"
                       disabled={voting}
                       onClick={() => { setPreview(authorTargets); setVoteResult(null); }}
                     >
-                      Vote {group.eligible.length} offen
+                      Vote {group.eligible.length === 1 ? "diesen Post" : `${group.eligible.length} Posts`}
                     </button>
                   )}
                 </div>
 
-                {/* Eligible posts */}
+                {/* Eligible posts — Post-Titel prominent */}
                 {group.eligible.length > 0 && (
-                  <div style={{ marginTop: "0.4rem", paddingLeft: "0.5rem", borderLeft: "2px solid #21262d" }}>
+                  <div style={{ display: "flex", flexDirection: "column" as const, gap: "0.4rem" }}>
                     {group.eligible.map(p => (
-                      <div key={p.permlink} style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.2rem 0", fontSize: "0.78rem" }}>
-                        <span style={{ color: "#2d3a42", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          ↳ {p.title || `${p.author}/${p.permlink}`}
-                        </span>
-                        <span style={{ color: "#607078", whiteSpace: "nowrap" }}>{formatAge(p.ageMinutes)}</span>
-                        <span style={{ color: color, whiteSpace: "nowrap", fontWeight: 600 }}>{group.rule.maxWeightPct}%</span>
+                      <div key={p.permlink} style={{
+                        background: "#ffffff", border: "1px solid #f0d080", borderRadius: "7px",
+                        padding: "0.55rem 0.75rem",
+                      }}>
+                        <div style={{ color: "#17202a", fontSize: "0.92rem", fontWeight: 700, marginBottom: "0.2rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
+                          {p.title || p.permlink}
+                        </div>
+                        <div style={{ display: "flex", gap: "0.75rem", fontSize: "0.73rem", color: "#8fa4b0", flexWrap: "wrap" as const }}>
+                          <span>{formatAge(p.ageMinutes)}</span>
+                          {p.remainingHours > 0 && <span style={{ color: p.remainingHours < 24 ? "#d97706" : "#8fa4b0" }}>{p.remainingHours.toFixed(0)}h verbleibend</span>}
+                          <span style={{ color: p.postScore >= 80 ? "#16a34a" : p.postScore >= 50 ? "#d97706" : "#8fa4b0", fontWeight: 600 }}>Score {p.postScore}</span>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -2614,7 +3018,7 @@ function OpenVoteOpportunities(props: {
           <div style={{ color: "#607078", fontSize: "0.8rem", marginBottom: "0.6rem", display: "flex", gap: "1.25rem", flexWrap: "wrap" }}>
             <span>Autoren: <b style={{ color: "#17202a" }}>{new Set(preview.map(t => t.author)).size}</b></span>
             <span>Ø Gewicht: <b style={{ color: "#17202a" }}>{avgWeightPct}%</b></span>
-            <span>Aktuelle VP: <b style={{ color: "#17202a" }}>{Math.round(currentVpBps / 100 * 10) / 10}%</b></span>
+            <span>Aktuelle VP: <b style={{ color: "#17202a" }}>{currentVpPct.toFixed(1)}%</b></span>
             <span>VP danach: <b style={{ color: vpAfterPct < 75 ? "#dc2626" : vpAfterPct < 85 ? "#d97706" : "#16a34a" }}>{vpAfterPct}%</b></span>
           </div>
           <div style={{ marginBottom: "0.75rem", maxHeight: "160px", overflowY: "auto" }}>

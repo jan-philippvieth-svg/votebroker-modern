@@ -546,14 +546,14 @@ function VpGauge({ pct, sp, voteUsd }: { pct: number; sp?: number; voteUsd?: num
   );
 }
 
-// ── Technical Strip (compact, at the bottom) ──────────────────────────────────
+// ── Operative KPI Row (Cockpit — direkt nach Hero) ────────────────────────────
 
-function TechnicalStrip({ snapshot, snapshotLoading, snapshotRefreshedAt, opportunities, opportunitiesMeta, recentVotes, curationProfile, strategyRules, onRefresh, onLoadOpps, onTabChange, onGenerateVotes, t }: {
+function OperativeKPIRow({ snapshot, snapshotLoading, snapshotRefreshedAt, opportunities, opportunitiesMeta, recentVotes, curationProfile, strategyRules, onRefresh, onLoadOpps, onTabChange, t }: {
   snapshot: SteemAccountSnapshot|null; snapshotLoading: boolean; snapshotRefreshedAt?: Date;
   opportunities: PostOpportunity[]|null; opportunitiesMeta: OpportunitiesMeta|null;
   recentVotes: RecentVote[]; curationProfile: CurationProfile|null; strategyRules: StrategyRuleLite[]|null;
   onRefresh?: ()=>void; onLoadOpps: ()=>void;
-  onTabChange:(tab:"dna"|"dashboard"|"community"|"billing")=>void; onGenerateVotes:()=>void;
+  onTabChange:(tab:"dna"|"dashboard"|"community"|"billing")=>void;
   t: ReturnType<typeof createTranslator>;
 }) {
   const vpPct   =snapshot?snapshot.votingPowerBps/100:null;
@@ -562,19 +562,19 @@ function TechnicalStrip({ snapshot, snapshotLoading, snapshotRefreshedAt, opport
   const sessUsd =recentVotes.reduce((s,v)=>s+v.weightPct/100*(snapshot?.currentVoteUsd??0),0);
 
   return (
-    <div style={{ display:"grid", gridTemplateColumns:"1.2fr 1fr 1fr 1fr", gap:"1rem" }}>
-      {/* VP compact */}
+    <div style={{ display:"grid", gridTemplateColumns:"1.2fr 1fr 1fr", gap:"1rem" }}>
+      {/* Voting Power */}
       <div style={card}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"0.6rem" }}>
-          <span style={{ color:C.dim, fontSize:"0.68rem", fontWeight:700, textTransform:"uppercase" as const, letterSpacing:"0.8px" }}>{t("secTechnical")}</span>
+          <span style={{ color:C.dim, fontSize:"0.68rem", fontWeight:700, textTransform:"uppercase" as const, letterSpacing:"0.8px" }}>{t("kpiVotingPower")}</span>
           {onRefresh&&<button type="button" onClick={onRefresh} disabled={snapshotLoading} style={{ background:"none", border:"none", cursor:"pointer", color:snapshotLoading?C.faint:C.muted, fontSize:"0.9rem", padding:0 }}>↻</button>}
         </div>
         {vpPct!==null?(
           <>
             <div style={{ display:"flex", alignItems:"baseline", gap:"0.4rem", marginBottom:"0.4rem" }}>
-              <span style={{ color:vpCol(vpPct), fontSize:"1.8rem", fontWeight:900, lineHeight:1 }}>{vpPct.toFixed(1)}%</span>
+              <span style={{ color:vpCol(vpPct), fontSize:"2.2rem", fontWeight:900, lineHeight:1, letterSpacing:"-1px" }}>{vpPct.toFixed(1)}%</span>
               <span style={{ color:C.faint, fontSize:"0.72rem" }}>VP</span>
-              {snapshot&&<span style={{ color:C.muted, fontSize:"0.72rem", marginLeft:"auto" }}>{fmtUsd(snapshot.currentVoteUsd)}/vote</span>}
+              {snapshot&&<span style={{ color:C.info, fontSize:"0.85rem", fontWeight:700, marginLeft:"auto" }}>{fmtUsd(snapshot.currentVoteUsd)}<span style={{ color:C.faint, fontSize:"0.65rem", fontWeight:400 }}>/vote</span></span>}
             </div>
             <div style={{ height:"6px", background:C.inner, borderRadius:"3px", overflow:"hidden", marginBottom:"0.35rem", border:`1px solid ${C.border}` }}>
               <div style={{ height:"100%", width:`${vpPct}%`, background:vpCol(vpPct), borderRadius:"3px", transition:"width 0.5s" }}/>
@@ -598,7 +598,7 @@ function TechnicalStrip({ snapshot, snapshotLoading, snapshotRefreshedAt, opport
         {snapshotRefreshedAt&&<div style={{ color:C.faint, fontSize:"0.6rem", marginTop:"0.25rem" }}>{fmtAge(snapshotRefreshedAt.toISOString(),t)}</div>}
       </div>
 
-      {/* Opportunities */}
+      {/* Offene Chancen */}
       <div style={{ ...card, cursor:"pointer" }} onClick={()=>{onLoadOpps();onTabChange("dna");}}>
         <p style={{ ...lbl, margin:"0 0 0.5rem" }}>{t("kpiOpenOpps")}</p>
         <div style={{ color:openOpps.length>0?C.warn:opportunities!==null?C.ok:C.muted, fontSize:"2.2rem", fontWeight:900, lineHeight:1, letterSpacing:"-1px", marginBottom:"0.4rem" }}>
@@ -612,7 +612,7 @@ function TechnicalStrip({ snapshot, snapshotLoading, snapshotRefreshedAt, opport
         </div>
       </div>
 
-      {/* Session */}
+      {/* Heutige Wirkung */}
       <div style={card}>
         <p style={{ ...lbl, margin:"0 0 0.5rem" }}>{t("kpiSessionImpact")}</p>
         <div style={{ color:recentVotes.length>0?C.ok:C.purple, fontSize:"2.2rem", fontWeight:900, lineHeight:1, letterSpacing:"-1px", marginBottom:"0.4rem" }}>
@@ -623,23 +623,35 @@ function TechnicalStrip({ snapshot, snapshotLoading, snapshotRefreshedAt, opport
           {curationProfile&&snapshot&&<div style={{ color:C.purple, marginTop:"2px" }}>~{fmtUsd(curationProfile.votesPerDay*30*snapshot.currentVoteUsd*avgW/100)}/mo est.</div>}
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* Quick Actions */}
-      <div style={card}>
-        <p style={{ ...lbl, margin:"0 0 0.65rem" }}>{t("secQuickActions")}</p>
-        <div style={{ display:"flex", flexDirection:"column" as const, gap:"0.4rem" }}>
-          {([
-            {icon:"🧬",label:t("btnVoteDna"), col:C.info,   fn:()=>onTabChange("dna")},
-            {icon:"🗳", label:t("btnVotePlan"),col:C.purple, fn:()=>{onTabChange("dna");onGenerateVotes();}},
-            {icon:"⚡", label:openOpps.length>0?`${t("btnOpportunities")} (${openOpps.length})`:t("btnScan"),col:openOpps.length>0?C.warn:C.muted,fn:()=>{onLoadOpps();onTabChange("dna");}},
-            {icon:"⚙", label:t("btnSettings"),col:C.ok,     fn:()=>onTabChange("billing")},
-          ] as const).map((a,i)=>(
-            <button key={i} type="button" onClick={a.fn} style={{ background:`${a.col}10`, border:`1px solid ${a.col}30`, borderRadius:"7px", padding:"0.4rem 0.6rem", cursor:"pointer", textAlign:"left" as const, display:"flex", alignItems:"center", gap:"0.4rem" }}>
-              <span style={{ fontSize:"0.85rem" }}>{a.icon}</span>
-              <span style={{ color:C.text, fontSize:"0.75rem", fontWeight:700 }}>{a.label}</span>
-            </button>
-          ))}
-        </div>
+// ── Quick Actions Card (unten) ─────────────────────────────────────────────────
+
+function QuickActionsCard({ opportunities, onLoadOpps, onTabChange, onGenerateVotes, t }: {
+  opportunities: PostOpportunity[]|null;
+  onLoadOpps: ()=>void;
+  onTabChange:(tab:"dna"|"dashboard"|"community"|"billing")=>void;
+  onGenerateVotes: ()=>void;
+  t: ReturnType<typeof createTranslator>;
+}) {
+  const openOpps=opportunities?.filter(p=>p.eligible)??[];
+  return (
+    <div style={{ ...card, maxWidth:"320px" }}>
+      <p style={{ ...lbl, margin:"0 0 0.65rem" }}>{t("secQuickActions")}</p>
+      <div style={{ display:"flex", flexDirection:"column" as const, gap:"0.4rem" }}>
+        {([
+          {icon:"🧬",label:t("btnVoteDna"), col:C.info,   fn:()=>onTabChange("dna")},
+          {icon:"🗳", label:t("btnVotePlan"),col:C.purple, fn:()=>{onTabChange("dna");onGenerateVotes();}},
+          {icon:"⚡", label:openOpps.length>0?`${t("btnOpportunities")} (${openOpps.length})`:t("btnScan"),col:openOpps.length>0?C.warn:C.muted,fn:()=>{onLoadOpps();onTabChange("dna");}},
+          {icon:"⚙", label:t("btnSettings"),col:C.ok,     fn:()=>onTabChange("billing")},
+        ] as const).map((a,i)=>(
+          <button key={i} type="button" onClick={a.fn} style={{ background:`${a.col}10`, border:`1px solid ${a.col}30`, borderRadius:"7px", padding:"0.4rem 0.6rem", cursor:"pointer", textAlign:"left" as const, display:"flex", alignItems:"center", gap:"0.4rem" }}>
+            <span style={{ fontSize:"0.85rem" }}>{a.icon}</span>
+            <span style={{ color:C.text, fontSize:"0.75rem", fontWeight:700 }}>{a.label}</span>
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -755,13 +767,16 @@ export function UserDashboard(props: {
         )
       }
 
-      {/* 2. Community Growth Chart */}
-      <CommunityGrowthChart
-        growth={growthData} growthLoading={growthLoading}
-        growthPeriod={growthPeriod} setGrowthPeriod={setGrowthPeriod} t={t}
+      {/* 2. Operative Kennzahlen — Cockpit */}
+      <OperativeKPIRow
+        snapshot={snapshot} snapshotLoading={props.snapshotLoading} snapshotRefreshedAt={props.snapshotRefreshedAt}
+        opportunities={opportunities} opportunitiesMeta={opportunitiesMeta}
+        recentVotes={recentVotes} curationProfile={curationProfile} strategyRules={strategyRules}
+        onRefresh={props.onRefreshSnapshot} onLoadOpps={props.onLoadOpportunities}
+        onTabChange={props.onTabChange} t={t}
       />
 
-      {/* 3. Journey | Relationships | Activity */}
+      {/* 3+4. Curator Journey | Beziehungen | Aktivität */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"1.5rem", alignItems:"start" }}>
         <div style={card}>
           <p style={lbl}>{t("secCuratorJourney")}</p>
@@ -783,17 +798,20 @@ export function UserDashboard(props: {
         </div>
       </div>
 
-      {/* 4. Author Strategy Grid */}
+      {/* 5. Wachstum */}
+      <CommunityGrowthChart
+        growth={growthData} growthLoading={growthLoading}
+        growthPeriod={growthPeriod} setGrowthPeriod={setGrowthPeriod} t={t}
+      />
+
+      {/* 6. Autorenliste */}
       {strategyRules!==null&&(
         <AuthorGrid rules={rules} openOpps={openOpps} snapshot={snapshot} dnaMap={dnaMap} onTabChange={props.onTabChange} t={t}/>
       )}
 
-      {/* 5. Technical Strip */}
-      <TechnicalStrip
-        snapshot={snapshot} snapshotLoading={props.snapshotLoading} snapshotRefreshedAt={props.snapshotRefreshedAt}
-        opportunities={opportunities} opportunitiesMeta={opportunitiesMeta}
-        recentVotes={recentVotes} curationProfile={curationProfile} strategyRules={strategyRules}
-        onRefresh={props.onRefreshSnapshot} onLoadOpps={props.onLoadOpportunities}
+      {/* 7. Aktionen */}
+      <QuickActionsCard
+        opportunities={opportunities} onLoadOpps={props.onLoadOpportunities}
         onTabChange={props.onTabChange} onGenerateVotes={props.onGenerateVotes} t={t}
       />
 

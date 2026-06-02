@@ -34,12 +34,13 @@ const constraintsSchema = z.object({
 });
 
 const generateSchema = z.object({
-  voterUsername:  z.string().min(1).max(64),
-  currentVpBps:   z.number().int().min(0).max(10_000),
-  currentVoteUsd: z.number().min(0).max(100),
-  targetVpPct:    z.number().min(50).max(100).optional(),
-  constraints:    constraintsSchema.optional(),
-  rules:          z.array(strategyRuleSchema).max(100),
+  voterUsername:       z.string().min(1).max(64),
+  currentVpBps:        z.number().int().min(0).max(10_000),
+  currentVoteUsd:      z.number().min(0).max(100),
+  targetVpPct:         z.number().min(50).max(100).optional(),
+  targetTomorrowVpPct: z.number().min(50).max(100).optional(), // VP floor target for next day
+  constraints:         constraintsSchema.optional(),
+  rules:               z.array(strategyRuleSchema).max(100),
 });
 
 // ── Vote plan types ───────────────────────────────────────────────────────────
@@ -83,131 +84,105 @@ interface VotePlanEntry {
 
 // Minimum meaningful vote — below this, skip rather than sending a dust vote
 const DUST_THRESHOLD_BPS = 1_000; // 10% minimum
+const DAILY_REGEN_PCT = 20;       // Steem VP regenerates 20 percentage-points per day
 
-type StopReason = "max_votes" | "max_spend" | "min_vp" | "none";
+// Minimum meaningful vote weight per category (in BPS)
+const CATEGORY_DUST_BPS: Record<string, number> = {
+  immer_voten:    5_000,  // 50%
+  lieblingsautor: 3_000,  // 30%
+  bevorzugt:      1_500,  // 15%
+  normal:         1_000,  // 10%
+  niedrig:          500,  // 5%
+};
+
+// Reduction order: lowest priority gets cut first
+const REDUCTION_ORDER: StrategyCategory[] = ["niedrig", "normal", "bevorzugt", "lieblingsautor", "immer_voten"];
+
+type StopReason = "max_votes" | "budget" | "none";
 
 interface ConstraintReport {
-  minVpPct:        number;
-  maxVotesPerRun:  number;
-  maxVpSpendPct:   number;
-  effectiveBudgetPct: number;  // actual allowed spend = min(maxVpSpendPct, currentVp - minVp)
-  includedVotes:   number;
-  excludedVotes:   number;     // candidates that existed but were cut by constraints
-  stoppedBy:       StopReason;
-  stoppedByLabel:  string;
-  vpAfterPlanPct:  number;
+  maxVotesPerRun:         number;
+  dynamicBudgetPct:       number;   // max spend while keeping tomorrow's VP at target
+  effectiveBudgetPct:     number;   // alias for backward-compat
+  maxVpSpendPct:          number;   // kept for backward-compat display
+  minVpPct:               number;   // kept for backward-compat display
+  includedVotes:          number;
+  excludedVotes:          number;
+  stoppedBy:              StopReason;
+  stoppedByLabel:         string;
+  vpAfterPlanPct:         number;
+  expectedTomorrowVpPct:  number;
+  recoveryMode:           boolean;  // true when currentVp < targetTomorrowVp
+  weightReductionPct:     number;   // % reduction applied to included votes (0 = none)
 }
 
 // ── Vote plan generation ──────────────────────────────────────────────────────
 
 function buildVotePlan(params: {
-  rules:          z.infer<typeof strategyRuleSchema>[];
-  posts:          Map<string, PostOpportunity[]>;
-  currentVpBps:   number;
-  targetVpPct:    number;
-  currentVoteUsd: number;
+  rules:               z.infer<typeof strategyRuleSchema>[];
+  posts:               Map<string, PostOpportunity[]>;
+  currentVpBps:        number;
+  targetVpPct:         number;   // legacy, kept for vpDelta context hints
+  targetTomorrowVpPct: number;   // VP floor target for tomorrow (default 80%)
+  currentVoteUsd:      number;
   constraints: {
-    minVpPct:       number;
     maxVotesPerRun: number;
-    maxVpSpendPct:  number;
+    minVpPct:       number;  // kept for compat
+    maxVpSpendPct:  number;  // kept for compat
   };
 }): { entries: VotePlanEntry[]; report: ConstraintReport } {
-  const currentVpPct    = params.currentVpBps / 100;
-  const { minVpPct, maxVotesPerRun, maxVpSpendPct } = params.constraints;
+  const currentVpPct = params.currentVpBps / 100;
+  const { maxVotesPerRun } = params.constraints;
+  const targetTomorrow = params.targetTomorrowVpPct;
 
-  // Effective budget = most restrictive of: explicit spend cap OR floor gap
-  const floorGap = Math.max(0, currentVpPct - minVpPct);
-  const effectiveBudgetPct = Math.min(maxVpSpendPct, floorGap);
+  // Dynamic budget: how much VP can be spent today while keeping tomorrow's VP at target.
+  // Steem regenerates 20 percentage-points per day.
+  const vpTomorrow       = Math.min(100, currentVpPct + DAILY_REGEN_PCT);
+  const dynamicBudgetPct = Math.max(0, vpTomorrow - targetTomorrow);
+  const recoveryMode     = currentVpPct < targetTomorrow;
+  const vpDelta          = currentVpPct - params.targetVpPct;
 
-  const vpDelta = currentVpPct - params.targetVpPct;
-
-  function adjustedWeightBps(rule: z.infer<typeof strategyRuleSchema>): number {
+  function fullWeightBps(rule: z.infer<typeof strategyRuleSchema>): number {
     const base = Math.round(rule.maxWeightPct * 100);
-    const min  = Math.max(Math.round(rule.minWeightPct * 100), DUST_THRESHOLD_BPS);
-
-    if (rule.category === "immer_voten") {
-      // Never scale down below 50% for always-vote authors
-      return Math.max(5_000, base);
-    }
-    if (vpDelta > 10 && rule.category === "niedrig") {
-      return Math.min(10_000, Math.round(base * 1.15));
-    }
-    if (vpDelta < -15) {
-      // VP significantly below target: scale down but never below dust threshold
-      const scale = Math.max(0.6, 1 + vpDelta / 80);
-      return Math.max(DUST_THRESHOLD_BPS, Math.round(base * scale));
-    }
-    return Math.max(DUST_THRESHOLD_BPS, base);
+    // immer_voten always gets at least 50%
+    if (rule.category === "immer_voten") return Math.max(5_000, base);
+    // Slight boost when VP is very high
+    if (vpDelta > 10 && rule.category === "niedrig") return Math.min(10_000, Math.round(base * 1.15));
+    return Math.max(CATEGORY_DUST_BPS[rule.category] ?? DUST_THRESHOLD_BPS, base);
   }
 
-  function isDustVote(weightBps: number, category: string): boolean {
-    // Skip entirely if weight is below the meaningful minimum for this category
-    const categoryMin: Record<string, number> = {
-      immer_voten:    5_000,
-      lieblingsautor: 3_000,
-      bevorzugt:      1_500,
-      normal:         1_000,
-      niedrig:          500,
-    };
-    return weightBps < (categoryMin[category] ?? DUST_THRESHOLD_BPS);
-  }
-
-  function buildReasons(rule: z.infer<typeof strategyRuleSchema>, post: PostOpportunity): string[] {
+  function buildReasons(rule: z.infer<typeof strategyRuleSchema>, post: PostOpportunity, reduced: boolean): string[] {
     const r: string[] = [CATEGORY_REASON[rule.category]];
-
-    // DNA-derived author reasons
-    if (rule.selectionReasons && rule.selectionReasons.length > 0) {
-      r.push(...rule.selectionReasons.slice(0, 2));
-    }
-
-    // Post-level curation context
+    if (rule.selectionReasons && rule.selectionReasons.length > 0) r.push(...rule.selectionReasons.slice(0, 2));
     if (post.postScore >= 90) r.push("Optimales Curation-Fenster (< 30 Min.)");
     else if (post.postScore >= 70) r.push(`Post ${post.ageMinutes < 1440 ? Math.round(post.ageMinutes / 60) + "h" : Math.round(post.ageMinutes / 1440) + "d"} alt — gutes Curation-Fenster`);
-
-    if (post.remainingHours < 24 && post.remainingHours > 0) {
-      r.push(`⚠ Nur noch ${post.remainingHours.toFixed(0)}h bis Auszahlung`);
-    }
-
-    // VP context
-    if (vpDelta > 10) r.push("VP-Überschuss — volles Gewicht verfügbar");
-    if (vpDelta < -10) r.push(`VP ${currentVpPct.toFixed(1)}% — Gewicht reduziert`);
-
+    if (post.remainingHours < 24 && post.remainingHours > 0) r.push(`⚠ Nur noch ${post.remainingHours.toFixed(0)}h bis Auszahlung`);
+    if (reduced) r.push(`VP ${currentVpPct.toFixed(1)}% — Recovery-Modus, Gewicht reduziert`);
+    else if (vpDelta > 10) r.push("VP-Überschuss — volles Gewicht verfügbar");
     return r;
   }
 
-  // 1. Per author: select the BEST eligible post (not all)
-  //    Ranking: postScore desc → remainingHours desc → ageMinutes asc
+  // ── 1. Build all candidates at full weight ─────────────────────────────────
   const allCandidates: VotePlanEntry[] = [];
 
   for (const rule of params.rules) {
     if (!rule.enabled || rule.category === "ignorieren") continue;
-
-    const posts   = params.posts.get(rule.username) ?? [];
-    const eligible = posts
-      .filter(p => p.eligible)
-      .sort((a, b) => {
-        // Primary: curation timing score (higher = better)
-        if (b.postScore !== a.postScore) return b.postScore - a.postScore;
-        // Secondary: more remaining time = better
-        if (b.remainingHours !== a.remainingHours) return b.remainingHours - a.remainingHours;
-        // Tertiary: newer post wins
-        return a.ageMinutes - b.ageMinutes;
-      });
-
-    // Pick top posts per author (score-sorted), limit by category priority:
-    // immer_voten/lieblingsautor: up to 3 posts · others: top 1
-    const maxPosts = (rule.category === "immer_voten" || rule.category === "lieblingsautor") ? 3 : 1;
-    const selected = eligible.slice(0, maxPosts);
+    const posts    = params.posts.get(rule.username) ?? [];
+    const eligible = posts.filter(p => p.eligible).sort((a, b) => {
+      if (b.postScore !== a.postScore) return b.postScore - a.postScore;
+      if (b.remainingHours !== a.remainingHours) return b.remainingHours - a.remainingHours;
+      return a.ageMinutes - b.ageMinutes;
+    });
+    const maxPosts  = (rule.category === "immer_voten" || rule.category === "lieblingsautor") ? 3 : 1;
+    const selected  = eligible.slice(0, maxPosts);
     if (selected.length === 0) continue;
 
-    const weightBps = adjustedWeightBps(rule);
-    const weightPct = Math.round(weightBps / 100 * 10) / 10;
-
-    // Skip dust votes — if weight is below meaningful minimum for this category, don't include
-    if (isDustVote(weightBps, rule.category)) continue;
+    const weightBps = fullWeightBps(rule);
+    // Drop if even the full weight is below the dust floor for this category
+    if (weightBps < (CATEGORY_DUST_BPS[rule.category] ?? DUST_THRESHOLD_BPS)) continue;
 
     for (const post of selected) {
-      const reasons = buildReasons(rule, post);
+      const reasons = buildReasons(rule, post, false);
       allCandidates.push({
         author:             post.author,
         permlink:           post.permlink,
@@ -217,7 +192,7 @@ function buildVotePlan(params: {
         postScore:          post.postScore,
         category:           rule.category as StrategyCategory,
         priority:           PRIORITY_SCORE[rule.category as StrategyCategory],
-        suggestedWeightPct: weightPct,
+        suggestedWeightPct: Math.round(weightBps / 100 * 10) / 10,
         suggestedWeightBps: weightBps,
         expectedVoteUsd:    Math.round((weightBps / 10_000) * params.currentVoteUsd * 10_000) / 10_000,
         reason:             reasons[0],
@@ -227,66 +202,112 @@ function buildVotePlan(params: {
     }
   }
 
-  // 2. Sort: priority desc → postScore desc → age asc
+  // ── 2. Sort: priority desc → postScore desc → age asc ─────────────────────
   allCandidates.sort((a, b) => {
     if (b.priority !== a.priority)   return b.priority   - a.priority;
     if (b.postScore !== a.postScore) return b.postScore  - a.postScore;
     return a.ageMinutes - b.ageMinutes;
   });
 
-  // 3. Apply constraints — greedy selection by priority.
-  //    Heavy votes (e.g. 100% lieblingsautor) are SKIPPED if they don't fit,
-  //    allowing smaller-weight votes later in the list to still be included.
-  //    Only hard stops: max_votes reached, or remaining budget can't fit ANY candidate.
-  const STOP_LABELS: Record<StopReason, string> = {
-    max_votes: `Limit erreicht: max. ${maxVotesPerRun} Votes pro Run`,
-    max_spend: `Budget erschöpft: max. ${maxVpSpendPct}% VP-Verbrauch erreicht`,
-    min_vp:    `VP-Boden erreicht: unter ${minVpPct}% VP`,
-    none:      "Alle verfügbaren Posts eingeschlossen",
-  };
+  // ── 3. Progressive weight reduction to fit within dynamic budget ───────────
+  //  Phase A: reduce lowest-priority categories first (to dust minimum)
+  //  Phase B: remove categories entirely if reduction alone isn't enough
+  let working = allCandidates.map(e => ({ ...e }));
 
-  const included: VotePlanEntry[] = [];
-  let spentPct   = 0;
-  let stoppedBy: StopReason = "none";
-
-  for (const entry of allCandidates) {
-    const entrySpendPct = entry.suggestedWeightBps / 100;
-
-    // Hard stop: vote count cap reached
-    if (included.length >= maxVotesPerRun) {
-      stoppedBy = "max_votes"; break;
-    }
-
-    // Skip this individual entry if it doesn't fit — DON'T break, try next
-    const wouldVpDrop = currentVpPct - spentPct - entrySpendPct < minVpPct;
-    const wouldExceedBudget = spentPct + entrySpendPct > effectiveBudgetPct;
-
-    if (wouldVpDrop || wouldExceedBudget) {
-      // Track why entries are being skipped (for report), but keep going
-      if (stoppedBy === "none") {
-        stoppedBy = wouldVpDrop ? "min_vp" : "max_spend";
-      }
-      continue; // ← key fix: skip heavy vote, try next lighter candidate
-    }
-
-    included.push(entry);
-    spentPct += entrySpendPct;
+  // Steem VP cost: a 100% vote consumes 100/50 = 2% VP (full regen = 5 days × 10 votes/day = 50 votes)
+  function totalSpend(entries: VotePlanEntry[]) {
+    return entries.reduce((s, e) => s + e.suggestedWeightBps / 5_000, 0);
   }
 
-  // If we included some votes but hit limits along the way, keep the stopReason for info
-  // If ALL candidates were included successfully, mark as "none"
-  if (included.length === allCandidates.length) stoppedBy = "none";
+  // Phase A — weight reduction
+  for (const cat of REDUCTION_ORDER) {
+    if (totalSpend(working) <= dynamicBudgetPct) break;
+
+    const dustBps    = CATEGORY_DUST_BPS[cat] ?? DUST_THRESHOLD_BPS;
+    const catEntries = working.filter(e => e.category === cat);
+    if (catEntries.length === 0) continue;
+
+    const catFullSpend = catEntries.reduce((s, e) => s + e.suggestedWeightBps / 5_000, 0);
+    const catMinSpend  = catEntries.length * (dustBps / 5_000);
+    const excess       = totalSpend(working) - dynamicBudgetPct;
+    const savingsAvail = catFullSpend - catMinSpend;
+
+    if (savingsAvail >= excess) {
+      // Proportional reduction to exactly hit budget
+      const reductionRatio = excess / catFullSpend;
+      working = working.map(e => {
+        if (e.category !== cat) return e;
+        const newBps = Math.max(dustBps, Math.round(e.suggestedWeightBps * (1 - reductionRatio)));
+        return { ...e,
+          suggestedWeightBps: newBps,
+          suggestedWeightPct: Math.round(newBps / 100 * 10) / 10,
+          expectedVoteUsd:    Math.round((newBps / 10_000) * params.currentVoteUsd * 10_000) / 10_000,
+          reasons: buildReasons({ username: e.author, category: cat, maxWeightPct: 0, minWeightPct: 0, enabled: true, selectionReasons: [] }, { author: e.author, permlink: e.permlink, title: e.title, ageMinutes: e.ageMinutes, remainingHours: e.remainingHours, postScore: e.postScore, eligible: true, alreadyVoted: false, warning: e.warning }, true),
+        };
+      });
+    } else {
+      // Reduce entire category to dust minimum
+      working = working.map(e => {
+        if (e.category !== cat) return e;
+        return { ...e,
+          suggestedWeightBps: dustBps,
+          suggestedWeightPct: Math.round(dustBps / 100 * 10) / 10,
+          expectedVoteUsd:    Math.round((dustBps / 10_000) * params.currentVoteUsd * 10_000) / 10_000,
+          reasons: buildReasons({ username: e.author, category: cat, maxWeightPct: 0, minWeightPct: 0, enabled: true, selectionReasons: [] }, { author: e.author, permlink: e.permlink, title: e.title, ageMinutes: e.ageMinutes, remainingHours: e.remainingHours, postScore: e.postScore, eligible: true, alreadyVoted: false, warning: e.warning }, true),
+        };
+      });
+    }
+  }
+
+  // Phase B — remove categories if still over budget
+  for (const cat of REDUCTION_ORDER) {
+    if (totalSpend(working) <= dynamicBudgetPct) break;
+    working = working.filter(e => e.category !== cat);
+  }
+
+  // ── 4. Apply vote count cap ────────────────────────────────────────────────
+  const included = working.slice(0, maxVotesPerRun);
+  const excluded  = allCandidates.length - included.length;
+
+  // ── 5. Calculate weight reduction % ───────────────────────────────────────
+  const originalBpsForIncluded = allCandidates
+    .filter(orig => included.some(inc => inc.author === orig.author && inc.permlink === orig.permlink))
+    .reduce((s, e) => s + e.suggestedWeightBps, 0);
+  const finalBps = included.reduce((s, e) => s + e.suggestedWeightBps, 0);
+  const weightReductionPct = originalBpsForIncluded > 0
+    ? Math.max(0, Math.round((1 - finalBps / originalBpsForIncluded) * 100))
+    : 0;
+
+  const spentPct           = totalSpend(included);
+  const expectedTomorrow   = Math.round((vpTomorrow - spentPct) * 10) / 10;
+  const stoppedBy: StopReason = included.length < allCandidates.length
+    ? (working.length >= maxVotesPerRun ? "max_votes" : "budget")
+    : "none";
+
+  const STOP_LABELS: Record<StopReason, string> = {
+    max_votes: `Limit erreicht: max. ${maxVotesPerRun} Votes pro Run`,
+    budget:    recoveryMode
+      ? `Recovery-Modus: Budget ${dynamicBudgetPct.toFixed(1)}% (VP ${currentVpPct.toFixed(1)}% → ${targetTomorrow}% morgen)`
+      : `Tages-Budget ${dynamicBudgetPct.toFixed(1)}% ausgeschöpft`,
+    none:      weightReductionPct > 0
+      ? `Alle Posts eingeschlossen (Gewichte um ${weightReductionPct}% reduziert)`
+      : "Alle verfügbaren Posts eingeschlossen",
+  };
 
   const report: ConstraintReport = {
-    minVpPct,
     maxVotesPerRun,
-    maxVpSpendPct,
-    effectiveBudgetPct:  Math.round(effectiveBudgetPct * 10) / 10,
-    includedVotes:       included.length,
-    excludedVotes:       allCandidates.length - included.length,
+    dynamicBudgetPct:      Math.round(dynamicBudgetPct * 10) / 10,
+    effectiveBudgetPct:    Math.round(dynamicBudgetPct * 10) / 10,
+    maxVpSpendPct:         Math.round(dynamicBudgetPct * 10) / 10,
+    minVpPct:              Math.round((vpTomorrow - dynamicBudgetPct) * 10) / 10,
+    includedVotes:         included.length,
+    excludedVotes:         excluded,
     stoppedBy,
-    stoppedByLabel:      STOP_LABELS[stoppedBy],
-    vpAfterPlanPct:      Math.round((currentVpPct - spentPct) * 10) / 10,
+    stoppedByLabel:        STOP_LABELS[stoppedBy],
+    vpAfterPlanPct:        Math.round((currentVpPct - spentPct) * 10) / 10,
+    expectedTomorrowVpPct: expectedTomorrow,
+    recoveryMode,
+    weightReductionPct,
   };
 
   return { entries: included, report };
@@ -425,11 +446,12 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
     }
 
     const { voterUsername, currentVpBps, currentVoteUsd, rules } = body.data;
-    const targetVpPct  = body.data.targetVpPct ?? 85;
-    const constraints  = {
+    const targetVpPct        = body.data.targetVpPct ?? 85;
+    const targetTomorrowVpPct = body.data.targetTomorrowVpPct ?? 80;
+    const constraints = {
       minVpPct:       body.data.constraints?.minVpPct       ?? 70,
-      maxVotesPerRun: body.data.constraints?.maxVotesPerRun ?? 10,
-      maxVpSpendPct:  body.data.constraints?.maxVpSpendPct  ?? 10,
+      maxVotesPerRun: body.data.constraints?.maxVotesPerRun ?? 20,
+      maxVpSpendPct:  body.data.constraints?.maxVpSpendPct  ?? 80,
     };
 
     const activeAuthors = [...new Set(
@@ -449,13 +471,14 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
     }
 
     const postMap        = await fetchAllPosts(activeAuthors, voterUsername);
-    const { entries, report } = buildVotePlan({ rules, posts: postMap, currentVpBps, targetVpPct, currentVoteUsd, constraints });
+    const { entries, report } = buildVotePlan({ rules, posts: postMap, currentVpBps, targetVpPct, targetTomorrowVpPct, currentVoteUsd, constraints });
 
-    const totalSpendBps  = entries.reduce((s, e) => s + e.suggestedWeightBps, 0);
-    const spendPct       = Math.round(totalSpendBps / 100 * 10) / 10;
+    // VP cost = weightBps / 5000 (100% vote = 2% VP in Steem)
+    const spendPct = Math.round(entries.reduce((s, e) => s + e.suggestedWeightBps / 5_000, 0) * 10) / 10;
     const sustainability: "sustainable" | "aggressive" | "critical" =
-      totalSpendBps <= 2000 ? "sustainable" :
-      totalSpendBps <= 3000 ? "aggressive"  : "critical";
+      spendPct <= 5  ? "sustainable" :   // ≤5% VP consumed = well within daily regen
+      spendPct <= 12 ? "aggressive"  :   // 5–12% VP = moderate spend
+      "critical";                         // >12% VP = approaching or exceeding daily regen
 
     const vpDelta = currentVpPct - targetVpPct;
     const skippedCategories: string[] = [];

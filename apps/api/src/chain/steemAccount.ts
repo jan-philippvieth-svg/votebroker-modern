@@ -64,8 +64,25 @@ export async function fetchSteemAccountSnapshot(username: string): Promise<Steem
     ? effectiveVests * (totalVestingFundSteem / totalVestingShares)
     : 0;
 
-  // ── Voting Power ────────────────────────────────────────────────────────
-  const votingPowerBps = account.voting_power; // 0-10000
+  // ── Voting Power (regeneration-aware) ───────────────────────────────────
+  // account.voting_power is the snapshot at last_vote_time — stale between votes.
+  // Recompute from voting_manabar + elapsed time so the value is always current.
+  const MANA_REGEN_SECONDS = 5 * 24 * 3600; // 432 000 s = 5 days to full regen
+  const votingManabar = (account as unknown as {
+    voting_manabar: { current_mana: string; last_update_time: number }
+  }).voting_manabar;
+  const storedMana      = parseAmount(votingManabar.current_mana);
+  const lastUpdateTime  = votingManabar.last_update_time; // Unix seconds
+
+  const effectiveVestsMicro = effectiveVests * 1_000_000;
+  const nowSec     = Math.floor(Date.now() / 1000);
+  const elapsed    = Math.max(0, nowSec - lastUpdateTime);
+  const regenMana  = (elapsed / MANA_REGEN_SECONDS) * effectiveVestsMicro;
+  const currentMana = Math.min(effectiveVestsMicro, storedMana + regenMana);
+
+  const votingPowerBps = effectiveVestsMicro > 0
+    ? Math.round((currentMana / effectiveVestsMicro) * 10_000)
+    : 0;
 
   // ── Price (from witness feed history, NOT get_current_median_history_price) ──
   const steemPriceUsd = medianPriceFromHistory(feedHistory.price_history ?? []);
@@ -77,16 +94,14 @@ export async function fetchSteemAccountSnapshot(username: string): Promise<Steem
   //   rshares = effective_vests_micro / max_vote_denom  (100% weight, 100% VP)
   //
   // where:
-  //   mana            = voting_manabar.current_mana  (= eff_micro × VP/10000)
+  //   mana            = currentMana (regeneration-adjusted, see above)
   //   max_vote_denom  = vote_power_reserve_rate × REGEN_DAYS = 10 × 5 = 50
   //
-  // Previous bug: rsharesFullPower = effectiveVestsMicro (missing /50 → 50× too high)
-  const VOTE_REGEN_DAYS = 5;              // STEEM_VOTE_REGENERATION_SECONDS = 432000
-  const VOTE_RESERVE_RATE = 10;           // vote_power_reserve_rate from DGP
+  const VOTE_REGEN_DAYS = 5;
+  const VOTE_RESERVE_RATE = 10;
   const maxVoteDenom = VOTE_RESERVE_RATE * VOTE_REGEN_DAYS; // = 50
 
-  const mana = parseAmount((account as unknown as { voting_manabar: { current_mana: string } }).voting_manabar.current_mana);
-  const effectiveVestsMicro = effectiveVests * 1_000_000;
+  const mana = currentMana; // use the regeneration-adjusted value
 
   const rsharesFullPower = Math.floor(effectiveVestsMicro / maxVoteDenom);
   const rsharesCurrent   = Math.floor(mana / maxVoteDenom);

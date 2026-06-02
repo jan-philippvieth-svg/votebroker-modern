@@ -526,18 +526,22 @@ export interface VotePlanSummary {
   skippedCategories: string[];
 }
 
-export type StopReason = "max_votes" | "max_spend" | "min_vp" | "none";
+export type StopReason = "max_votes" | "budget" | "none";
 
 export interface ConstraintReport {
-  minVpPct:           number;
-  maxVotesPerRun:     number;
-  maxVpSpendPct:      number;
-  effectiveBudgetPct: number;
-  includedVotes:      number;
-  excludedVotes:      number;
-  stoppedBy:          StopReason;
-  stoppedByLabel:     string;
-  vpAfterPlanPct:     number;
+  maxVotesPerRun:         number;
+  dynamicBudgetPct:       number;
+  effectiveBudgetPct:     number;
+  maxVpSpendPct:          number;
+  minVpPct:               number;
+  includedVotes:          number;
+  excludedVotes:          number;
+  stoppedBy:              StopReason;
+  stoppedByLabel:         string;
+  vpAfterPlanPct:         number;
+  expectedTomorrowVpPct:  number;
+  recoveryMode:           boolean;
+  weightReductionPct:     number;
 }
 
 export interface VotePlanConstraints {
@@ -555,9 +559,9 @@ export interface VotePlanResponse {
 }
 
 export const DEFAULT_CONSTRAINTS: VotePlanConstraints = {
-  minVpPct:       50,   // allow spending when VP > 50% — enables meaningful votes
-  maxVotesPerRun: 3,    // quality over quantity — fewer, stronger votes
-  maxVpSpendPct:  80,   // floor is the effective limit; set high so minVpPct controls
+  minVpPct:       70,
+  maxVotesPerRun: 20,  // dynamic budget controls effective count, not this cap
+  maxVpSpendPct:  80,
 };
 
 export async function generateVotePlan(payload: {
@@ -565,6 +569,7 @@ export async function generateVotePlan(payload: {
   currentVpBps: number;
   currentVoteUsd: number;
   targetVpPct?: number;
+  targetTomorrowVpPct?: number;
   constraints?: VotePlanConstraints;
   rules: Array<{ username: string; category: string; maxWeightPct: number; minWeightPct: number; enabled: boolean; selectionReasons?: string[] }>;
 }): Promise<VotePlanResponse> {
