@@ -1,8 +1,13 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { getDb } from "../db/index.js";
-
-const CONTENT_DIR = process.env.VOTEBROKER_CONTENT_DIR ?? resolve("docs/content");
+const CONTENT_DIR = (() => {
+  if (process.env.VOTEBROKER_CONTENT_DIR) return process.env.VOTEBROKER_CONTENT_DIR;
+  const dbPath = process.env.VOTEBROKER_DB_PATH;
+  if (dbPath) return resolve(dbPath, "..", "content");
+  if (existsSync("/app/data")) return "/app/data/content";
+  return resolve("docs/content");
+})();
 const RUN_HOUR_UTC   = 22;
 const RUN_MINUTE_UTC = 0;
 

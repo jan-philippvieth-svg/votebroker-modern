@@ -1,5 +1,7 @@
 import { readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { getDb } from "../db/index.js";
@@ -9,7 +11,18 @@ import { createSteemClient } from "../chain/steemBroadcaster.js";
 import { PrivateKey } from "dsteem";
 import { generateDevlogDraft } from "../jobs/dailyDevlog.js";
 
-const CONTENT_DIR = process.env.VOTEBROKER_CONTENT_DIR ?? resolve("docs/content");
+const execFileAsync = promisify(execFile);
+const SCREENSHOT_SCRIPT = process.env.VOTEBROKER_SCREENSHOT_SCRIPT ?? "";
+const SCREENSHOT_TOKEN  = process.env.SESSION_TOKEN ?? "";
+
+// Resolve content dir: explicit env → DB_PATH sibling → /app/data/content (if exists) → docs/content
+const CONTENT_DIR = (() => {
+  if (process.env.VOTEBROKER_CONTENT_DIR) return process.env.VOTEBROKER_CONTENT_DIR;
+  const dbPath = process.env.VOTEBROKER_DB_PATH;
+  if (dbPath) return resolve(dbPath, "..", "content");
+  if (existsSync("/app/data")) return "/app/data/content";
+  return resolve("docs/content");
+})();
 const DRAFT_PATTERN = /^(\d{4}-\d{2}-\d{2})-(product-post|tech-post|devlog-post)\.md$/;
 
 // Hours between scheduled posts
@@ -220,6 +233,44 @@ export async function registerContentRoutes(app: FastifyInstance): Promise<void>
       return reply.code(500).send({ error: "generation_failed", reason: result.reason });
     }
     return result;
+  });
+
+  // ── POST /api/admin/capture-screenshots ──────────────────────────────────
+  // Runs the Python capture + annotate pipeline if VOTEBROKER_SCREENSHOT_SCRIPT is set.
+  // Returns {status:"unavailable"} gracefully if not configured.
+  app.post("/api/admin/capture-screenshots", async (request, reply) => {
+    if (!SCREENSHOT_SCRIPT || !existsSync(SCREENSHOT_SCRIPT)) {
+      return {
+        status:  "unavailable",
+        message: "Screenshot-Pipeline nicht konfiguriert. Setze VOTEBROKER_SCREENSHOT_SCRIPT=/pfad/zu/capture.py",
+      };
+    }
+
+    const scriptDir = resolve(SCREENSHOT_SCRIPT, "..");
+    const annotate  = resolve(scriptDir, "annotate.py");
+    const env = { ...process.env };
+    if (SCREENSHOT_TOKEN) env.SESSION_TOKEN = SCREENSHOT_TOKEN;
+
+    try {
+      await execFileAsync("python3", [SCREENSHOT_SCRIPT], { env, timeout: 120_000 });
+      if (existsSync(annotate)) {
+        await execFileAsync("python3", [annotate], { env, timeout: 60_000 });
+      }
+
+      const outDir = resolve(scriptDir, "output", "annotated");
+      let files: string[] = [];
+      if (existsSync(outDir)) {
+        files = readdirSync(outDir)
+          .filter(f => f.endsWith(".png"))
+          .map(f => resolve(outDir, f));
+      }
+      request.log.info({ files }, "Screenshots captured");
+      return { status: "ok", files };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      request.log.error({ msg }, "Screenshot capture failed");
+      return reply.code(500).send({ status: "failed", message: msg });
+    }
   });
 
   // List all drafts

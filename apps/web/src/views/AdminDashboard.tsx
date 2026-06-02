@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
-  ContentValidationError, editDraftContent, getAdminCockpit,
-  getContentDrafts, getContentPreview, publishDraft, triggerFeePost,
+  captureScreenshots, ContentValidationError, editDraftContent, generateDevlogContent,
+  getAdminCockpit, getContentDrafts, getContentPreview, publishDraft, triggerFeePost,
   updateDraftStatus,
   type AdminCockpit, type AuthSession, type BroadcastEntry,
   type ContentDraft, type ContentListResponse, type ContentQueueItem,
@@ -351,13 +351,15 @@ function SystemSection({ d, session }: { d: AdminCockpit; session: AuthSession }
   const [triggerMsg, setTriggerMsg]     = useState<string | null>(null);
   const [retroDate, setRetroDate]       = useState("");   // YYYY-MM-DD for retroactive publish
 
-  async function doTrigger(dateStr?: string) {
+  async function doTrigger(dateStr?: string, forceUpdate?: boolean) {
     setTriggering(true); setTriggerMsg(null);
     try {
-      const r = await triggerFeePost(session.token, dateStr);
-      setTriggerMsg(r.alreadyExisted
-        ? `✓ Already exists: @votebroker/${r.permlink}`
-        : `✓ Published: @votebroker/${r.permlink}${dateStr ? ` (retroactive ${dateStr})` : ""}`);
+      const r = await triggerFeePost(session.token, dateStr, forceUpdate);
+      setTriggerMsg(forceUpdate
+        ? `✓ Updated: @votebroker/${r.permlink} (title fixed)`
+        : r.alreadyExisted
+          ? `✓ Already exists: @votebroker/${r.permlink}`
+          : `✓ Published: @votebroker/${r.permlink}${dateStr ? ` (retroactive ${dateStr})` : ""}`);
       if (dateStr) setRetroDate("");
     } catch (e) { setTriggerMsg(`✗ ${e instanceof Error ? e.message : "failed"}`); }
     finally { setTriggering(false); }
@@ -400,6 +402,9 @@ function SystemSection({ d, session }: { d: AdminCockpit; session: AuthSession }
               <button style={btnStyle(C.info)} type="button" disabled={triggering} onClick={() => void doTrigger()}>
                 {triggering ? "Running…" : "Run today"}
               </button>
+              <button style={{ ...btnStyle(C.warn), fontSize: "0.72rem" }} type="button" disabled={triggering} onClick={() => void doTrigger(undefined, true)} title="Re-broadcasts today's post with the correct title (VoteBroker Fee Settlement)">
+                Fix title
+              </button>
             </div>
           </div>
           {/* Retroactive publish row */}
@@ -420,7 +425,16 @@ function SystemSection({ d, session }: { d: AdminCockpit; session: AuthSession }
             >
               Publish for {retroDate || "…"}
             </button>
-            <span style={{ color: C.dim, fontSize: "0.68rem" }}>Use this if the scheduler missed a day</span>
+            <button
+              type="button"
+              disabled={!retroDate || triggering}
+              onClick={() => void doTrigger(retroDate, true)}
+              style={{ ...btnStyle(C.err), opacity: retroDate ? 1 : 0.4, fontSize: "0.72rem" }}
+              title="Re-broadcasts the post for the selected date with the correct title"
+            >
+              Fix title for {retroDate || "…"}
+            </button>
+            <span style={{ color: C.dim, fontSize: "0.68rem" }}>Use this if the scheduler missed a day or published with wrong title</span>
           </div>
         </div>
         <FeePostLogTable rows={feePostLog} />
@@ -447,6 +461,37 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
   async function load() { setLoading(true); try { setData(await gcd(session.token)); } finally { setLoading(false); } }
 
   useEffect(() => { void load(); }, []);
+
+  async function doGenerate(force: boolean, withScreenshots: boolean) {
+    setSaving(true);
+    setActionMsg(withScreenshots ? "⏳ Generiere Inhalt…" : "⏳ Generiere…");
+    try {
+      const dateStr = selected
+        ? (data?.drafts.find(d => d.filename === selected)?.dateStr ?? undefined)
+        : undefined;
+      const result = await generateDevlogContent(session.token, { date: dateStr, force });
+      setActionMsg(`✓ ${result.status === "updated" ? "Aktualisiert" : result.status === "created" ? "Erstellt" : "Übersprungen"}: ${result.filename}`);
+      await load();
+      // Refresh preview if same file was just generated/updated
+      if (result.filename && (selected === result.filename || !selected)) {
+        setSelected(result.filename);
+        await openPreview(result.filename);
+      }
+      if (withScreenshots) {
+        setActionMsg("⏳ Erstelle Screenshots…");
+        const cap = await captureScreenshots(session.token);
+        if (cap.status === "ok") {
+          setActionMsg(`✓ Inhalt + ${cap.files?.length ?? 0} Screenshots erstellt`);
+        } else if (cap.status === "unavailable") {
+          setActionMsg(`✓ Inhalt generiert · ⚠ Screenshots: ${cap.message}`);
+        } else {
+          setActionMsg(`✓ Inhalt generiert · ✗ Screenshots fehlgeschlagen: ${cap.message}`);
+        }
+      }
+    } catch (e) {
+      setActionMsg(`✗ ${e instanceof Error ? e.message : "Fehler"}`);
+    } finally { setSaving(false); }
+  }
 
   async function openPreview(fn: string) {
     setSelected(fn); setPreviewLoading(true); setEditMode(false); setActionMsg(null); setPublishResult(null);
@@ -492,9 +537,23 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
     <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: "0.75rem", minHeight: "500px" }}>
       {/* Left: list */}
       <div style={card}>
-        <p style={{ ...lbl, margin: "0 0 0.5rem" }}>Content Queue</p>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+          <p style={{ ...lbl, margin: 0 }}>Content Queue</p>
+          <button
+            style={{ ...btnStyle(C.info), fontSize: "0.68rem", padding: "0.2rem 0.55rem" }}
+            type="button" disabled={saving}
+            onClick={() => void doGenerate(false, false)}
+            title="Generiert heutigen Devlog-Draft (Änderungen seit letztem Devlog)"
+          >+ Devlog</button>
+        </div>
         {loading ? <p style={{ color: C.dim }}>Loading…</p> : drafts.length === 0 ? (
-          <p style={{ color: C.border, fontSize: "0.8rem" }}>No drafts yet. Run <code>npm run devlog:today</code></p>
+          <div>
+            <p style={{ color: C.dim, fontSize: "0.8rem", marginBottom: "0.6rem" }}>Keine Drafts vorhanden.</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+              <button style={btnStyle(C.info)} type="button" disabled={saving} onClick={() => void doGenerate(false, false)}>Devlog generieren</button>
+              <button style={{ ...btnStyle(C.info), opacity: 0.8 }} type="button" disabled={saving} onClick={() => void doGenerate(false, true)}>Devlog + Screenshots</button>
+            </div>
+          </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
             {drafts.map(draft => (
@@ -534,13 +593,33 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
                 </>
               ) : (
                 <>
-                  <button style={btnStyle(C.info)} type="button" onClick={() => setEditMode(true)}>Edit</button>
-                  {selectedDraft?.status === "draft" && <button style={btnStyle(C.info)} type="button" disabled={saving} onClick={() => void setStatus(selected, "reviewed")}>Mark Reviewed</button>}
-                  {selectedDraft?.status === "reviewed" && <button style={btnStyle(C.ok)} type="button" disabled={saving} onClick={() => void setStatus(selected, "approved")}>Approve</button>}
-                  {selectedDraft?.status === "approved" && <button style={btnStyle(C.purple)} type="button" disabled={saving} onClick={() => void setStatus(selected, "scheduled")}>Schedule →</button>}
-                  {selectedDraft?.status === "scheduled" && <button style={{ ...btnStyle(C.ok), fontWeight: 700 }} type="button" disabled={saving} onClick={() => void doPublish(selected)}>🚀 Publish</button>}
+                  {/* Generate / Regenerate — only for devlog/product types in draft/failed state */}
+                  {(selectedDraft?.status === "draft" || selectedDraft?.status === "failed") && (
+                    <>
+                      {(selectedDraft?.wordCount ?? 0) < 30
+                        ? (
+                          // Empty draft — prominent Generate buttons
+                          <>
+                            <button style={{ ...btnStyle(C.ok), fontWeight: 700 }} type="button" disabled={saving} onClick={() => void doGenerate(false, false)} title="Inhalt aus git-Commits und Community-Aktivität generieren">Generieren</button>
+                            <button style={{ ...btnStyle(C.ok), opacity: 0.8 }} type="button" disabled={saving} onClick={() => void doGenerate(false, true)} title="Generieren + Screenshots aufnehmen">+ Screenshots</button>
+                          </>
+                        ) : (
+                          // Draft has content — Regenerate buttons (destructive, secondary)
+                          <>
+                            <button style={{ ...btnStyle(C.warn), fontSize: "0.73rem" }} type="button" disabled={saving} onClick={() => void doGenerate(true, false)} title="Inhalt neu generieren (vorherigen überschreiben)">Neu generieren</button>
+                            <button style={{ ...btnStyle(C.warn), fontSize: "0.73rem", opacity: 0.85 }} type="button" disabled={saving} onClick={() => void doGenerate(true, true)} title="Neu generieren + Screenshots">+ Screenshots</button>
+                          </>
+                        )
+                      }
+                    </>
+                  )}
+                  <button style={btnStyle(C.info)} type="button" onClick={() => setEditMode(true)}>Bearbeiten</button>
+                  {selectedDraft?.status === "draft" && <button style={btnStyle(C.info)} type="button" disabled={saving} onClick={() => void setStatus(selected, "reviewed")}>Review ✓</button>}
+                  {selectedDraft?.status === "reviewed" && <button style={btnStyle(C.ok)} type="button" disabled={saving} onClick={() => void setStatus(selected, "approved")}>Freigeben</button>}
+                  {selectedDraft?.status === "approved" && <button style={btnStyle(C.purple)} type="button" disabled={saving} onClick={() => void setStatus(selected, "scheduled")}>Einplanen →</button>}
+                  {selectedDraft?.status === "scheduled" && <button style={{ ...btnStyle(C.ok), fontWeight: 700 }} type="button" disabled={saving} onClick={() => void doPublish(selected)}>🚀 Publizieren</button>}
                   {selectedDraft?.status !== "published" && selectedDraft?.status !== "failed" && (
-                    <button style={btnStyle(C.err)} type="button" disabled={saving} onClick={() => void setStatus(selected, "failed", { failedReason: "Manually rejected" })}>Reject</button>
+                    <button style={btnStyle(C.err)} type="button" disabled={saving} onClick={() => void setStatus(selected, "failed", { failedReason: "Manually rejected" })}>Ablehnen</button>
                   )}
                 </>
               )}
@@ -557,10 +636,29 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
             {editMode ? (
               <textarea value={editContent} onChange={e => setEditContent(e.target.value)}
                 style={{ flex: 1, background: "#1e2733", border: `1px solid ${C.border}`, borderRadius: "4px", color: "#e2eaf4", fontFamily: "monospace", fontSize: "0.77rem", lineHeight: 1.5, padding: "0.75rem", resize: "none" as const, outline: "none" }} />
-            ) : (
+            ) : preview?.content && (preview.content.trim().split(/\s+/).length > 20) ? (
               <pre style={{ flex: 1, background: C.bg1, border: `1px solid ${C.border}`, borderRadius: "4px", color: "#2d3a42", fontFamily: "monospace", fontSize: "0.74rem", lineHeight: 1.5, margin: 0, overflow: "auto", padding: "0.75rem", whiteSpace: "pre-wrap" as const, wordBreak: "break-word" as const, maxHeight: "480px" }}>
-                {preview?.content ?? "No content"}
+                {preview.content}
               </pre>
+            ) : (
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.75rem", padding: "2rem", background: C.bg1, border: `1px solid ${C.border}`, borderRadius: "4px" }}>
+                <p style={{ color: C.dim, fontSize: "0.85rem", margin: 0, textAlign: "center" }}>
+                  Dieser Draft enthält noch keinen generierten Inhalt.
+                </p>
+                <p style={{ color: C.dim, fontSize: "0.75rem", margin: 0, textAlign: "center" }}>
+                  Der Generator verwendet Änderungen seit dem letzten veröffentlichten Devlog<br />
+                  und die aktuelle Community-Aktivität aus audit_events.
+                </p>
+                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", justifyContent: "center" }}>
+                  <button style={{ ...btnStyle(C.ok), fontWeight: 700 }} type="button" disabled={saving} onClick={() => void doGenerate(false, false)}>
+                    Inhalt generieren
+                  </button>
+                  <button style={{ ...btnStyle(C.ok), opacity: 0.8 }} type="button" disabled={saving} onClick={() => void doGenerate(false, true)}>
+                    Mit Screenshots generieren
+                  </button>
+                </div>
+                {actionMsg && <p style={{ color: actionMsg.startsWith("✓") ? C.ok : C.warn, fontSize: "0.78rem", margin: 0 }}>{actionMsg}</p>}
+              </div>
             )}
           </>
         )}

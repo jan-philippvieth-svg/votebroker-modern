@@ -1040,3 +1040,42 @@ export async function fetchCommunityDiscovery(token: string): Promise<CommunityD
   if (!res.ok) throw new Error("Community Discovery konnte nicht geladen werden.");
   return res.json();
 }
+
+// ── Devlog generation (admin-session auth) ────────────────────────────────────
+
+export interface DevlogGenerateResult {
+  dateStr:  string;
+  filename: string;
+  status:   "created" | "skipped" | "failed" | "updated";
+  reason?:  string;
+}
+
+export async function generateDevlogContent(
+  token: string,
+  opts: { date?: string; force?: boolean; screenshots?: boolean } = {},
+): Promise<DevlogGenerateResult> {
+  const res = await fetch(`${API_BASE}/api/admin/content/generate-devlog`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", session: token },
+    body: JSON.stringify({ date: opts.date, force: opts.force ?? false }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { reason?: string };
+    throw new Error(body.reason ?? `Generate failed (${res.status})`);
+  }
+  return res.json();
+}
+
+export interface CaptureScreenshotsResult {
+  status:    "ok" | "unavailable" | "failed";
+  files?:    string[];
+  message?:  string;
+}
+
+export async function captureScreenshots(token: string): Promise<CaptureScreenshotsResult> {
+  const res = await fetch(`${API_BASE}/api/admin/capture-screenshots`, {
+    method: "POST",
+    headers: { session: token },
+  });
+  return res.json();
+}
