@@ -1079,3 +1079,30 @@ export async function captureScreenshots(token: string): Promise<CaptureScreensh
   });
   return res.json();
 }
+
+// ── Screenshot management ─────────────────────────────────────────────────────
+
+export interface ScreenshotFile {
+  filename: string;
+  url:      string;
+  sizekb:   number;
+}
+
+export async function listScreenshots(token: string): Promise<{ available: boolean; files: ScreenshotFile[] }> {
+  const res = await fetch(`${API_BASE}/api/admin/screenshots`, { headers: { session: token } });
+  if (!res.ok) return { available: false, files: [] };
+  return res.json();
+}
+
+export async function injectScreenshots(token: string, filename: string): Promise<{ ok: boolean; replaced: number; hint?: string }> {
+  const res = await fetch(`${API_BASE}/api/admin/content/inject-screenshots`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", session: token },
+    body: JSON.stringify({ filename }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string; hint?: string };
+    throw new Error(body.hint ?? body.error ?? `inject failed (${res.status})`);
+  }
+  return res.json();
+}

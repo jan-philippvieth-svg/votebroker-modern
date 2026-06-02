@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import {
   captureScreenshots, ContentValidationError, editDraftContent, generateDevlogContent,
-  getAdminCockpit, getContentDrafts, getContentPreview, publishDraft, triggerFeePost,
-  updateDraftStatus,
+  getAdminCockpit, getContentDrafts, getContentPreview, injectScreenshots,
+  listScreenshots, publishDraft, triggerFeePost, updateDraftStatus,
   type AdminCockpit, type AuthSession, type BroadcastEntry,
   type ContentDraft, type ContentListResponse, type ContentQueueItem,
-  type DraftStatus, type FeePostLogEntry, type PublishResult,
+  type DraftStatus, type FeePostLogEntry, type PublishResult, type ScreenshotFile,
 } from "../api";
 
 export const ADMIN_USERNAME = "jan-philippvieth";
@@ -455,12 +455,37 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
   const [editContent, setEditContent] = useState("");
   const [actionMsg, setActionMsg] = useState<string | null>(null);
   const [publishResult, setPublishResult] = useState<PublishResult | null>(null);
+  const [screenshots, setScreenshots] = useState<ScreenshotFile[]>([]);
+  const [showScreenshots, setShowScreenshots] = useState(false);
 
   const { getContentDrafts: gcd, getContentPreview: gcp, updateDraftStatus: uds, editDraftContent: edc, publishDraft: pd } = { getContentDrafts, getContentPreview, updateDraftStatus: updateDraftStatus, editDraftContent, publishDraft };
 
   async function load() { setLoading(true); try { setData(await gcd(session.token)); } finally { setLoading(false); } }
 
   useEffect(() => { void load(); }, []);
+
+  async function loadScreenshots() {
+    const res = await listScreenshots(session.token);
+    setScreenshots(res.files);
+    return res;
+  }
+
+  async function doInjectScreenshots() {
+    if (!selected) return;
+    setSaving(true);
+    setActionMsg("⏳ Binde Screenshots ein…");
+    try {
+      const res = await injectScreenshots(session.token, selected);
+      if (res.replaced === 0) {
+        setActionMsg(`ℹ ${res.hint ?? "Keine Platzhalter gefunden"}`);
+      } else {
+        setActionMsg(`✓ ${res.replaced} Screenshot-Platzhalter ersetzt`);
+        await openPreview(selected);   // Vorschau neu laden
+      }
+    } catch (e) {
+      setActionMsg(`✗ ${e instanceof Error ? e.message : "Fehler"}`);
+    } finally { setSaving(false); }
+  }
 
   async function doGenerate(force: boolean, withScreenshots: boolean) {
     setSaving(true);
@@ -481,11 +506,18 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
         setActionMsg("⏳ Erstelle Screenshots…");
         const cap = await captureScreenshots(session.token);
         if (cap.status === "ok") {
-          setActionMsg(`✓ Inhalt + ${cap.files?.length ?? 0} Screenshots erstellt`);
+          setActionMsg("⏳ Binde Screenshots ein…");
+          if (result.filename) {
+            try {
+              const inj = await injectScreenshots(session.token, result.filename);
+              setActionMsg(`✓ ${inj.replaced} Screenshots eingebunden`);
+              await openPreview(result.filename);
+            } catch { setActionMsg("✓ Screenshots erstellt · ⚠ Platzhalter-Ersatz fehlgeschlagen"); }
+          }
         } else if (cap.status === "unavailable") {
-          setActionMsg(`✓ Inhalt generiert · ⚠ Screenshots: ${cap.message}`);
+          setActionMsg(`✓ Inhalt generiert · ℹ Screenshots: ${cap.message}`);
         } else {
-          setActionMsg(`✓ Inhalt generiert · ✗ Screenshots fehlgeschlagen: ${cap.message}`);
+          setActionMsg(`✓ Inhalt generiert · ✗ Screenshots: ${cap.message}`);
         }
       }
     } catch (e) {
@@ -613,6 +645,20 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
                       }
                     </>
                   )}
+                  <button
+                    style={{ ...btnStyle(C.purple), fontSize: "0.73rem" }}
+                    type="button" disabled={saving}
+                    onClick={() => { void loadScreenshots().then(() => setShowScreenshots(s => !s)); }}
+                    title="Screenshots einbinden / anzeigen"
+                  >📸 Screenshots</button>
+                  {preview?.content?.includes("PLACEHOLDER_") && (
+                    <button
+                      style={{ ...btnStyle(C.ok), fontSize: "0.73rem", fontWeight: 700 }}
+                      type="button" disabled={saving}
+                      onClick={() => void doInjectScreenshots()}
+                      title="Platzhalter im Draft durch Screenshot-URLs ersetzen"
+                    >⬇ Einbetten</button>
+                  )}
                   <button style={btnStyle(C.info)} type="button" onClick={() => setEditMode(true)}>Bearbeiten</button>
                   {selectedDraft?.status === "draft" && <button style={btnStyle(C.info)} type="button" disabled={saving} onClick={() => void setStatus(selected, "reviewed")}>Review ✓</button>}
                   {selectedDraft?.status === "reviewed" && <button style={btnStyle(C.ok)} type="button" disabled={saving} onClick={() => void setStatus(selected, "approved")}>Freigeben</button>}
@@ -633,13 +679,60 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
               </div>
             )}
             {selectedDraft?.failedReason && <div style={{ color: C.err, fontSize: "0.75rem", marginBottom: "0.4rem" }}>✗ {selectedDraft.failedReason}</div>}
+            {showScreenshots && screenshots.length > 0 && (
+              <div style={{ marginBottom: "0.6rem", padding: "0.6rem 0.8rem", background: C.bg1, border: `1px solid ${C.border}`, borderRadius: "6px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.4rem" }}>
+                  <p style={{ ...lbl, margin: 0 }}>Verfügbare Screenshots ({screenshots.length})</p>
+                  <button style={{ ...btnStyle(C.dim), fontSize: "0.68rem" }} type="button" onClick={() => setShowScreenshots(false)}>Schließen</button>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0.4rem" }}>
+                  {screenshots.map(s => (
+                    <div key={s.filename} style={{ textAlign: "center" }}>
+                      <img
+                        src={s.url} alt={s.filename}
+                        style={{ width: "100%", borderRadius: "4px", border: `1px solid ${C.border}`, cursor: "zoom-in" }}
+                        onClick={() => window.open(s.url, "_blank")}
+                      />
+                      <p style={{ color: C.dim, fontSize: "0.62rem", margin: "0.1rem 0 0" }}>{s.filename} · {s.sizekb} KB</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {showScreenshots && screenshots.length === 0 && (
+              <div style={{ marginBottom: "0.6rem", padding: "0.5rem 0.75rem", background: C.bg1, border: `1px solid ${C.border}`, borderRadius: "6px", fontSize: "0.78rem", color: C.dim }}>
+                Keine Screenshots vorhanden.
+                Führe <code>python3 tools/showcase/capture.py</code> aus oder nutze "+ Screenshots" beim Generieren.
+              </div>
+            )}
             {editMode ? (
               <textarea value={editContent} onChange={e => setEditContent(e.target.value)}
                 style={{ flex: 1, background: "#1e2733", border: `1px solid ${C.border}`, borderRadius: "4px", color: "#e2eaf4", fontFamily: "monospace", fontSize: "0.77rem", lineHeight: 1.5, padding: "0.75rem", resize: "none" as const, outline: "none" }} />
             ) : preview?.content && (preview.content.trim().split(/\s+/).length > 20) ? (
-              <pre style={{ flex: 1, background: C.bg1, border: `1px solid ${C.border}`, borderRadius: "4px", color: "#2d3a42", fontFamily: "monospace", fontSize: "0.74rem", lineHeight: 1.5, margin: 0, overflow: "auto", padding: "0.75rem", whiteSpace: "pre-wrap" as const, wordBreak: "break-word" as const, maxHeight: "480px" }}>
-                {preview.content}
-              </pre>
+              <div style={{ flex: 1, overflow: "auto", maxHeight: "480px" }}>
+                {/* Render images inline if content has /api/admin/screenshots/ references */}
+                {preview.content.includes("/api/admin/screenshots/") ? (
+                  <div style={{ background: C.bg1, border: `1px solid ${C.border}`, borderRadius: "4px", padding: "0.75rem" }}>
+                    {preview.content.split("\n").map((line, i) => {
+                      const imgMatch = line.match(/!\[([^\]]*)\]\((\/api\/admin\/screenshots\/[^)]+)\)/);
+                      if (imgMatch) {
+                        return (
+                          <div key={i} style={{ margin: "0.5rem 0", textAlign: "center" }}>
+                            <img src={imgMatch[2]} alt={imgMatch[1]}
+                              style={{ maxWidth: "100%", borderRadius: "6px", border: `1px solid ${C.border}` }} />
+                            {imgMatch[1] && <p style={{ color: C.dim, fontSize: "0.7rem", margin: "0.2rem 0 0" }}>{imgMatch[1]}</p>}
+                          </div>
+                        );
+                      }
+                      return <div key={i} style={{ color: "#2d3a42", fontFamily: "monospace", fontSize: "0.74rem", lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{line || " "}</div>;
+                    })}
+                  </div>
+                ) : (
+                  <pre style={{ background: C.bg1, border: `1px solid ${C.border}`, borderRadius: "4px", color: "#2d3a42", fontFamily: "monospace", fontSize: "0.74rem", lineHeight: 1.5, margin: 0, padding: "0.75rem", whiteSpace: "pre-wrap" as const, wordBreak: "break-word" as const }}>
+                    {preview.content}
+                  </pre>
+                )}
+              </div>
             ) : (
               <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.75rem", padding: "2rem", background: C.bg1, border: `1px solid ${C.border}`, borderRadius: "4px" }}>
                 <p style={{ color: C.dim, fontSize: "0.85rem", margin: 0, textAlign: "center" }}>

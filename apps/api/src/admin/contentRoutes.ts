@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, readdirSync, existsSync, createReadStream, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -23,6 +23,14 @@ const CONTENT_DIR = (() => {
   if (existsSync("/app/data")) return "/app/data/content";
   return resolve("docs/content");
 })();
+
+// Screenshots dir: same data volume, /screenshots subdir
+const SCREENSHOTS_DIR = (() => {
+  if (process.env.VOTEBROKER_SCREENSHOTS_DIR) return process.env.VOTEBROKER_SCREENSHOTS_DIR;
+  if (existsSync("/app/data")) return "/app/data/screenshots";
+  return resolve("docs/screenshots");
+})();
+
 const DRAFT_PATTERN = /^(\d{4}-\d{2}-\d{2})-(product-post|tech-post|devlog-post)\.md$/;
 
 // Hours between scheduled posts
@@ -271,6 +279,81 @@ export async function registerContentRoutes(app: FastifyInstance): Promise<void>
       request.log.error({ msg }, "Screenshot capture failed");
       return reply.code(500).send({ status: "failed", message: msg });
     }
+  });
+
+  // ── GET /api/admin/screenshots — list available screenshots ──────────────
+  app.get("/api/admin/screenshots", async () => {
+    const dir = SCREENSHOTS_DIR;
+    if (!existsSync(dir)) return { available: false, files: [] };
+    const annotatedDir = resolve(dir, "annotated");
+    const source = existsSync(annotatedDir) ? annotatedDir : dir;
+    const files = readdirSync(source)
+      .filter(f => f.endsWith(".png"))
+      .map(f => ({
+        filename: f,
+        url:      `/api/admin/screenshots/${f}`,
+        sizekb:   Math.round(statSync(resolve(source, f)).size / 1024),
+      }));
+    return { available: files.length > 0, source, files };
+  });
+
+  // ── GET /api/admin/screenshots/:filename — serve a screenshot file ─────
+  app.get("/api/admin/screenshots/:filename", async (request, reply) => {
+    const { filename } = request.params as { filename: string };
+    if (!/^[\w\-\.]+\.png$/.test(filename)) return reply.code(400).send({ error: "invalid_filename" });
+
+    const annotated = resolve(SCREENSHOTS_DIR, "annotated", filename);
+    const raw       = resolve(SCREENSHOTS_DIR, filename);
+    const filePath  = existsSync(annotated) ? annotated : existsSync(raw) ? raw : null;
+
+    if (!filePath) return reply.code(404).send({ error: "not_found" });
+
+    reply.type("image/png");
+    return reply.send(createReadStream(filePath));
+  });
+
+  // ── POST /api/admin/content/inject-screenshots — replace PLACEHOLDERs ──
+  // Scans the draft file for PLACEHOLDER_XX markers and replaces them with
+  // /api/admin/screenshots/XX_annotated.png URLs.
+  app.post("/api/admin/content/inject-screenshots", async (request, reply) => {
+    const body = z.object({ filename: z.string().min(1).max(200) }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: "invalid_request" });
+    const { filename } = body.data;
+    if (!DRAFT_PATTERN.test(filename)) return reply.code(400).send({ error: "invalid_filename" });
+
+    const filePath = resolve(CONTENT_DIR, filename);
+    if (!existsSync(filePath)) return reply.code(404).send({ error: "draft_not_found" });
+
+    // Build screenshot map: PLACEHOLDER_01_dashboard → /api/admin/screenshots/01_dashboard_annotated.png
+    const annotatedDir = resolve(SCREENSHOTS_DIR, "annotated");
+    const source = existsSync(annotatedDir) ? annotatedDir : SCREENSHOTS_DIR;
+    if (!existsSync(source)) return reply.code(424).send({ error: "no_screenshots", hint: "Run capture.py first" });
+
+    const available = readdirSync(source).filter(f => f.endsWith(".png"));
+    const screenshotMap: Record<string, string> = {};
+    for (const f of available) {
+      // 01_dashboard_annotated.png → PLACEHOLDER_01_dashboard
+      const key = "PLACEHOLDER_" + f.replace(/_annotated\.png$/, "").replace(/\.png$/, "");
+      screenshotMap[key] = `/api/admin/screenshots/${f}`;
+    }
+
+    let content = readFileSync(filePath, "utf8");
+    let replaced = 0;
+    for (const [placeholder, url] of Object.entries(screenshotMap)) {
+      const regex = new RegExp(placeholder.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g");
+      const before = content;
+      content = content.replace(regex, url);
+      if (content !== before) replaced++;
+    }
+
+    if (replaced === 0) {
+      return { ok: true, replaced: 0, hint: "Keine PLACEHOLDER_* Marker im Draft gefunden" };
+    }
+
+    writeFileSync(filePath, content, "utf8");
+    getDb().prepare("UPDATE content_drafts SET updated_at=datetime('now') WHERE filename=?").run(filename);
+    request.log.info({ filename, replaced, screenshotMap }, "Screenshots injected into draft");
+    return { ok: true, replaced, screenshotMap };
   });
 
   // List all drafts
