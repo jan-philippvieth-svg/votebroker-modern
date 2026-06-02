@@ -1963,7 +1963,7 @@ function CurationDnaPanel(props: {
             </div>
 
             {strategyRules && (
-              <StrategyEditor rules={strategyRules} votesPerDay={p.votesPerDay} onUpdate={updateRule} onRemove={removeRule} />
+              <StrategyEditor rules={strategyRules} votesPerDay={p.votesPerDay} currentVoteUsd={props.accountSnapshot?.currentVoteUsd ?? 0} onUpdate={updateRule} onRemove={removeRule} />
             )}
           </div>
         )}
@@ -1976,6 +1976,7 @@ function CurationDnaPanel(props: {
 function StrategyEditor(props: {
   rules: StrategyRule[];
   votesPerDay: number;
+  currentVoteUsd: number;
   onUpdate: (username: string, patch: Partial<StrategyRule>) => void;
   onRemove: (username: string) => void;
 }) {
@@ -1989,15 +1990,15 @@ function StrategyEditor(props: {
               <th style={{ textAlign: "left", padding: "0.2rem 0.35rem", fontWeight: 600, width: "20px" }}>An</th>
               <th style={{ textAlign: "left", padding: "0.2rem 0.35rem", fontWeight: 600 }}>Autor</th>
               <th style={{ textAlign: "left", padding: "0.2rem 0.35rem", fontWeight: 600 }}>Kategorie</th>
-              <th style={{ textAlign: "center", padding: "0.2rem 0.35rem", fontWeight: 600 }}>Max %</th>
-              <th style={{ textAlign: "center", padding: "0.2rem 0.35rem", fontWeight: 600 }}>Min %</th>
+              <th style={{ textAlign: "center", padding: "0.2rem 0.35rem", fontWeight: 600 }}>Max % / ≈$</th>
+              <th style={{ textAlign: "center", padding: "0.2rem 0.35rem", fontWeight: 600 }}>Min % / ≈$</th>
               <th style={{ textAlign: "left", padding: "0.2rem 0.35rem", fontWeight: 600 }}>Quelle</th>
               <th style={{ width: "20px" }} />
             </tr>
           </thead>
           <tbody>
             {props.rules.map(rule => (
-              <StrategyRuleRow key={rule.username} rule={rule} onUpdate={props.onUpdate} onRemove={props.onRemove} />
+              <StrategyRuleRow key={rule.username} rule={rule} currentVoteUsd={props.currentVoteUsd} onUpdate={props.onUpdate} onRemove={props.onRemove} />
             ))}
           </tbody>
         </table>
@@ -2010,6 +2011,7 @@ function StrategyEditor(props: {
 
 function StrategyRuleRow(props: {
   rule: StrategyRule;
+  currentVoteUsd: number;
   onUpdate: (username: string, patch: Partial<StrategyRule>) => void;
   onRemove: (username: string) => void;
 }) {
@@ -2068,18 +2070,32 @@ function StrategyRuleRow(props: {
           </select>
         </td>
         <td style={{ padding: "0.18rem 0.35rem", textAlign: "center" }}>
-          <input type="number" min="0" max="100" step="0.5"
-            value={rule.maxWeightPct}
-            onChange={e => onUpdate(rule.username, { maxWeightPct: Math.min(100, Math.max(0, Number(e.target.value))) })}
-            style={inputStyle}
-          />
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1px" }}>
+            <input type="number" min="0" max="100" step="0.5"
+              value={rule.maxWeightPct}
+              onChange={e => onUpdate(rule.username, { maxWeightPct: Math.min(100, Math.max(0, Number(e.target.value))) })}
+              style={inputStyle}
+            />
+            {props.currentVoteUsd > 0 && (
+              <span style={{ fontSize: "0.63rem", color: "#0d9488", fontWeight: 600, letterSpacing: "-0.2px" }}>
+                ≈${(rule.maxWeightPct / 100 * props.currentVoteUsd).toFixed(3)}
+              </span>
+            )}
+          </div>
         </td>
         <td style={{ padding: "0.18rem 0.35rem", textAlign: "center" }}>
-          <input type="number" min="0" max="100" step="0.5"
-            value={rule.minWeightPct}
-            onChange={e => onUpdate(rule.username, { minWeightPct: Math.min(100, Math.max(0, Number(e.target.value))) })}
-            style={inputStyle}
-          />
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1px" }}>
+            <input type="number" min="0" max="100" step="0.5"
+              value={rule.minWeightPct}
+              onChange={e => onUpdate(rule.username, { minWeightPct: Math.min(100, Math.max(0, Number(e.target.value))) })}
+              style={inputStyle}
+            />
+            {props.currentVoteUsd > 0 && rule.minWeightPct > 0 && (
+              <span style={{ fontSize: "0.63rem", color: "#8fa4b0", fontWeight: 600, letterSpacing: "-0.2px" }}>
+                ≈${(rule.minWeightPct / 100 * props.currentVoteUsd).toFixed(3)}
+              </span>
+            )}
+          </div>
         </td>
         <td style={{ padding: "0.18rem 0.35rem" }}>
           <span style={{ fontSize: "0.68rem", color: rule.manuallyModified ? "#d97706" : "#8fa4b0", whiteSpace: "nowrap" }}>
