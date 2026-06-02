@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
-  AuthSession, CurationProfile, GrowthData,
-  OpportunitiesMeta, PendingCuration, PendingDebugPost, PostOpportunity, SteemAccountSnapshot, TodayStats, VotePlanResponse,
+  AuthSession, CurationProfile, DailyEarnings, GrowthData,
+  OpportunitiesMeta, PendingCuration, PendingDebugPost, PostOpportunity,
+  SteemAccountSnapshot, TodayStats, VBEarningsResult, VotePlanResponse,
 } from "../api";
+import { fetchVBEarnings } from "../api";
 import { fetchGrowthData, fetchPendingCuration, fetchTodayStats } from "../api";
 import { createTranslator, type Locale, type TranslationKey } from "../i18n";
 
@@ -1147,264 +1149,244 @@ function VpGraphToday({ todayStats, snapshot }: {
   );
 }
 
-// ── Earnings Card ─────────────────────────────────────────────────────────────
+// ── VoteBroker Earnings Card — Bar + Line combined chart ─────────────────────
 
-type EarningsTab = "today" | "7d" | "30d" | "90d" | "all";
+type VBEarningsPeriod = "7d" | "30d" | "90d" | "all";
 
-interface EarningsPoint { label: string; sp: number; votes: number; isEst: boolean; }
-
-function EarningsAreaChart({ points, color, height=90 }: {
-  points: EarningsPoint[];
+function VBEarningsChart({ data, pendingSp, color }: {
+  data: DailyEarnings[];
+  pendingSp: number;
   color: string;
-  height?: number;
 }) {
   const [hoverIdx, setHoverIdx] = useState<number|null>(null);
-  if (!points.length) return null;
-  const maxSp = Math.max(...points.map(p => p.sp), 0.001);
-  const W = 100, H = height;
-  const pts = points.map((p, i) => ({
-    x: points.length === 1 ? 50 : (i / (points.length - 1)) * W,
-    y: H - (p.sp / maxSp) * (H - 8),
-    ...p,
-  }));
-  const linePath = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
-  const areaPath = `${linePath} L ${pts[pts.length-1].x} ${H} L ${pts[0].x} ${H} Z`;
-  const hovPt    = hoverIdx !== null ? pts[hoverIdx] : null;
+  if (!data.length) return null;
+
+  const maxSp   = Math.max(...data.map(d => d.realizedSp), pendingSp / data.length, 0.001);
+  const maxCum  = data[data.length - 1]?.cumRealizedSp || 0.001;
+  const W       = 400;  // internal SVG units
+  const H       = 100;
+  const BAR_W   = Math.max(1, (W / data.length) * 0.65);
+  const PAD     = 6;
+
+  const barX  = (i: number) => PAD + (i / data.length) * (W - 2*PAD) + BAR_W * 0.1;
+  const barH  = (sp: number) => ((sp / maxSp) * (H - PAD - 10));
+  const lineX = (i: number) => PAD + ((i + 0.5) / data.length) * (W - 2*PAD);
+  const lineY = (cum: number) => H - PAD - ((cum / maxCum) * (H - PAD - 12));
+
+  const linePoints = data.map((d, i) => `${lineX(i)},${lineY(d.cumRealizedSp)}`).join(" ");
+  const areaPoints = [
+    `${lineX(0)},${H - PAD}`,
+    ...data.map((d, i) => `${lineX(i)},${lineY(d.cumRealizedSp)}`),
+    `${lineX(data.length - 1)},${H - PAD}`,
+  ].join(" ");
+
+  const hovD = hoverIdx !== null ? data[hoverIdx] : null;
 
   return (
-    <div style={{ position:"relative" }}>
+    <div style={{ position:"relative", userSelect:"none" }}>
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
-        style={{ width:"100%", height:`${height}px`, display:"block" }}
+        style={{ width:"100%", height:"96px", display:"block" }}
         onMouseLeave={() => setHoverIdx(null)}>
         <defs>
-          <linearGradient id={`eg-${color.replace("#","")}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%"   stopColor={color} stopOpacity="0.28"/>
+          <linearGradient id="vb-line-grad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"   stopColor={color} stopOpacity="0.18"/>
             <stop offset="100%" stopColor={color} stopOpacity="0.02"/>
           </linearGradient>
         </defs>
-        <path d={areaPath} fill={`url(#eg-${color.replace("#","")})`}/>
-        <path d={linePath} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round"/>
-        {pts.map((p, i) => (
-          <circle key={i} cx={p.x} cy={p.y} r={hoverIdx === i ? 3.5 : 2}
-            fill={hoverIdx === i ? color : "white"} stroke={color} strokeWidth="1.2"
-            style={{ cursor:"pointer" }}
-            onMouseEnter={() => setHoverIdx(i)}/>
-        ))}
+
+        {/* Daily bars */}
+        {data.map((d, i) => {
+          const bh = barH(d.realizedSp);
+          return (
+            <rect key={i}
+              x={barX(i)} y={H - PAD - bh} width={BAR_W} height={Math.max(0, bh)}
+              fill={hoverIdx === i ? color : color + "88"}
+              rx="1.5"
+              style={{ cursor:"pointer" }}
+              onMouseEnter={() => setHoverIdx(i)}
+            />
+          );
+        })}
+
+        {/* Cumulative area + line */}
+        <polygon points={areaPoints} fill="url(#vb-line-grad)"/>
+        <polyline points={linePoints} fill="none"
+          stroke={color} strokeWidth="1.8" strokeLinejoin="round"
+          style={{ pointerEvents:"none" }}/>
+
+        {/* Hover dot */}
+        {hoverIdx !== null && (
+          <circle
+            cx={lineX(hoverIdx)}
+            cy={lineY(data[hoverIdx].cumRealizedSp)}
+            r={3.5} fill={color} stroke="white" strokeWidth="1.5"
+            style={{ pointerEvents:"none" }}/>
+        )}
       </svg>
-      {hovPt && (
+
+      {/* Tooltip */}
+      {hovD && (
         <div style={{
-          position:"absolute", left:`${hovPt.x}%`, top:"0", transform:"translateX(-50%)",
-          background:"#1e293b", border:`1px solid ${color}55`, borderRadius:"8px",
-          padding:"0.4rem 0.6rem", pointerEvents:"none", zIndex:10, whiteSpace:"nowrap",
-          fontSize:"0.7rem", color:"#e2e8f0",
+          position:"absolute", left:`${(hoverIdx!+0.5)/data.length*100}%`,
+          bottom:"100%", transform:"translateX(-50%)",
+          background:"#1e293b", border:`1px solid ${color}55`,
+          borderRadius:"8px", padding:"0.4rem 0.6rem",
+          pointerEvents:"none", zIndex:10, whiteSpace:"nowrap",
+          fontSize:"0.7rem", color:"#e2e8f0", marginBottom:"4px",
         }}>
-          <div style={{ fontWeight:700, color }}>{hovPt.label}</div>
-          <div>{hovPt.sp > 0 ? hovPt.sp.toFixed(4) + " SP" : "—"}{hovPt.isEst ? " (Est.)" : ""}</div>
-          {hovPt.votes > 0 && <div style={{ color:"#94a3b8" }}>{hovPt.votes} Vote{hovPt.votes !== 1 ? "s" : ""}</div>}
+          <div style={{ fontWeight:700, color, marginBottom:"0.1rem" }}>{hovD.date.slice(5)}</div>
+          <div>Realisiert: <b>{hovD.realizedSp.toFixed(4)} SP</b></div>
+          <div style={{ color:"#94a3b8" }}>Kumuliert: {hovD.cumRealizedSp.toFixed(3)} SP</div>
+          {hovD.votes > 0 && <div style={{ color:"#94a3b8" }}>{hovD.votes} VB-Votes</div>}
         </div>
       )}
     </div>
   );
 }
 
-function EarningsCard({ pendingCuration, growthData, growthLoading, growthPeriod, onPeriodChange,
-  todayStats, snapshot, t }: {
+function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, t }: {
+  session: AuthSession;
   pendingCuration: PendingCuration|null;
-  growthData: GrowthData|null;
-  growthLoading: boolean;
-  growthPeriod: "30d"|"90d"|"all";
-  onPeriodChange: (p:"30d"|"90d"|"all") => void;
   todayStats: TodayStats|null;
   snapshot: SteemAccountSnapshot|null;
   t: ReturnType<typeof createTranslator>;
 }) {
-  const [tab, setTab] = useState<EarningsTab>("30d");
+  const [period, setPeriod] = useState<VBEarningsPeriod>("30d");
+  const [data,   setData]   = useState<VBEarningsResult|null>(null);
+  const [loading, setLoading] = useState(false);
 
-  // Sync growthPeriod with tab
   useEffect(() => {
-    if (tab === "90d") onPeriodChange("90d");
-    else if (tab === "all") onPeriodChange("all");
-    else if (tab !== "today") onPeriodChange("30d");
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab]);
+    setLoading(true);
+    fetchVBEarnings(session.token, period)
+      .then(setData).catch(()=>setData(null))
+      .finally(()=>setLoading(false));
+  }, [session.token, period]);
 
-  // ── Derived metrics ──────────────────────────────────────────────────────────
-  const earned30dSp  = pendingCuration?.earned30dSp ?? 0;
-  const earned30dCnt = pendingCuration?.earned30dCount ?? 0;
-  const pendingSp    = pendingCuration?.pendingSp ?? 0;
-  const sbdPrStm     = snapshot?.sbdPerSteem ?? 0.051;
-
-  // Average SP per curation_reward payout — used to estimate daily value
-  const spPerPayout  = earned30dCnt > 0 ? earned30dSp / earned30dCnt : 0;
-
-  // Today's estimated SP: sum of estimated curation per vote
-  // Approximation: (weightBps/10000) * spPerPayout — labeled "Est."
-  const todaySp = (todayStats?.votes ?? []).reduce((s, v) =>
-    s + (v.weightBps / 10_000) * spPerPayout, 0);
-  const todayVotes = todayStats?.totalVotes ?? 0;
-
-  // Build chart points based on current tab
-  const { points, mainSp, mainLabel, isEst, summaryLine, color } = useMemo(() => {
-    const days   = growthData?.dataPoints ?? [];
-    const summ   = growthData?.summary;
-    const totalGrowthVotes = summ?.totalVotes ?? 1;
-
-    // Estimate daily SP proportional to vote share
-    const daysSp = days.map(d => ({
-      label:  d.day.slice(5),   // MM-DD
-      sp:     totalGrowthVotes > 0 ? (d.votes / totalGrowthVotes) * earned30dSp : 0,
-      votes:  d.votes,
-      isEst:  true,
-    }));
-
-    if (tab === "today") {
-      // Hourly buckets from todayStats
-      const buckets: Record<number, { sp: number; votes: number }> = {};
-      for (let h = 0; h < 24; h++) buckets[h] = { sp: 0, votes: 0 };
-      (todayStats?.votes ?? []).forEach(v => {
-        const h = new Date(v.votedAt).getHours();
-        buckets[h].sp    += (v.weightBps / 10_000) * spPerPayout;
-        buckets[h].votes += 1;
-      });
-      // Cumulative
-      let cum = 0;
-      const pts: EarningsPoint[] = Object.entries(buckets)
-        .filter(([, b]) => b.votes > 0 || cum > 0)
-        .map(([h, b]) => { cum += b.sp; return { label: `${h}:00`, sp: cum, votes: b.votes, isEst: true }; });
-      return {
-        points:      pts.length ? pts : [{ label: "—", sp: 0, votes: 0, isEst: true }],
-        mainSp:      todaySp,
-        mainLabel:   "Heute geschätzt",
-        isEst:       true,
-        summaryLine: `${todayVotes} Votes heute · basiert auf Ø ${spPerPayout.toFixed(4)} SP/Payout`,
-        color:       C.purple,
-      };
-    }
-
-    if (tab === "7d") {
-      const slice = daysSp.slice(-7);
-      const total = slice.reduce((s, d) => s + d.sp, 0);
-      const avg   = slice.length ? total / slice.length : 0;
-      return {
-        points:      slice,
-        mainSp:      total,
-        mainLabel:   "Est. letzte 7 Tage",
-        isEst:       true,
-        summaryLine: `Ø ${avg.toFixed(4)} SP/Tag (geschätzt)`,
-        color:       C.info,
-      };
-    }
-
-    if (tab === "30d") {
-      const slice = daysSp.slice(-30);
-      const avg = earned30dCnt > 0 ? earned30dSp / 30 : 0;
-      return {
-        points:      slice,
-        mainSp:      earned30dSp,
-        mainLabel:   "Realisiert · 30 Tage",
-        isEst:       false,
-        summaryLine: `Ø ${avg.toFixed(4)} SP/Tag · ${earned30dCnt} Payouts on-chain`,
-        color:       C.ok,
-      };
-    }
-
-    // 90d / all
-    const total = daysSp.reduce((s, d) => s + d.sp, 0);
-    const days_ = daysSp.length || 1;
-    return {
-      points:      daysSp,
-      mainSp:      tab === "90d" ? total : total,
-      mainLabel:   tab === "90d" ? "Est. 90 Tage" : "Est. All-time",
-      isEst:       true,
-      summaryLine: `Ø ${(total / days_).toFixed(4)} SP/Tag (geschätzt aus ${String(days_)} Tagen)`,
-      color:       "#8b5cf6",
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, growthData, todayStats, earned30dSp, earned30dCnt, spPerPayout, todaySp]);
-
-  // ── Gamification ─────────────────────────────────────────────────────────────
-  const streak  = growthData?.summary.currentStreak ?? 0;
-  const gameTip = streak >= 30 ? `🏆 ${streak}-Tage-Streak — außergewöhnlich!`
-    : streak >= 7  ? `🔥 ${streak} Tage aktiv in Folge`
-    : streak >= 3  ? `✨ ${streak} Tage am Stück aktiv`
-    : todayVotes > 0 ? `✅ Heute ${todayVotes} Votes verteilt`
-    : `🌱 Starte heute deinen ersten Run`;
-
-  const tabs: { id: EarningsTab; label: string }[] = [
-    { id:"today", label:"Heute" }, { id:"7d", label:"7 T" },
-    { id:"30d",   label:"30 T" }, { id:"90d", label:"90 T" }, { id:"all", label:"All" },
+  const sbdPrStm = snapshot?.sbdPerSteem ?? 0.051;
+  const periods: { id: VBEarningsPeriod; label: string }[] = [
+    { id:"7d",  label:"7 Tage"  },
+    { id:"30d", label:"30 Tage" },
+    { id:"90d", label:"90 Tage" },
+    { id:"all", label:"All-time"},
   ];
 
-  const usdApprox = mainSp * sbdPrStm;
-  const loading   = (tab !== "today" && growthLoading) || (!pendingCuration && tab === "30d");
+  const PURPLE = "#7c3aed";
+  const totalSp    = data?.totals.realizedSp ?? 0;
+  const usdApprox  = totalSp * sbdPrStm;
+  const pendingSp  = pendingCuration?.pendingSp ?? 0;
+  const todayVotes = todayStats?.totalVotes ?? 0;
+  const streak     = 0; // growthData not available here; could be added
+  const gameTip    = todayVotes > 0
+    ? `✅ Heute ${todayVotes} Votes verteilt durch VoteBroker`
+    : `🌱 Starte heute deinen ersten VoteBroker-Run`;
+
+  // 7-day realized: sum of last 7 days in current data
+  const recent7dSp = data
+    ? data.dailyData.slice(-7).reduce((s, d) => s + d.realizedSp, 0)
+    : 0;
 
   return (
-    <div style={{ ...card, background:"linear-gradient(135deg,#fafffe 0%,#f0fdf4 60%,#f5f0ff 100%)" }}>
+    <div style={{ ...card, background:"linear-gradient(135deg,#faf5ff 0%,#f5f3ff 60%,#ede9fe 100%)" }}>
       {/* Header */}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"0.75rem" }}>
         <div style={{ display:"flex", alignItems:"center", gap:"0.5rem" }}>
-          <span style={{ fontSize:"0.95rem" }}>💰</span>
-          <span style={{ fontSize:"0.82rem", fontWeight:700, color:C.text, letterSpacing:"-0.2px" }}>Verdienst</span>
+          <span style={{ fontSize:"0.95rem" }}>💜</span>
+          <span style={{ fontSize:"0.82rem", fontWeight:700, color:C.text, letterSpacing:"-0.2px" }}>
+            Verdienst durch VoteBroker
+          </span>
         </div>
-        {/* Tabs */}
         <div style={{ display:"flex", gap:"0.2rem" }}>
-          {tabs.map(tb => (
-            <button key={tb.id} type="button" onClick={() => setTab(tb.id)}
-              style={{ background: tab===tb.id ? color : "#f1f5f9",
-                border: `1px solid ${tab===tb.id ? color : "#e2e8f0"}`,
-                borderRadius:"5px", color: tab===tb.id ? "#fff" : C.dim,
+          {periods.map(p => (
+            <button key={p.id} type="button" onClick={()=>setPeriod(p.id)}
+              style={{ background: period===p.id ? PURPLE : "#f1f5f9",
+                border:`1px solid ${period===p.id ? PURPLE : "#e2e8f0"}`,
+                borderRadius:"5px", color: period===p.id ? "#fff" : C.dim,
                 cursor:"pointer", fontSize:"0.65rem", fontWeight:700,
                 padding:"0.18rem 0.45rem", lineHeight:1 }}>
-              {tb.label}
+              {p.label}
             </button>
           ))}
         </div>
       </div>
 
       {loading ? (
-        <div style={{ color:C.faint, fontSize:"0.82rem", padding:"1rem 0" }}>Lädt…</div>
+        <div style={{ color:C.faint, fontSize:"0.82rem", padding:"1rem 0", textAlign:"center" }}>Lädt…</div>
+      ) : !data ? (
+        <div style={{ color:C.faint, fontSize:"0.82rem", textAlign:"center", padding:"1rem 0" }}>
+          Noch keine Earnings-Daten verfügbar.
+        </div>
       ) : (
         <>
-          {/* Main number */}
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:"0.6rem" }}>
+          {/* Attribution notice */}
+          {data.notice && (
+            <div style={{ background:"#fef3c7", border:"1px solid #fde047", borderRadius:"6px",
+              padding:"0.35rem 0.6rem", fontSize:"0.7rem", color:"#713f12", marginBottom:"0.6rem" }}>
+              ℹ {data.notice}
+            </div>
+          )}
+
+          {/* Main metrics */}
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:"0.5rem" }}>
             <div>
-              <div style={{ fontSize:"2.2rem", fontWeight:900, color, letterSpacing:"-1.5px", lineHeight:1 }}>
-                {mainSp > 0 ? mainSp.toFixed(3) : "—"}
-                <span style={{ fontSize:"0.9rem", fontWeight:700, marginLeft:"0.3rem", opacity:0.75 }}>SP</span>
+              <div style={{ fontSize:"2.1rem", fontWeight:900, color:PURPLE, letterSpacing:"-1.5px", lineHeight:1 }}>
+                {totalSp > 0 ? totalSp.toFixed(3) : "—"}
+                <span style={{ fontSize:"0.88rem", fontWeight:700, marginLeft:"0.3rem", opacity:0.75 }}>SP</span>
               </div>
-              <div style={{ fontSize:"0.75rem", color:C.dim, marginTop:"0.15rem" }}>
-                {mainSp > 0 ? `≈ ${usdApprox.toFixed(4)} SBD` : "Noch keine Daten"}
+              <div style={{ fontSize:"0.73rem", color:C.dim, marginTop:"0.12rem" }}>
+                {totalSp > 0 ? `≈ ${usdApprox.toFixed(4)} SBD · ${data.totals.realizedCount} Payouts` : "Noch keine attributierten Rewards"}
               </div>
             </div>
-            <div style={{ textAlign:"right" }}>
-              <div style={{ fontSize:"0.65rem", color: isEst ? C.warn : C.ok,
-                background: (isEst ? C.warn : C.ok)+"18", borderRadius:"5px",
-                padding:"0.15rem 0.4rem", fontWeight:700, whiteSpace:"nowrap" }}>
-                {isEst ? "Est." : "Realisiert"}
-              </div>
-              {tab === "today" && pendingSp > 0 && (
-                <div style={{ fontSize:"0.65rem", color:C.purple, marginTop:"0.2rem", whiteSpace:"nowrap" }}>
+            <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:"0.2rem" }}>
+              <span style={{ fontSize:"0.63rem", color:"#fff", background:PURPLE,
+                borderRadius:"5px", padding:"0.12rem 0.4rem", fontWeight:700 }}>
+                Realisiert
+              </span>
+              {pendingSp > 0 && (
+                <span style={{ fontSize:"0.63rem", color:C.warn, fontWeight:700, whiteSpace:"nowrap" }}>
                   +{pendingSp.toFixed(3)} SP pending
-                </div>
+                </span>
               )}
             </div>
           </div>
 
-          {/* Chart */}
-          {points.length > 1 ? (
-            <EarningsAreaChart points={points} color={color}/>
+          {/* Quick side stats */}
+          <div style={{ display:"flex", gap:"1rem", fontSize:"0.7rem", color:C.dim, marginBottom:"0.65rem" }}>
+            {recent7dSp > 0 && (
+              <span>7 Tage: <b style={{ color:PURPLE }}>{recent7dSp.toFixed(3)} SP</b></span>
+            )}
+            {data.totals.voteCount > 0 && (
+              <span>{data.totals.voteCount} VB-Votes im Zeitraum</span>
+            )}
+            {data.attributionStart && (
+              <span style={{ color:C.faint }}>seit {data.attributionStart}</span>
+            )}
+          </div>
+
+          {/* Bar + Line chart */}
+          {data.dailyData.some(d => d.realizedSp > 0) ? (
+            <>
+              <div style={{ fontSize:"0.63rem", color:C.faint, marginBottom:"0.2rem", display:"flex", gap:"0.8rem" }}>
+                <span>▮ täglicher Ertrag</span>
+                <span>— kumuliert</span>
+              </div>
+              <VBEarningsChart data={data.dailyData} pendingSp={pendingSp} color={PURPLE}/>
+            </>
           ) : (
-            <div style={{ textAlign:"center", padding:"1.5rem 0", color:C.faint, fontSize:"0.8rem" }}>
-              Noch keine Earnings-Daten für diesen Zeitraum.
+            <div style={{ textAlign:"center", padding:"1.5rem 0",
+              color:C.faint, fontSize:"0.8rem",
+              border:`1px dashed ${PURPLE}33`, borderRadius:"8px" }}>
+              Noch keine VoteBroker-attributierten Curation-Rewards in diesem Zeitraum.
+              {data.attributionStart && (
+                <div style={{ marginTop:"0.3rem", fontSize:"0.7rem" }}>
+                  Attribution aktiv seit {data.attributionStart}
+                </div>
+              )}
             </div>
           )}
 
-          {/* Summary line */}
-          <div style={{ fontSize:"0.67rem", color:C.muted, marginTop:"0.4rem" }}>{summaryLine}</div>
-
           {/* Gamification */}
-          <div style={{ marginTop:"0.6rem", paddingTop:"0.5rem",
-            borderTop:`1px solid ${color}22`,
+          <div style={{ marginTop:"0.55rem", paddingTop:"0.45rem",
+            borderTop:`1px solid ${PURPLE}22`,
             fontSize:"0.73rem", color:C.dim, fontWeight:600 }}>
             {gameTip}
           </div>
@@ -1601,13 +1583,10 @@ export function UserDashboard(props: {
         t={t}
       />
 
-      {/* 2c. Earnings Card — kombinierter Verdienst-Verlauf */}
-      <EarningsCard
+      {/* 2c. VoteBroker Earnings — attributierter Verdienst (Bar+Line chart) */}
+      <VBEarningsCard
+        session={props.session}
         pendingCuration={pendingCuration}
-        growthData={growthData}
-        growthLoading={growthLoading}
-        growthPeriod={growthPeriod}
-        onPeriodChange={setGrowthPeriod}
         todayStats={todayStats}
         snapshot={snapshot}
         t={t}

@@ -1106,3 +1106,36 @@ export async function injectScreenshots(token: string, filename: string): Promis
   }
   return res.json();
 }
+
+// ── VoteBroker-attributed Earnings ───────────────────────────────────────────
+
+export interface DailyEarnings {
+  date:          string;
+  realizedSp:    number;
+  votes:         number;
+  cumRealizedSp: number;
+}
+
+export interface VBEarningsResult {
+  period:           string;
+  attributionStart: string | null;
+  dailyData:        DailyEarnings[];
+  totals: {
+    realizedSp:    number;
+    voteCount:     number;
+    realizedCount: number;
+  };
+  notice:    string | null;
+  computedAt: string;
+}
+
+export async function fetchVBEarnings(
+  token: string,
+  period: "7d" | "30d" | "90d" | "all" = "30d",
+): Promise<VBEarningsResult> {
+  const res = await fetch(`${API_BASE}/api/me/votebroker-earnings?period=${period}`, {
+    headers: { session: token },
+  });
+  if (!res.ok) throw new Error("VoteBroker Earnings konnten nicht geladen werden.");
+  return res.json();
+}

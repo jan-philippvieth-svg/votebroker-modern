@@ -14,7 +14,7 @@ const dnaQuerySchema = z.object({
 });
 
 const opportunitiesSchema = z.object({
-  authors:       z.array(z.string().min(1).max(64)).min(1).max(50),
+  authors:       z.array(z.string().min(1).max(64)).min(1).max(200),
   voterUsername: z.string().min(1).max(64)
 });
 
@@ -499,6 +499,24 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
       },
       generatedAt: new Date().toISOString()
     };
+  });
+
+  // ── GET /api/me/votebroker-earnings — VoteBroker-attributed curation ────────
+  app.get("/api/me/votebroker-earnings", async (request, reply) => {
+    const token   = (request.headers as Record<string, string>)["session"];
+    const session = token ? getSession(token) : null;
+    if (!session) return reply.code(401).send({ error: "unauthorized" });
+
+    const rawPeriod = (request.query as Record<string, string>)["period"] ?? "30d";
+    const period    = (["7d", "30d", "90d", "all"] as const).find(p => p === rawPeriod) ?? "30d";
+
+    try {
+      const { fetchVBEarnings } = await import("../chain/voteBrokerEarnings.js");
+      return await fetchVBEarnings(session.user.username, period);
+    } catch (err) {
+      return reply.code(502).send({ error: "earnings_fetch_failed",
+        detail: err instanceof Error ? err.message : "unknown" });
+    }
   });
 
   // ── GET /api/me/growth — curator growth time series ──────────────────────
