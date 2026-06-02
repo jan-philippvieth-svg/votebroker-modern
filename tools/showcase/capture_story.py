@@ -265,7 +265,11 @@ def annotate_image(src: Path, markers: list[tuple[int, int, str]]) -> Path:
                                fill=LABEL_BG)
         draw.text((lx+pad-lb[0], ly+pad-lb[1]), rest, font=fl, fill=WHITE)
 
-    dst = src.parent / src.name.replace(".png", "_story.png")
+    # Save into annotated/ subdir with _annotated.png naming — this is
+    # exactly where the API gallery reads from (/api/admin/screenshots/).
+    annotated_dir = src.parent / "annotated"
+    annotated_dir.mkdir(parents=True, exist_ok=True)
+    dst = annotated_dir / src.name.replace(".png", "_annotated.png")
     Image.alpha_composite(img, ov).convert("RGB").save(dst, quality=95)
     return dst
 

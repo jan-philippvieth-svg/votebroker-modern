@@ -55,9 +55,9 @@ sections:
         text: "Vote-Plan generieren"
         wait_after_ms: 4000
     markers:
-      - label: "① Plan erstellt"
-        find_text: "Votes gefunden"       # Headline wenn Plan sichtbar ist
-        fallback: "Plan aktualisieren"
+      - label: "① Plan aktiv"
+        find_text: "Alles gevoted"        # nach Ausführung — Plan abgeschlossen
+        fallback: "Votes gefunden"        # oder: offene Votes vorhanden
         anchor: center
       - label: "② VP nach Plan"
         find_text: "NACH PLAN"
@@ -66,50 +66,53 @@ sections:
         find_text: "VP MORGEN"
         anchor: below
 
-  # ── 3. Autor-Liste & Gewichtungen ─────────────────────────────────────────
+  # ── 3. Strategie — immer sichtbar ────────────────────────────────────────
   - id: edit_weights
     filename: "03_edit_weights"
-    title: "Gewichtungen anpassen"
+    title: "Strategie konfigurieren"
     story: |
-      Jeder Autor in der Strategie hat ein Kategorien-Tag und einen aktuellen
-      Vote-Status. Gewichtungen lassen sich per Klick direkt anpassen.
-    tab: dna
-    scroll_y: 400                       # scroll down to author list
-    ready_text: "gevoted"               # bestätigt: Autor-Liste mit Status sichtbar
-    actions:
-      - type: wait_ms
-        ms: 800
-    markers:
-      - label: "① Kategorie"
-        find_text: "Lieblingsautor"     # Kategorie-Badge (exakt, nicht lowercase)
-        fallback: "lieblingsautor"
-        anchor: center
-      - label: "② Vote-Status"
-        find_text: "gevoted"
-        anchor: center
-      - label: "③ Autoren-Strategie"
-        find_text: "Autoren-Strategie"   # Akkordeon-Header — immer sichtbar
-        fallback: "Strategie"
-        anchor: top_right
-
-  # ── 4. Votes bestätigen ───────────────────────────────────────────────────
-  - id: confirm_votes
-    filename: "04_confirm_votes"
-    title: "Votes absenden"
-    story: |
-      VoteBroker zeigt alle geplanten Votes und wartet auf deine Bestätigung.
-      Kein Vote ohne explizite Freigabe — du hast immer die Kontrolle.
+      Die Autoren-Strategie zeigt VP jetzt, VP nach Plan und VP morgen.
+      Jeder Autor hat ein Kategorien-Tag. Gewichtungen lassen sich jederzeit anpassen.
     tab: dna
     scroll_y: 0
-    ready_text: "bestätigen"            # bestätigt: Bestätigungs-Button sichtbar
+    ready_text: "VP JETZT"              # VP-Boxen — immer sichtbar nach Tab-Load
+    actions:
+      - type: wait_ms
+        ms: 1000
+    markers:
+      - label: "① VP jetzt"
+        find_text: "VP JETZT"
+        anchor: below
+      - label: "② VP morgen"
+        find_text: "VP MORGEN"
+        anchor: below
+      - label: "③ Strategie"
+        find_text: "Autoren-Strategie"  # Akkordeon-Header — immer sichtbar
+        fallback: "Strategie:"
+        anchor: top_right
+
+  # ── 4. Kontrolle — kein autonomes Handeln ────────────────────────────────
+  - id: confirm_votes
+    filename: "04_confirm_votes"
+    title: "Du entscheidest immer"
+    story: |
+      VoteBroker schlägt vor, du entscheidest. Kein Vote läuft ohne deine
+      Freigabe. Das Kurator-Profil zeigt deinen Typ und deine Aktivität.
+    tab: dna
+    scroll_y: 0
+    ready_text: "Regular Curator"       # Kurator-Profil — immer sichtbar
     actions:
       - type: wait_ms
         ms: 500
     markers:
-      - label: "① Votes bestätigen"
-        find_text: "Votes bestätigen →" # exakter Button-Text mit Pfeil
-        fallback: "bestätigen"
-        anchor: center
+      - label: "① Kurator-Profil"
+        find_text: "Regular Curator"
+        fallback: "Regelmäßiger Kurator"
+        anchor: top_right
+      - label: "② Aktive Tage"
+        find_text: "Akt. Tage"
+        fallback: "Aktive Tage"
+        anchor: below
 
   # ── 5. Dashboard — Ergebnisse ─────────────────────────────────────────────
   - id: dashboard_results
@@ -137,10 +140,7 @@ sections:
         find_text: "VERDIENT · 30 TAGE"  # exakte Karten-Überschrift
         fallback: "Verdient · 30 Tage"
         anchor: top_right
-      - label: "④ VP-Verlauf"
-        find_text: "VP HEUTE"
-        fallback: "VP-Verlauf"
-        anchor: above
+      # VP-Chart ist SVG — kein DOM-Textelement, daher kein 4. Marker möglich
 
   # ── 6. Community — neue Autoren entdecken ─────────────────────────────────
   - id: community
