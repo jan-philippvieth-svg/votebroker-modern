@@ -187,16 +187,34 @@ function getSessionHeader2(v: string | string[] | undefined): string | undefined
 export async function registerContentRoutes(app: FastifyInstance): Promise<void> {
 
   // ── POST /api/admin/content/generate-devlog ────────────────────────────────
-  // Manually trigger devlog draft generation for a specific date (default: today).
-  // Safe to call repeatedly — skips if draft already exists for that date.
+  // Trigger devlog draft generation (admin session required — see routes.ts for
+  // operator-token variant at /api/devlog/generate).
   app.post("/api/admin/content/generate-devlog", async (request, reply) => {
+    const changeSchema = z.object({
+      type:        z.enum(["feat", "fix", "ux", "perf", "refactor", "other"]),
+      description: z.string().min(1).max(500),
+    });
     const body = z.object({
-      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), // override date
+      date:        z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      changes:     z.array(changeSchema).max(50).optional(),
+      nextItems:   z.array(z.string().min(1).max(300)).max(10).optional(),
+      screenshots: z.array(z.string().min(1).max(200)).max(10).optional(),
+      sinceDate:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      force:       z.boolean().optional(),
     }).safeParse(request.body);
-    if (!body.success) return reply.code(400).send({ error: "invalid_request" });
 
-    const date = body.data.date ? new Date(body.data.date + "T12:00:00Z") : new Date();
-    const result = await generateDevlogDraft(request.log as unknown as typeof console, date);
+    if (!body.success) return reply.code(400).send({ error: "invalid_request", detail: body.error.flatten() });
+
+    const { date, changes, nextItems, screenshots, sinceDate, force } = body.data;
+    const opts = {
+      date:        date ? new Date(date + "T12:00:00Z") : new Date(),
+      changes,
+      nextItems,
+      screenshots,
+      sinceDate,
+      force,
+    };
+    const result = await generateDevlogDraft(request.log as unknown as typeof console, opts);
 
     if (result.status === "failed") {
       return reply.code(500).send({ error: "generation_failed", reason: result.reason });

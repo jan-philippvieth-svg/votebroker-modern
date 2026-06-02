@@ -34,6 +34,7 @@ services:
       VOTEBROKER_POSTING_WIF: ${VOTEBROKER_POSTING_WIF:-}
       VOTEBROKER_MANUAL_TOKEN_FALLBACK: ${VOTEBROKER_MANUAL_TOKEN_FALLBACK:-false}
       VOTEBROKER_DB_PATH: /app/data/votebroker.db
+      VOTEBROKER_CONTENT_DIR: /app/data/content
     volumes:
       - votebroker_data:/app/data
     expose:

@@ -15,7 +15,8 @@ import {
 } from "./chain/steemBroadcaster.js";
 import { getCachedAuthority, setCachedAuthority } from "./chain/authorityCache.js";
 import { fetchSteemAccountSnapshot } from "./chain/steemAccount.js";
-import { broadcastConfig, feePolicy } from "./config.js";
+import { broadcastConfig, feePolicy, operatorConfig } from "./config.js";
+import { generateDevlogDraft } from "./jobs/dailyDevlog.js";
 import { hasConsent } from "./consent/consentStore.js";
 import { getDb } from "./db/index.js";
 import { fetchPendingCuration } from "./chain/steemPendingCuration.js";
@@ -50,6 +51,35 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     status: "ok",
     service: "votebroker-api"
   }));
+
+  // ── POST /api/devlog/generate — operator-token auth (for CI/tools) ─────────
+  app.post("/api/devlog/generate", async (request, reply) => {
+    const token = (request.headers["x-operator-token"] as string | undefined) ?? "";
+    if (!token || token !== operatorConfig.token || !operatorConfig.token) {
+      return reply.code(403).send({ error: "operator_token_required" });
+    }
+    const changeSchema = z.object({
+      type:        z.enum(["feat", "fix", "ux", "perf", "refactor", "other"]),
+      description: z.string().min(1).max(500),
+    });
+    const body = z.object({
+      date:        z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      changes:     z.array(changeSchema).max(50).optional(),
+      nextItems:   z.array(z.string().min(1).max(300)).max(10).optional(),
+      screenshots: z.array(z.string().min(1).max(200)).max(10).optional(),
+      sinceDate:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      force:       z.boolean().optional(),
+    }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: "invalid_request", detail: body.error.flatten() });
+
+    const { date, ...opts } = body.data;
+    const result = await generateDevlogDraft(request.log as unknown as typeof console, {
+      ...opts,
+      date: date ? new Date(date + "T12:00:00Z") : new Date(),
+    });
+    if (result.status === "failed") return reply.code(500).send({ error: "generation_failed", reason: result.reason });
+    return result;
+  });
 
   app.get("/api/account/snapshot", async (request, reply) => {
     const query = z.object({ username: z.string().min(1) }).safeParse(request.query);
