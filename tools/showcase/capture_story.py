@@ -55,14 +55,34 @@ SESSION_JSON = json.dumps({
 # ── Ergebnis-Tracking ──────────────────────────────────────────────────────────
 
 @dataclass
+class MarkerResult:
+    label:     str
+    found:     bool
+    element:   str = ""    # tag:text[:40]
+    bbox:      str = ""    # "x,y w×h"
+    warning:   str = ""
+
+@dataclass
 class SectionResult:
-    id:              str
-    screenshot_ok:   bool = False
-    annotated_ok:    bool = False
-    markers_found:   int  = 0
-    markers_total:   int  = 0
-    missing_markers: list[str] = field(default_factory=list)
-    warnings:        list[str] = field(default_factory=list)
+    id:            str
+    expected_view: str = ""
+    ready_check:   bool | None = None   # None = no ready_text defined
+    screenshot_ok: bool = False
+    annotated_ok:  bool = False
+    markers:       list[MarkerResult] = field(default_factory=list)
+    warnings:      list[str] = field(default_factory=list)
+
+    @property
+    def markers_found(self) -> int:
+        return sum(1 for m in self.markers if m.found)
+
+    @property
+    def markers_total(self) -> int:
+        return len(self.markers)
+
+    @property
+    def missing_markers(self) -> list[str]:
+        return [m.label for m in self.markers if not m.found]
 
 # ── DOM-basierte Navigation (kein get_by_text — Emoji-resistent) ───────────────
 
@@ -181,6 +201,22 @@ def apply_anchor(cx: int, cy: int, w: int, h: int, anchor: str) -> tuple[int, in
     dx, dy = offsets.get(anchor, (0, 0))
     return (cx + dx, cy + dy)
 
+# ── Ready-Check ───────────────────────────────────────────────────────────────
+
+def wait_for_ready(page: Page, ready_text: str, timeout_ms: int = 8000) -> bool:
+    """
+    Wartet bis ready_text im sichtbaren DOM erscheint.
+    Gibt True zurück wenn bereit, False bei Timeout.
+    """
+    try:
+        page.wait_for_function(
+            f"document.body.innerText.includes({json.dumps(ready_text)})",
+            timeout=timeout_ms,
+        )
+        return True
+    except Exception:
+        return False
+
 # ── Annotation ─────────────────────────────────────────────────────────────────
 
 CIRCLE_FILL    = (210, 30, 30, 235)
@@ -294,72 +330,88 @@ def main():
 
         # ── Sections ───────────────────────────────────────────────────────────
         for section in sections:
-            sid      = section.get("id", "unknown")
-            filename = section.get("filename", sid)
-            title    = section.get("title", sid)
-            tab      = section.get("tab", "dashboard")
-            scroll_y = section.get("scroll_y", 0)
-            actions  = section.get("actions", [])
-            markers  = section.get("markers", [])
+            sid        = section.get("id", "unknown")
+            filename   = section.get("filename", sid)
+            title      = section.get("title", sid)
+            tab        = section.get("tab", "dashboard")
+            scroll_y   = section.get("scroll_y", 0)
+            actions    = section.get("actions", [])
+            m_defs     = section.get("markers", [])
+            ready_text = section.get("ready_text", "")
 
-            res = SectionResult(id=sid, markers_total=len(markers))
+            res = SectionResult(id=sid, expected_view=tab)
             results.append(res)
             print(f"── [{sid}] {title}")
+            print(f"   View: {tab}  |  Ready: {ready_text!r}")
 
-            # Tab navigieren
+            # 1. Tab navigieren
             ok = navigate_tab(page, tab)
             if not ok:
-                # Debug: welche Buttons sind sichtbar?
                 try:
                     btns = page.evaluate(
-                        "Array.from(document.querySelectorAll('button')).map(b=>b.innerText.trim()).filter(t=>t).slice(0,8)"
+                        "Array.from(document.querySelectorAll('button')).map(b=>b.innerText.trim()).filter(t=>t).slice(0,6)"
                     )
-                    print(f"  ⚠  Tab '{tab}' nicht gefunden. Sichtbare Buttons: {btns}")
+                    print(f"   ⚠  Tab '{tab}' nicht gefunden. Buttons: {btns}")
                 except Exception:
-                    print(f"  ⚠  Tab '{tab}' nicht gefunden")
+                    print(f"   ⚠  Tab '{tab}' nicht gefunden")
                 res.warnings.append(f"Tab '{tab}' nicht gefunden")
 
             if scroll_y:
                 page.evaluate(f"window.scrollTo(0, {scroll_y})")
                 page.wait_for_timeout(300)
 
-            # Actions ausführen
+            # 2. Actions
             for action in actions:
                 try:
                     run_action(page, action)
                 except Exception as e:
-                    res.warnings.append(f"Action '{action.get('type')}' fehlgeschlagen: {e}")
+                    res.warnings.append(f"Action {action.get('type')} failed: {e}")
 
-            # Secret-Guard — Screenshot blockieren wenn Secret im DOM
+            # 3. Ready-Check — bestätigt korrekten View-Zustand
+            if ready_text:
+                ready = wait_for_ready(page, ready_text, timeout_ms=8000)
+                res.ready_check = ready
+                if ready:
+                    print(f"   ✓  Ready: '{ready_text}' sichtbar")
+                else:
+                    sample = ""
+                    try:
+                        sample = str(page.evaluate("document.body.innerText"))[:80].replace("\n"," ")
+                    except Exception:
+                        pass
+                    print(f"   ⚠  NOT READY: '{ready_text}' nicht sichtbar nach 8s")
+                    print(f"      DOM-Sample: {sample!r}")
+                    res.warnings.append(f"Ready-Check fehlgeschlagen: '{ready_text}'")
+
+            # 4. Secret-Guard
             dom_text = ""
             try:
-                dom_text = str(page.evaluate("document.body?.innerText ?? ''", timeout=3000))
+                dom_text = str(page.evaluate("document.body?.innerText ?? ''"))
             except Exception:
                 pass
-
             guard = scan_text(dom_text)
             if not guard.safe:
                 labels = ", ".join(f.label for f in guard.findings)
-                print(f"  ⛔  BLOCKIERT — Secrets im DOM: {labels}")
-                res.warnings.append(f"Screenshot blockiert: {labels}")
+                print(f"   ⛔  BLOCKIERT — Secrets erkannt: {labels}")
+                res.warnings.append(f"Blockiert: {labels}")
                 continue
 
-            # Screenshot
+            # 5. Screenshot
             raw_path = OUTPUT_DIR / f"{filename}.png"
             try:
                 page.screenshot(path=str(raw_path), timeout=15000)
                 res.screenshot_ok = True
                 kb = raw_path.stat().st_size // 1024
-                print(f"  ✓  {filename}.png ({kb} KB)")
+                print(f"   ✓  {filename}.png ({kb} KB)")
             except Exception as e:
-                print(f"  ✗  Screenshot fehlgeschlagen: {e}")
-                res.warnings.append(f"Screenshot-Fehler: {e}")
+                print(f"   ✗  Screenshot fehlgeschlagen: {e}")
+                res.warnings.append(f"Screenshot: {e}")
                 continue
 
-            # Marker per DOM suchen
+            # 6. Marker
             markers_placed: list[tuple[int, int, str]] = []
 
-            for m in markers:
+            for m in m_defs:
                 find_text = m.get("find_text", "")
                 fallback  = m.get("fallback")
                 anchor    = m.get("anchor", "center")
@@ -371,28 +423,33 @@ def main():
                     cx = int(el["x"])
                     cy = int(el["y"])
                     cx, cy = apply_anchor(cx, cy, int(el.get("w", 0)), int(el.get("h", 0)), anchor)
+                    cx = max(20, min(VIEWPORT["width"]  - 20, cx))
+                    cy = max(20, min(VIEWPORT["height"] - 20, cy))
                     markers_placed.append((cx, cy, label))
-                    res.markers_found += 1
-                    print(f"    ✓  [{label}] → ({cx},{cy})  [{el.get('text','?')[:40]}]")
+                    bbox_s = f"{int(el.get('x',0))},{int(el.get('y',0))} {int(el.get('w',0))}×{int(el.get('h',0))}"
+                    elem_s = f"{el.get('tag','?')}:{el.get('text','?')[:30]}"
+                    print(f"   ✓  [{label}]  {elem_s}  bbox={bbox_s}")
+                    res.markers.append(MarkerResult(
+                        label=label, found=True, element=elem_s, bbox=bbox_s
+                    ))
                 else:
                     searched = f"'{find_text}'" + (f" / '{fallback}'" if fallback else "")
-                    print(f"    ⚠  MARKER NICHT GESETZT [{label}]")
-                    print(f"       Kein sichtbares Element für: {searched}")
-                    print(f"       → find_text in stories.yaml anpassen")
-                    res.missing_markers.append(label)
+                    print(f"   ⚠  MARKER FEHLT [{label}]  suche={searched}")
+                    res.markers.append(MarkerResult(
+                        label=label, found=False,
+                        warning=f"kein sichtbares Element für {searched}"
+                    ))
 
-            # Annotation — nur wenn ALLE Marker gefunden
+            # 7. Annotation
             if res.missing_markers:
-                print(f"  ⚠  Annotierte Version nicht erzeugt ({len(res.missing_markers)} Marker fehlen)")
-                print(f"     Fehlende Marker: {res.missing_markers}")
+                print(f"   ⚠  Keine Annotation — {len(res.missing_markers)} Marker fehlen: {res.missing_markers}")
             elif markers_placed:
                 dst = annotate_image(raw_path, markers_placed)
                 res.annotated_ok = True
                 kb = dst.stat().st_size // 1024
-                print(f"  ✓  {dst.name} ({kb} KB)")
+                print(f"   ✓  {dst.name} ({kb} KB)")
             else:
-                print(f"  ℹ  Keine Marker definiert — nur raw Screenshot")
-                res.annotated_ok = True  # raw ist OK für marker-lose sections
+                res.annotated_ok = True   # marker-lose section ist OK
 
         browser.close()
 
@@ -406,21 +463,23 @@ def main():
     total_mt    = sum(r.markers_total for r in results)
 
     for r in results:
-        shot_icon = "✓" if r.screenshot_ok else "✗"
-        ann_icon  = "✓" if r.annotated_ok else "⚠"
-        print(f"  [{shot_icon} screenshot][{ann_icon} annotiert] {r.id}")
-        print(f"    Marker: {r.markers_found}/{r.markers_total} gefunden", end="")
-        if r.missing_markers:
-            print(f"  ← FEHLEN: {r.missing_markers}", end="")
-        print()
+        shot_sym  = "✓" if r.screenshot_ok else "✗"
+        ann_sym   = "✓" if r.annotated_ok  else "⚠"
+        ready_sym = ("✓" if r.ready_check else "⚠") if r.ready_check is not None else "—"
+        print(f"\n  {shot_sym}screenshot  {ann_sym}annotiert  {ready_sym}ready  [{r.id}]")
+        print(f"    View: {r.expected_view}")
+        for mr in r.markers:
+            sym = "✓" if mr.found else "⚠"
+            detail = f"{mr.element}  bbox={mr.bbox}" if mr.found else mr.warning
+            print(f"    {sym} [{mr.label}]  {detail}")
         for w in r.warnings:
             print(f"    ⚠  {w}")
 
-    print(f"\nGesamt: {total_shots}/{len(results)} Screenshots  |  {total_ann}/{len(results)} annotiert  |  Marker: {total_mf}/{total_mt}")
+    print(f"\n{'═'*60}")
+    print(f"Gesamt:  {total_shots}/{len(results)} Screenshots  |  {total_ann}/{len(results)} annotiert  |  Marker: {total_mf}/{total_mt}")
     if total_mf < total_mt:
-        print("\n⚠  Fehlende Marker = find_text in stories.yaml stimmt nicht mit UI-Text überein.")
-        print("   Tipp: DOM-Text per page.evaluate(\"document.body.innerText\") prüfen.")
-    print(f"\nOutput: {OUTPUT_DIR}")
+        print("⚠  Fehlende Marker → find_text in stories.yaml präzisieren")
+    print(f"Output:  {OUTPUT_DIR}")
 
 if __name__ == "__main__":
     main()

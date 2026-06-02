@@ -1,18 +1,15 @@
 # VoteBroker Showcase — Story-driven Screenshot Annotations
 # ============================================================
-# Jede Section = ein Textabschnitt des Posts + ein Screenshot.
-# Marker dürfen NUR Elemente markieren, die im Absatz erklärt werden.
-# "find_text" sucht den echten DOM-Text; kein Marker ohne Textbezug.
+# REGELN:
+# 1. find_text muss exakt mit sichtbarem DOM-Text übereinstimmen
+# 2. ready_text definiert, wann der View bereit ist für den Screenshot
+# 3. Marker markiert nur, was der story-Text erklärt
+# 4. Kein Marker ohne Textbezug
 #
-# UI-Navigation:
-#   tab: dna | dashboard | community
-#   actions: Liste von Schritten vor dem Screenshot
-#
-# Marker-Positionierung:
-#   find_text:  Browser-Text der genau so im DOM stehen muss
-#   fallback:   Alternatives Textfragment wenn Haupttext nicht gefunden
-#   anchor:     Wo der Marker relativ zum Element sitzt
-#               center | top_left | top_right | below | above
+# Validation vor jedem Screenshot:
+#   a) Tab/View navigieren
+#   b) Warten bis ready_text sichtbar (timeout: 8s → warning)
+#   c) Erst dann Screenshot + Marker-Suche
 
 sections:
 
@@ -24,21 +21,21 @@ sections:
       VoteBroker durchsucht alle Beiträge deiner Autoren-Strategie
       und findet neue Voting-Chancen – vollautomatisch.
     tab: dna
+    ready_text: "Offene Posts suchen"   # bestätigt: DNA-Tab geladen
     actions:
       - type: wait_ms
         ms: 1500
     markers:
-      - label: "① Jetzt scannen"
-        find_text: "Offene Posts suchen"
-        fallback: "Scann"
+      - label: "① Posts suchen"
+        find_text: "Offene Posts suchen →"   # exakter Button-Text mit Pfeil
+        fallback: "Offene Posts suchen"
         anchor: center
-      - label: "② Kurator-Profil"
+      - label: "② Kurator-Typ"
         find_text: "Regular Curator"
         fallback: "Regelmäßiger Kurator"
         anchor: top_right
       - label: "③ VP jetzt"
         find_text: "VP JETZT"
-        fallback: "73."
         anchor: below
 
   # ── 2. Vote-Plan erstellen ────────────────────────────────────────────────
@@ -49,70 +46,72 @@ sections:
       Nach dem Scan berechnet VoteBroker automatisch einen VP-schonenden Plan:
       welche Posts, in welcher Reihenfolge, mit welchem VP-Effekt morgen.
     tab: dna
+    ready_text: "NACH PLAN"             # bestätigt: Plan mit VP-Boxen sichtbar
     actions:
       - type: click_text
         text: "Offene Posts suchen"
-        wait_after_ms: 3000
+        wait_after_ms: 3500
       - type: click_text
         text: "Vote-Plan generieren"
-        wait_after_ms: 3500
+        wait_after_ms: 4000
     markers:
-      - label: "① Plan generieren"
-        find_text: "Vote-Plan generieren"
+      - label: "① Plan erstellt"
+        find_text: "Votes gefunden"       # Headline wenn Plan sichtbar ist
         fallback: "Plan aktualisieren"
         anchor: center
       - label: "② VP nach Plan"
         find_text: "NACH PLAN"
-        fallback: "Nach Plan"
         anchor: below
       - label: "③ VP morgen"
         find_text: "VP MORGEN"
-        fallback: "VP morgen"
         anchor: below
 
-  # ── 3. Gewichtungen anpassen ──────────────────────────────────────────────
+  # ── 3. Autor-Liste & Gewichtungen ─────────────────────────────────────────
   - id: edit_weights
     filename: "03_edit_weights"
     title: "Gewichtungen anpassen"
     story: |
-      Jeder Autor hat ein Kategorien-Tag und einen Vote-Status.
-      Gewichtungen lassen sich jederzeit manuell korrigieren.
+      Jeder Autor in der Strategie hat ein Kategorien-Tag und einen aktuellen
+      Vote-Status. Gewichtungen lassen sich per Klick direkt anpassen.
     tab: dna
-    scroll_y: 250
+    scroll_y: 400                       # scroll down to author list
+    ready_text: "gevoted"               # bestätigt: Autor-Liste mit Status sichtbar
     actions:
       - type: wait_ms
-        ms: 500
+        ms: 800
     markers:
       - label: "① Kategorie"
-        find_text: "Lieblingsautor"
+        find_text: "Lieblingsautor"     # Kategorie-Badge (exakt, nicht lowercase)
         fallback: "lieblingsautor"
         anchor: center
       - label: "② Vote-Status"
         find_text: "gevoted"
         anchor: center
-      - label: "③ Strategie"
-        find_text: "Autoren-Strategie"
+      - label: "③ Autoren-Strategie"
+        find_text: "Autoren-Strategie"   # Akkordeon-Header — immer sichtbar
         fallback: "Strategie"
         anchor: top_right
 
-  # ── 4. Votes bestätigen & absenden ────────────────────────────────────────
+  # ── 4. Votes bestätigen ───────────────────────────────────────────────────
   - id: confirm_votes
     filename: "04_confirm_votes"
     title: "Votes absenden"
     story: |
       VoteBroker zeigt alle geplanten Votes und wartet auf deine Bestätigung.
-      Keine automatische Ausführung – du entscheidest immer selbst.
+      Kein Vote ohne explizite Freigabe — du hast immer die Kontrolle.
     tab: dna
+    scroll_y: 0
+    ready_text: "bestätigen"            # bestätigt: Bestätigungs-Button sichtbar
     actions:
       - type: wait_ms
         ms: 500
     markers:
-      - label: "① Plan prüfen"
-        find_text: "Votes bestätigen"
+      - label: "① Votes bestätigen"
+        find_text: "Votes bestätigen →" # exakter Button-Text mit Pfeil
         fallback: "bestätigen"
         anchor: center
 
-  # ── 5. Dashboard – Auswirkungen ────────────────────────────────────────────
+  # ── 5. Dashboard — Ergebnisse ─────────────────────────────────────────────
   - id: dashboard_results
     filename: "05_dashboard"
     title: "Dashboard – was es gebracht hat"
@@ -122,28 +121,28 @@ sections:
       der letzten 30 Tage.
     tab: dashboard
     scroll_y: 0
+    ready_text: "VERDIENT · 30 TAGE"   # bestätigt: Dashboard-Tab mit Cards geladen
     actions:
       - type: wait_ms
-        ms: 2000
+        ms: 2500
     markers:
       - label: "① Votes heute"
         find_text: "HEUTE"
-        fallback: "Votes"
         anchor: top_right
-      - label: "② Pending 7 Tage"
-        find_text: "PENDING"
-        fallback: "7 Tage"
+      - label: "② Pending · 7 Tage"
+        find_text: "PENDING · 7 TAGE"  # exakte Karten-Überschrift
+        fallback: "Pending · 7 Tage"
         anchor: top_right
-      - label: "③ Verdient 30 Tage"
-        find_text: "VERDIENT"
-        fallback: "30 Tage"
+      - label: "③ Verdient · 30 Tage"
+        find_text: "VERDIENT · 30 TAGE"  # exakte Karten-Überschrift
+        fallback: "Verdient · 30 Tage"
         anchor: top_right
       - label: "④ VP-Verlauf"
         find_text: "VP HEUTE"
         fallback: "VP-Verlauf"
         anchor: above
 
-  # ── 6. Community – neue Autoren entdecken ─────────────────────────────────
+  # ── 6. Community — neue Autoren entdecken ─────────────────────────────────
   - id: community
     filename: "06_community"
     title: "Neue Autoren entdecken"
@@ -152,18 +151,19 @@ sections:
       unterstützen – aber noch nicht in deiner Strategie sind.
       Ein Klick fügt sie direkt hinzu.
     tab: community
+    ready_text: "Autor-Radar"           # bestätigt: Community-Tab geladen
     actions:
       - type: wait_ms
-        ms: 3500
+        ms: 4000                        # Community-Daten laden lazy
     markers:
-      - label: "① Entdeckungen"
-        find_text: "ENTDECKUNGEN FÜR DICH"
-        fallback: "Entdeckungen"
+      - label: "① Autor-Radar"
+        find_text: "Entdecken · Autor-Radar"  # Seitenüberschrift
+        fallback: "Autor-Radar"
         anchor: top_right
-      - label: "② Neuer Autor"
-        find_text: "@gtg"
-        fallback: "@kingscrown"
-        anchor: center
+      - label: "② Entdeckungen"
+        find_text: "ENTDECKUNGEN FÜR DICH"   # Spaltenheader rechts
+        fallback: "Entdeckungen für dich"
+        anchor: top_right
       - label: "③ Zur Strategie"
         find_text: "+ Zur Strategie"
         anchor: center
