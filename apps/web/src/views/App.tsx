@@ -48,6 +48,9 @@ import {
   type CommunityDiscovery,
   type AuthorDiscoveryCard,
   fetchCommunityDiscovery,
+  type WhaleSignalsData,
+  type WhaleSignalEntry,
+  fetchWhaleSignals,
   type ConsentRecord,
   type ConsentState,
   type ConsentType,
@@ -176,6 +179,8 @@ export function App() {
   const [communityError, setCommunityError] = useState<string | null>(null);
   const [communityDiscovery, setCommunityDiscovery] = useState<CommunityDiscovery | null>(null);
   const [communityDiscoveryLoading, setCommunityDiscoveryLoading] = useState(false);
+  const [whaleSignals, setWhaleSignals] = useState<WhaleSignalsData | null>(null);
+  const [whaleSignalsLoading, setWhaleSignalsLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [consentLoading, setConsentLoading] = useState<ConsentType | null>(null);
@@ -270,14 +275,23 @@ export function App() {
       .catch((err) => setCommunityError(err instanceof Error ? err.message : "Community pool could not be loaded"));
   }, [username]);
 
-  // Lazy-load community discovery only when tab is opened
+  // Lazy-load community discovery + whale signals when community tab opens
   useEffect(() => {
-    if (activeTab !== "community" || !session || communityDiscovery || communityDiscoveryLoading) return;
-    setCommunityDiscoveryLoading(true);
-    fetchCommunityDiscovery(session.token)
-      .then(setCommunityDiscovery)
-      .catch(() => setCommunityDiscovery(null))
-      .finally(() => setCommunityDiscoveryLoading(false));
+    if (activeTab !== "community" || !session) return;
+    if (!communityDiscovery && !communityDiscoveryLoading) {
+      setCommunityDiscoveryLoading(true);
+      fetchCommunityDiscovery(session.token)
+        .then(setCommunityDiscovery)
+        .catch(() => setCommunityDiscovery(null))
+        .finally(() => setCommunityDiscoveryLoading(false));
+    }
+    if (!whaleSignals && !whaleSignalsLoading) {
+      setWhaleSignalsLoading(true);
+      fetchWhaleSignals(session.token)
+        .then(setWhaleSignals)
+        .catch(() => setWhaleSignals(null))
+        .finally(() => setWhaleSignalsLoading(false));
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, session]);
 
@@ -895,11 +909,18 @@ export function App() {
       {/* Tab: Community */}
       {activeTab === "community" && (
         <div style={{ padding: "1.25rem 1.5rem" }}>
-          <CommunityDiscoverySection
-            discovery={communityDiscovery}
-            loading={communityDiscoveryLoading}
+          <WhaleSignalSection
+            data={whaleSignals}
+            loading={whaleSignalsLoading}
             onAddToStrategy={addAuthorToStrategy}
           />
+          <div style={{ marginTop: "2rem" }}>
+            <CommunityDiscoverySection
+              discovery={communityDiscovery}
+              loading={communityDiscoveryLoading}
+              onAddToStrategy={addAuthorToStrategy}
+            />
+          </div>
         </div>
       )}
 
@@ -3670,6 +3691,104 @@ function AuthorCard({ card, onAdd }: {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Whale Signal Section ──────────────────────────────────────────────────────
+
+function WhaleSignalSection({ data, loading, onAddToStrategy }: {
+  data:            WhaleSignalsData | null;
+  loading:         boolean;
+  onAddToStrategy: (username: string, category: StrategyCategory) => void;
+}) {
+  if (loading) return (
+    <div style={{ padding: "2rem", textAlign: "center", color: CD.dim, fontSize: "0.85rem" }}>
+      Signal-Voter werden geladen…
+    </div>
+  );
+
+  if (!data || data.authorsFound === 0) return null;
+
+  const age = data.computedAt
+    ? Math.round((Date.now() - new Date(data.computedAt).getTime()) / 3_600_000)
+    : null;
+
+  return (
+    <div style={{ maxWidth: "960px", margin: "0 auto", marginBottom: "0.5rem" }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", marginBottom: "0.75rem" }}>
+        <h2 style={{ fontSize: "1.15rem", fontWeight: 800, color: CD.text, margin: 0 }}>
+          Von Signal-Votern entdeckt
+        </h2>
+        <span style={{ fontSize: "0.75rem", color: CD.dim }}>
+          {data.trackedWhales.length} aktive Voter · {data.authorsFound} Autoren · {data.periodDays} Tage
+          {age !== null && ` · Stand vor ${age}h`}
+        </span>
+      </div>
+      <p style={{ fontSize: "0.78rem", color: CD.faint, marginBottom: "1rem", marginTop: 0 }}>
+        Autoren, auf deren Posts regelmäßig starke Kuratoren voten — automatisch aus aktuellen Blockchain-Daten ermittelt.
+      </p>
+
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+          <thead>
+            <tr style={{ borderBottom: `2px solid ${CD.border}` }}>
+              <th style={{ textAlign: "left", padding: "0.4rem 0.6rem", color: CD.dim, fontWeight: 600, fontSize: "0.72rem" }}>Autor</th>
+              <th style={{ textAlign: "center", padding: "0.4rem 0.6rem", color: CD.dim, fontWeight: 600, fontSize: "0.72rem" }}>Signal-Voter</th>
+              <th style={{ textAlign: "center", padding: "0.4rem 0.6rem", color: CD.dim, fontWeight: 600, fontSize: "0.72rem" }}>Votes</th>
+              <th style={{ textAlign: "left", padding: "0.4rem 0.6rem", color: CD.dim, fontWeight: 600, fontSize: "0.72rem" }}>Voter</th>
+              <th style={{ textAlign: "center", padding: "0.4rem 0.6rem", color: CD.dim, fontWeight: 600, fontSize: "0.72rem" }}>In Strategie</th>
+              <th style={{ padding: "0.4rem 0.6rem" }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.signals.slice(0, 30).map((s: WhaleSignalEntry, i: number) => (
+              <tr key={s.author} style={{
+                borderBottom: `1px solid ${CD.border}`,
+                background: i % 2 === 0 ? "transparent" : CD.tag,
+              }}>
+                <td style={{ padding: "0.45rem 0.6rem", fontWeight: 700 }}>
+                  <a href={`https://steemit.com/@${s.author}`} target="_blank" rel="noreferrer"
+                    style={{ color: CD.info, textDecoration: "none" }}>
+                    @{s.author}
+                  </a>
+                </td>
+                <td style={{ textAlign: "center", padding: "0.45rem 0.6rem" }}>
+                  <span style={{
+                    background: s.whaleCount >= 3 ? "#dcfce7" : s.whaleCount >= 2 ? "#fef9c3" : CD.tag,
+                    color: s.whaleCount >= 3 ? "#15803d" : s.whaleCount >= 2 ? "#854d0e" : CD.dim,
+                    fontWeight: 700, borderRadius: "999px",
+                    padding: "0.1rem 0.55rem", fontSize: "0.78rem",
+                  }}>{s.whaleCount}</span>
+                </td>
+                <td style={{ textAlign: "center", padding: "0.45rem 0.6rem", color: CD.text }}>
+                  {s.totalWhaleVotes}
+                </td>
+                <td style={{ padding: "0.45rem 0.6rem", color: CD.dim, fontSize: "0.75rem", maxWidth: "220px" }}>
+                  {s.whales.slice(0, 4).join(", ")}{s.whales.length > 4 ? ` +${s.whales.length - 4}` : ""}
+                </td>
+                <td style={{ textAlign: "center", padding: "0.45rem 0.6rem" }}>
+                  {s.inMyStrategy
+                    ? <span style={{ color: CD.ok, fontWeight: 700, fontSize: "0.75rem" }}>✓ drin</span>
+                    : <span style={{ color: CD.faint, fontSize: "0.75rem" }}>—</span>}
+                </td>
+                <td style={{ padding: "0.45rem 0.6rem" }}>
+                  {!s.inMyStrategy && (
+                    <button
+                      onClick={() => onAddToStrategy(s.author, "normal")}
+                      style={{
+                        fontSize: "0.7rem", padding: "0.2rem 0.55rem",
+                        background: CD.info, color: "#fff",
+                        border: "none", borderRadius: "6px", cursor: "pointer",
+                      }}
+                    >+ Hinzufügen</button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

@@ -1042,6 +1042,31 @@ export async function fetchCommunityDiscovery(token: string): Promise<CommunityD
   return res.json();
 }
 
+export interface WhaleSignalEntry {
+  author:          string;
+  whaleCount:      number;
+  whales:          string[];
+  totalWhaleVotes: number;
+  lastWhaleVoteAt: string | null;
+  inMyStrategy:    boolean;
+}
+
+export interface WhaleSignalsData {
+  signals:       WhaleSignalEntry[];
+  trackedWhales: string[];
+  periodDays:    number;
+  computedAt:    string | null;
+  authorsFound:  number;
+}
+
+export async function fetchWhaleSignals(token: string): Promise<WhaleSignalsData> {
+  const res = await fetch(`${API_BASE}/api/community/whale-signals`, {
+    headers: { session: token },
+  });
+  if (!res.ok) throw new Error("Whale Signals konnten nicht geladen werden.");
+  return res.json();
+}
+
 // ── Devlog generation (admin-session auth) ────────────────────────────────────
 
 export interface DevlogGenerateResult {
