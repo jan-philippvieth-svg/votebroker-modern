@@ -841,13 +841,13 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
         )}
       </div>
 
-      {/* ── Pending 7 Tage ── */}
+      {/* ── Pending 7 Tage ── orange = offen / wartet auf Auszahlung */}
       <div style={{
         ...card,
-        borderTop:`4px solid ${C.ok}`,
-        background:"linear-gradient(160deg,#f0fdf4 0%,#ffffff 55%)",
+        borderTop:`4px solid ${C.warn}`,
+        background:"linear-gradient(160deg,#fffbeb 0%,#ffffff 55%)",
       }}>
-        <p style={{ ...lbl, margin:"0 0 0.85rem", color:C.ok }}>Pending · 7 Tage</p>
+        <p style={{ ...lbl, margin:"0 0 0.85rem", color:C.warn }}>Pending · 7 Tage</p>
         {pendingLoading ? (
           <div style={{ color:C.dim, fontSize:"0.88rem" }}>Lädt…</div>
         ) : !pendingCuration || pendingCuration.pendingUsd <= 0 ? (
@@ -857,7 +857,7 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
             <Hero
               val={pendingCuration.pendingSp.toFixed(3)}
               unit="SP"
-              col={C.ok}
+              col={C.warn}
               sub={`≈ ${fmtUsd(pendingCuration.pendingUsd)}`}
             />
             <Row size="0.9rem" label="Offene Posts"   value={String(pendingCuration.postCount)}/>
@@ -865,9 +865,9 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
             {nextPayout && nextPayoutLabel && (
               <>
                 <Divider/>
-                <div style={{ background:C.ok+"10", borderRadius:"8px", padding:"0.45rem 0.65rem", border:`1px solid ${C.ok}25` }}>
+                <div style={{ background:C.warn+"10", borderRadius:"8px", padding:"0.45rem 0.65rem", border:`1px solid ${C.warn}25` }}>
                   <div style={{ color:C.muted, fontSize:"0.72rem", fontWeight:600, marginBottom:"0.15rem" }}>Nächster Payout</div>
-                  <div style={{ color:C.ok, fontWeight:900, fontSize:"1rem" }}>{nextPayoutLabel}</div>
+                  <div style={{ color:C.warn, fontWeight:900, fontSize:"1rem" }}>{nextPayoutLabel}</div>
                   <div style={{ color:C.dim, fontSize:"0.78rem" }}>{nextPayout.estimatedSp.toFixed(3)} SP · {fmtUsd(nextPayout.estimatedUsd)}</div>
                 </div>
               </>
@@ -1260,8 +1260,9 @@ function VBEarningsChart({ data, pendingSp, sbdPerSteem }: {
   const [hoverIdx, setHoverIdx] = useState<number|null>(null);
   if (!data.length) return null;
 
-  const PURPLE  = "#7c3aed";
-  const ORANGE  = "#d97706";
+  const GREEN   = "#16a34a";   // realized = earned = completed
+  const ORANGE  = "#d97706";   // pending  = open   = waiting
+  const PURPLE  = "#7c3aed";   // cumulative line (neutral aggregate)
   const enriched = useMemo(() => enrichWithPending(data, pendingSp), [data, pendingSp]);
 
   const maxBar = Math.max(...enriched.map(d => d.totalSp), 0.001);
@@ -1302,7 +1303,7 @@ function VBEarningsChart({ data, pendingSp, sbdPerSteem }: {
           ].join(" ")}
           fill="url(#vb-cum-grad)"/>
 
-        {/* Stacked daily bars: realized (bottom, purple) + pending (top, orange) */}
+        {/* Stacked daily bars: realized (bottom, green) + pending (top, orange) */}
         {enriched.map((d, i) => {
           const realH  = barH(d.realizedSp);
           const pendH  = barH(d.pendingSp);
@@ -1318,10 +1319,10 @@ function VBEarningsChart({ data, pendingSp, sbdPerSteem }: {
                 <rect x={barX(i)} y={H - PAD - totalH} width={barW} height={pendH}
                   fill={isHov ? ORANGE : ORANGE + "aa"} rx="1.5"/>
               )}
-              {/* Realized portion (bottom, purple) */}
+              {/* Realized portion (bottom, green) */}
               {realH > 0 && (
                 <rect x={barX(i)} y={H - PAD - realH} width={barW} height={realH}
-                  fill={isHov ? PURPLE : PURPLE + "bb"} rx="1.5"
+                  fill={isHov ? GREEN : GREEN + "bb"} rx="1.5"
                   style={{ borderRadius: pendH > 0 ? "0 0 1.5px 1.5px" : "1.5px" }}/>
               )}
               {/* Zero-vote day marker */}
@@ -1366,7 +1367,7 @@ function VBEarningsChart({ data, pendingSp, sbdPerSteem }: {
             </div>
           )}
           {hovD.realizedSp > 0 && (
-            <div>Realisiert: <b style={{ color:"#a78bfa" }}>{hovD.realizedSp.toFixed(4)} SP</b></div>
+            <div>Realisiert: <b style={{ color:"#4ade80" }}>{hovD.realizedSp.toFixed(4)} SP</b></div>
           )}
           {hovD.pendingSp > 0 && (
             <div>Pending: <b style={{ color:ORANGE }}>{hovD.pendingSp.toFixed(4)} SP</b></div>
@@ -1520,7 +1521,7 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, t }: {
               {/* Realized · Pending */}
               <div style={{ fontSize:"0.73rem", marginTop:"0.2rem", display:"flex", gap:"0.6rem", flexWrap:"wrap" }}>
                 {realizedSp > 0 && (
-                  <span style={{ color:"#7c3aed", fontWeight:600 }}>
+                  <span style={{ color:C.ok, fontWeight:600 }}>
                     {realizedSp.toFixed(3)} realisiert
                   </span>
                 )}
@@ -1550,7 +1551,7 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, t }: {
             <>
               <div style={{ fontSize:"0.62rem", color:C.faint, marginBottom:"0.2rem", display:"flex", gap:"0.9rem", alignItems:"center" }}>
                 <span style={{ display:"flex", alignItems:"center", gap:"0.22rem" }}>
-                  <span style={{ display:"inline-block", width:"8px", height:"8px", background:PURPLE, borderRadius:"2px" }}/>
+                  <span style={{ display:"inline-block", width:"8px", height:"8px", background:C.ok, borderRadius:"2px" }}/>
                   Realisiert
                 </span>
                 <span style={{ display:"flex", alignItems:"center", gap:"0.22rem" }}>
