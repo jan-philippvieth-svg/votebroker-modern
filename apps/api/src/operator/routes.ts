@@ -2,7 +2,8 @@ import { createOperatorOverview } from "@votebroker/domain";
 import type { FastifyInstance } from "fastify";
 import { operatorConfig } from "../config.js";
 import { ensureDailyFeePost } from "../chain/steemFeePost.js";
-import { accounts, invoices } from "../mockStore.js";
+import { accounts } from "../mockStore.js";
+import { listInvoices } from "../billing/billingStore.js";
 
 function readHeader(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
@@ -24,7 +25,7 @@ export async function registerOperatorRoutes(app: FastifyInstance): Promise<void
 
     return createOperatorOverview({
       accounts: [...accounts.values()],
-      invoices: [...invoices.values()]
+      invoices: listInvoices()
     });
   });
 

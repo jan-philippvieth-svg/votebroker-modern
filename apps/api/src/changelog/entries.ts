@@ -112,9 +112,10 @@ export const knownIssues: KnownIssue[] = [
     id: "invoice-persistence",
     title: "Invoice Persistence (RAM only)",
     description: "Fee invoices are stored in memory and lost on server restart. SQLite or file-based persistence is planned.",
-    state: "planned",
+    state: "resolved",
     component: "billing",
-    addedDate: "2026-05-31"
+    addedDate: "2026-05-31",
+    updatedDate: "2026-06-03"
   },
   {
     id: "dashboard-demo-data",

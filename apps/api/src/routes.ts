@@ -23,7 +23,8 @@ import { resolve as pathResolve } from "node:path";
 import { hasConsent } from "./consent/consentStore.js";
 import { getDb } from "./db/index.js";
 import { fetchPendingCuration } from "./chain/steemPendingCuration.js";
-import { getAccount, getCommunityPool, invoices, saveAccount } from "./mockStore.js";
+import { getAccount, getCommunityPool, saveAccount } from "./mockStore.js";
+import { getInvoice, listInvoices, saveInvoice, saveBillingAccount, loadBillingAccount } from "./billing/billingStore.js";
 import { voteBrokerWorkflow } from "./workflows.js";
 
 const quoteSchema = z.object({
@@ -537,7 +538,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: "invalid_request", detail: input.error.flatten() });
     }
 
-    const invoice = invoices.get(input.data.invoiceId);
+    const invoice = getInvoice(input.data.invoiceId);   // reads from SQLite, survives restarts
     if (!invoice) {
       return reply.code(404).send({ error: "invoice_not_found" });
     }
@@ -615,13 +616,15 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const assessment = assessFeeVote({ account, invoice, policy: feePolicy });
-    invoices.set(invoice.id, assessment.invoice);
-    saveAccount({
+    saveInvoice(assessment.invoice);   // persist updated invoice status (settled/underfunded)
+    const updatedAccount = {
       ...account,
       status: assessment.accountStatus,
       consecutiveUnderfundedFees:
         assessment.invoice.status === "settled" ? 0 : account.consecutiveUnderfundedFees + 1
-    });
+    };
+    saveAccount(updatedAccount);
+    saveBillingAccount(updatedAccount);   // persist account billing state
 
     return assessment;
   });

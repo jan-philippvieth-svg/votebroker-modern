@@ -2,7 +2,8 @@ import { createFeeInvoice, dailyFeePostPermlink, quoteUsdVote } from "@votebroke
 import { randomUUID } from "node:crypto";
 import { feePolicy } from "./config.js";
 import { fetchSteemAccountSnapshot, toVotingAccountSnapshot } from "./chain/steemAccount.js";
-import { getAccount, invoices } from "./mockStore.js";
+import { getAccount } from "./mockStore.js";
+import { saveInvoice } from "./billing/billingStore.js";
 import type { VoteBrokerWorkflow } from "./ports.js";
 
 export const voteBrokerWorkflow: VoteBrokerWorkflow = {
@@ -37,7 +38,7 @@ export const voteBrokerWorkflow: VoteBrokerWorkflow = {
       feePostPermlink: dailyFeePostPermlink()
     });
 
-    invoices.set(invoice.id, invoice);
+    saveInvoice(invoice);   // persisted to SQLite — survives restarts
 
     return { account, quote, invoice };
   }

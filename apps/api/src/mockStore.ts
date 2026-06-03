@@ -1,4 +1,5 @@
 import type { CommunityPoolSnapshot, FeeInvoice, VotingAccountSnapshot } from "@votebroker/domain";
+import { loadBillingAccount } from "./billing/billingStore.js";
 
 export const accounts = new Map<string, VotingAccountSnapshot>([
   [
@@ -82,12 +83,14 @@ export const communityPools = new Map<string, CommunityPoolSnapshot>([
 export function getAccount(username: string): VotingAccountSnapshot {
   const account = accounts.get(username);
   if (!account) {
+    // Restore billing state from SQLite after restart
+    const billing = loadBillingAccount(username);
     return {
       username,
       votingPowerBps: 0,
       fullPowerVoteUsd: 0,
-      status: "warning",
-      consecutiveUnderfundedFees: 0
+      status: billing?.status ?? "warning",
+      consecutiveUnderfundedFees: billing?.consecutiveUnderfundedFees ?? 0
     };
   }
   return account;

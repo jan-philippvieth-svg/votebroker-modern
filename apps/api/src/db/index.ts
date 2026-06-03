@@ -151,6 +151,33 @@ function initSchema(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_pub_features_cluster  ON published_features(cluster);
     CREATE INDEX IF NOT EXISTS idx_pub_features_draft    ON published_features(draft_filename);
     CREATE INDEX IF NOT EXISTS idx_pub_features_published ON published_features(published_at);
+
+    -- Persistent billing: replaces in-memory Map in mockStore.ts
+    CREATE TABLE IF NOT EXISTS fee_invoices (
+      id                       TEXT PRIMARY KEY,
+      username                 TEXT NOT NULL,
+      source_author            TEXT NOT NULL,
+      source_permlink          TEXT NOT NULL,
+      source_expected_vote_usd REAL NOT NULL,
+      nominal_fee_usd          REAL NOT NULL,
+      amount_usd               REAL NOT NULL,
+      fee_post_author          TEXT NOT NULL,
+      fee_post_permlink        TEXT NOT NULL,
+      required_vote_weight_bps INTEGER NOT NULL,
+      status                   TEXT NOT NULL,
+      billing_mode             TEXT NOT NULL,
+      transparency_json        TEXT NOT NULL,
+      created_at               TEXT NOT NULL,
+      updated_at               TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_fee_invoices_user ON fee_invoices(username);
+
+    CREATE TABLE IF NOT EXISTS billing_accounts (
+      username                     TEXT PRIMARY KEY,
+      status                       TEXT NOT NULL DEFAULT 'active',
+      consecutive_underfunded_fees INTEGER NOT NULL DEFAULT 0,
+      updated_at                   TEXT DEFAULT (datetime('now'))
+    );
   `);
 }
 
