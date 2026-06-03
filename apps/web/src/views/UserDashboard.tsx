@@ -1337,7 +1337,7 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, t }: {
   snapshot: SteemAccountSnapshot|null;
   t: ReturnType<typeof createTranslator>;
 }) {
-  const [period, setPeriod] = useState<VBEarningsPeriod>("30d");
+  const [period, setPeriod] = useState<VBEarningsPeriod>("7d");
   const [data,   setData]   = useState<VBEarningsResult|null>(null);
   const [loading, setLoading] = useState(false);
 
