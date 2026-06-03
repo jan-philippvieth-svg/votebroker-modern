@@ -791,10 +791,8 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
   t: ReturnType<typeof createTranslator>;
 }) {
   const voteUsd       = snapshot?.currentVoteUsd ?? 0;
-  const sbdPerSteem   = snapshot?.sbdPerSteem ?? 0;
   const estCuration   = todayStats
     ? todayStats.votes.reduce((s, v) => s + (v.weightBps / 10000) * voteUsd * 0.25, 0) : 0;
-  const estCurationSp = sbdPerSteem > 0 ? estCuration / sbdPerSteem : null;
   const vpConsumedPct = todayStats ? todayStats.totalWeightBps / 5000 : 0;
 
   // Big hero number + unit
@@ -844,11 +842,7 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
             <Row size="0.9rem" label="Autoren"        value={String(todayStats.uniqueAuthors)}/>
             <Divider/>
             <Row size="0.9rem" label="VP verbraucht"   value={`−${vpConsumedPct.toFixed(1)}%`} col={C.warn} bold/>
-            <Row size="0.9rem" label="→ Pending Pool"
-              value={estCurationSp !== null
-                ? `+${fmtUsd(estCuration)} · ${estCurationSp.toFixed(3)} SP`
-                : `+${fmtUsd(estCuration)}`}
-              col={C.ok} bold/>
+            <Row size="0.9rem" label="→ Pending Pool" value={`+${fmtUsd(estCuration)}`} col={C.ok} bold/>
           </>
         )}
       </div>
@@ -956,9 +950,6 @@ function AllRunsPanel({ todayStats, snapshot, timezone, locale }: {
   if (!todayStats || todayStats.runs.length === 0) return null;
 
   const voteUsd      = snapshot?.currentVoteUsd ?? 0;
-  const sbdPerSteem  = snapshot?.sbdPerSteem ?? 0;
-  const usdToSp      = (usd: number) => sbdPerSteem > 0 ? usd / sbdPerSteem : null;
-  const fmtSp        = (sp: number | null) => sp !== null ? `${sp.toFixed(3)} SP` : null;
   const currentVpPct = snapshot ? snapshot.votingPowerBps / 100 : null;
   const totalConsumed = todayStats.totalWeightBps / 5000;
   const vpBeforeDay   = currentVpPct !== null ? Math.min(100, currentVpPct + totalConsumed) : null;
@@ -1003,10 +994,7 @@ function AllRunsPanel({ todayStats, snapshot, timezone, locale }: {
                     <span style={{ color:C.dim, fontWeight:500, marginLeft:"0.5rem", fontSize:"0.82rem" }}>{time} Uhr</span>
                   </span>
                   <div style={{ display:"flex", alignItems:"center", gap:"0.6rem" }}>
-                    <span style={{ color:C.ok, fontWeight:800, fontSize:"0.9rem" }}>
-                      {fmtUsd(val)}
-                      {fmtSp(usdToSp(val)) && <span style={{ color:C.dim, fontWeight:500, fontSize:"0.78rem", marginLeft:"0.3rem" }}>· {fmtSp(usdToSp(val))}</span>}
-                    </span>
+                    <span style={{ color:C.ok, fontWeight:800, fontSize:"0.9rem" }}>{fmtUsd(val)}</span>
                     <span style={{ color:C.faint, fontSize:"0.78rem" }}>{expanded ? "▲" : "▼"}</span>
                   </div>
                 </div>
@@ -1042,10 +1030,7 @@ function AllRunsPanel({ todayStats, snapshot, timezone, locale }: {
                   ))}
                   <div style={{ padding:"0.4rem 1rem", background:C.inner, fontSize:"0.75rem", display:"flex", gap:"1.5rem", color:C.dim }}>
                     <span style={{ fontWeight:700, color:C.text }}>Gesamt</span>
-                    <span style={{ color:C.ok, fontWeight:700 }}>
-                      +{fmtUsd(val * 0.25)} Curation
-                      {fmtSp(usdToSp(val * 0.25)) && <span style={{ fontWeight:500 }}> · {fmtSp(usdToSp(val * 0.25))}</span>}
-                    </span>
+                    <span style={{ color:C.ok, fontWeight:700 }}>+{fmtUsd(val * 0.25)} Curation</span>
                     <span>{fmtUsd(val)} verteilt</span>
                   </div>
                 </div>
@@ -1061,10 +1046,7 @@ function AllRunsPanel({ todayStats, snapshot, timezone, locale }: {
           <span style={{ color:C.info, fontWeight:600 }}>{todayStats.uniqueAuthors} Autoren</span>
           <span style={{ color:C.warn, fontWeight:700 }}>−{totalConsumed.toFixed(1)}% VP</span>
           <span style={{ color:C.dim, fontWeight:600 }}>Vote-Wert: {fmtUsd(totalValue)}</span>
-          <span style={{ color:C.ok, fontWeight:700 }}>
-            +{fmtUsd(totalValue * 0.25)} Curation
-            {fmtSp(usdToSp(totalValue * 0.25)) && <span style={{ fontWeight:500 }}> · {fmtSp(usdToSp(totalValue * 0.25))}</span>}
-          </span>
+          <span style={{ color:C.ok, fontWeight:700 }}>+{fmtUsd(totalValue * 0.25)} Curation</span>
         </div>
       </div>
     </div>
