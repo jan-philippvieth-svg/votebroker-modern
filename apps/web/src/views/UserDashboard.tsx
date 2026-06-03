@@ -37,15 +37,21 @@ const C = {
   border:  "#dde8ed",
   border2: "#c5d3da",
 
-  // Semantic accents — vibrant, contrast on white
-  ok:      "#16a34a",   // green
-  warn:    "#d97706",   // amber
-  err:     "#dc2626",   // red
-  info:    "#2563eb",   // blue
-  purple:  "#7c3aed",   // violet
-  teal:    "#0d9488",   // teal (Community tab primary)
-  fire:    "#ea580c",   // orange
-  gold:    "#d97706",   // gold
+  // ── Semantic color system (DO NOT REUSE for other meanings) ────────────────
+  // 🟢 ok     = Realisiert / verdient / Erfolg / abgeschlossen
+  // 🟠 warn   = Pending / offen / wartet auf Auszahlung
+  // 🔴 err    = Kosten / Fees / Fehler / Verluste
+  // 🔵 info   = Aktionen / Links / Navigation / operative Metriken
+  // 🟣 purple = Lifetime / Aggregation / Statistik / neutraler Verlauf
+  // Every new card must use one of these five — not a custom color.
+  ok:      "#16a34a",   // 🟢 realized / earned / success
+  warn:    "#d97706",   // 🟠 pending / open / waiting
+  err:     "#dc2626",   // 🔴 cost / fee / error / loss
+  info:    "#2563eb",   // 🔵 action / link / navigation / activity
+  purple:  "#7c3aed",   // 🟣 lifetime / aggregate / statistic
+  teal:    "#0d9488",   // Community tab primary (contextual, not semantic)
+  fire:    "#ea580c",   // (deprecated — use warn instead)
+  gold:    "#d97706",   // (deprecated — use warn instead)
 
   // Backwards-compat aliases
   bg0: "#f4f7f8", bg1: "#f4f7f8", bg2: "#ffffff",
