@@ -554,6 +554,45 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
     }
   });
 
+  // ── POST /api/me/vote-outcomes/rebuild — populate vb_global_vote_outcomes ────
+  // Reads from audit_events + vb_vote_outcomes, fetches post timing from chain.
+  // Safe to run multiple times — upsert logic skips already-resolved fields.
+  app.post("/api/me/vote-outcomes/rebuild", async (request, reply) => {
+    const token   = (request.headers as Record<string, string>)["session"];
+    const session = token ? getSession(token) : null;
+    if (!session) return reply.code(401).send({ error: "unauthorized" });
+
+    try {
+      const { populateGlobalVoteOutcomes, getVoteOutcomeSummary } =
+        await import("../chain/globalVoteOutcomes.js");
+      const result  = await populateGlobalVoteOutcomes(
+        session.user.username,
+        request.log as unknown as typeof console,
+      );
+      const summary = getVoteOutcomeSummary(session.user.username);
+      return { ...result, summary };
+    } catch (err) {
+      return reply.code(502).send({
+        error:  "global_outcomes_rebuild_failed",
+        detail: err instanceof Error ? err.message : "unknown",
+      });
+    }
+  });
+
+  // ── GET /api/me/vote-outcomes/summary — timing analytics summary ─────────────
+  app.get("/api/me/vote-outcomes/summary", async (request, reply) => {
+    const token   = (request.headers as Record<string, string>)["session"];
+    const session = token ? getSession(token) : null;
+    if (!session) return reply.code(401).send({ error: "unauthorized" });
+
+    try {
+      const { getVoteOutcomeSummary } = await import("../chain/globalVoteOutcomes.js");
+      return getVoteOutcomeSummary(session.user.username);
+    } catch (err) {
+      return reply.code(502).send({ error: "summary_failed" });
+    }
+  });
+
   // ── GET /api/me/votebroker-earnings — VoteBroker-attributed curation ────────
   app.get("/api/me/votebroker-earnings", async (request, reply) => {
     const token   = (request.headers as Record<string, string>)["session"];

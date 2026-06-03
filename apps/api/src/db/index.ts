@@ -178,6 +178,42 @@ function initSchema(db: Database): void {
       consecutive_underfunded_fees INTEGER NOT NULL DEFAULT 0,
       updated_at                   TEXT DEFAULT (datetime('now'))
     );
+
+    -- Global vote outcome analytics index.
+    -- Source of truth: Steem blockchain. This table is a reconstructable cache.
+    -- Purpose: learn optimal vote timing from real curation reward outcomes.
+    -- Primary key: voter + author + permlink (one vote per post per voter).
+    CREATE TABLE IF NOT EXISTS vb_global_vote_outcomes (
+      -- Identity
+      voter                   TEXT NOT NULL,
+      author                  TEXT NOT NULL,
+      permlink                TEXT NOT NULL,
+      -- Post timing
+      post_created_at         TEXT,          -- ISO, from get_content.created
+      voted_at                TEXT NOT NULL, -- ISO, when VoteBroker broadcast the vote
+      vote_delay_minutes      REAL,          -- voted_at - post_created_at in minutes
+      -- Vote parameters at cast time
+      weight_bps              INTEGER NOT NULL,
+      vp_at_vote_bps          INTEGER,       -- voting power % × 100 at cast time
+      estimated_vote_value_sbd REAL,         -- estimated USD/SBD value at cast time
+      -- Curation outcome (filled when post pays out)
+      realized_curation_sp    REAL,          -- actual SP from curation_reward op
+      realized_at             TEXT,          -- ISO, when the payout occurred
+      -- Strategy context
+      strategy_category       TEXT,          -- immer_voten|lieblingsautor|bevorzugt|...
+      is_self_post            INTEGER,       -- 0/1 — author == voter
+      -- Chain provenance (allows verification + rebuild from chain)
+      source_vote_trx_id      TEXT,          -- transaction_id of the vote op
+      source_reward_trx_id    TEXT,          -- transaction_id of curation_reward op
+      -- Metadata
+      recorded_at             TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (voter, author, permlink)
+    );
+    CREATE INDEX IF NOT EXISTS idx_gvo_voter       ON vb_global_vote_outcomes(voter);
+    CREATE INDEX IF NOT EXISTS idx_gvo_voted_at    ON vb_global_vote_outcomes(voted_at);
+    CREATE INDEX IF NOT EXISTS idx_gvo_delay       ON vb_global_vote_outcomes(vote_delay_minutes);
+    CREATE INDEX IF NOT EXISTS idx_gvo_category    ON vb_global_vote_outcomes(strategy_category);
+    CREATE INDEX IF NOT EXISTS idx_gvo_realized    ON vb_global_vote_outcomes(realized_at);
   `);
 }
 
