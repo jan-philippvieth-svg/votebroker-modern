@@ -77,18 +77,21 @@ function deriveSystemStatus(params: {
 export async function ensureDailyFeePost(params: {
   date?: Date;
   newUsers?: string[];
+  forceUpdate?: boolean;
 }): Promise<EnsureFeePostResult> {
   const date   = params.date ?? new Date();
   const author = broadcastConfig.account;
   const permlink = dailyFeePostPermlink(date);
   const client = createSteemClient();
 
-  // Idempotency: check if the post already exists
-  const existing = await client.database.call("get_content", [author, permlink]) as {
-    author?: string;
-  };
-  if (existing?.author === author) {
-    return { permlink, alreadyExisted: true, author };
+  // Idempotency: check if the post already exists (skip if forceUpdate)
+  if (!params.forceUpdate) {
+    const existing = await client.database.call("get_content", [author, permlink]) as {
+      author?: string;
+    };
+    if (existing?.author === author) {
+      return { permlink, alreadyExisted: true, author };
+    }
   }
 
   if (!broadcastConfig.postingWif) {

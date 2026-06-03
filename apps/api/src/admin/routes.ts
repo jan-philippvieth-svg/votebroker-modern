@@ -182,12 +182,12 @@ function getSystemHealth() {
 
 // ── Manual fee post trigger (admin-only) ───────────────────────────────────────
 // Pass an optional ISO date string (YYYY-MM-DD) to retroactively publish a missing post.
-async function triggerFeePostNow(dateStr?: string): Promise<object> {
+async function triggerFeePostNow(dateStr?: string, forceUpdate?: boolean): Promise<object> {
   const date = dateStr ? new Date(`${dateStr}T01:00:00Z`) : undefined;
   if (dateStr && isNaN(date!.getTime())) {
     throw new Error(`Invalid date: "${dateStr}" — expected YYYY-MM-DD`);
   }
-  return runDailyFeePost(console, date);
+  return runDailyFeePost(console, date, forceUpdate);
 }
 
 // ── VoteBroker insights ───────────────────────────────────────────────────────
@@ -429,12 +429,13 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/admin/analytics",     async () => getAnalytics());
   app.get("/api/admin/broadcasts",    async () => ({ broadcasts: getRecentBroadcasts() }));
 
-  // Manual fee post trigger — optional body: { date: "YYYY-MM-DD" } for retroactive publish
+  // Manual fee post trigger — optional body: { date: "YYYY-MM-DD", forceUpdate: true }
   app.post("/api/admin/fee-post/trigger", async (request, reply) => {
     try {
-      const body  = (request.body ?? {}) as { date?: string };
+      const body  = (request.body ?? {}) as { date?: string; forceUpdate?: boolean };
       const dateStr = typeof body.date === "string" && body.date.length > 0 ? body.date : undefined;
-      return await triggerFeePostNow(dateStr);
+      const forceUpdate = body.forceUpdate === true;
+      return await triggerFeePostNow(dateStr, forceUpdate);
     }
     catch (err) { return reply.code(500).send({ error: "trigger_failed", detail: err instanceof Error ? err.message : String(err) }); }
   });

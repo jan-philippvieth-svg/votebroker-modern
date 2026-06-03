@@ -1,0 +1,82 @@
+[
+  {
+    "storyKey": "bugfixes-2026-05-31",
+    "cluster": "bugfixes",
+    "clusterLabel": "Bugfixes",
+    "summary": "Absolute URLs for Steemit — relative paths resolve to steemit.com",
+    "type": "fix",
+    "sinceDate": "2026-05-31",
+    "untilDate": "2026-06-02",
+    "commitCount": 10
+  },
+  {
+    "storyKey": "pending_curation-2026-05-31",
+    "cluster": "pending_curation",
+    "clusterLabel": "Pending Curation",
+    "summary": "Accurate 7-day curation estimate via curation weight",
+    "type": "feat",
+    "sinceDate": "2026-05-31",
+    "untilDate": "2026-06-02",
+    "commitCount": 1
+  },
+  {
+    "storyKey": "vote_planner-2026-05-31",
+    "cluster": "vote_planner",
+    "clusterLabel": "Vote-Planer",
+    "summary": "Show USD equivalent alongside weight % in strategy table",
+    "type": "feat",
+    "sinceDate": "2026-05-31",
+    "untilDate": "2026-06-02",
+    "commitCount": 4
+  },
+  {
+    "storyKey": "community-2026-05-31",
+    "cluster": "community",
+    "clusterLabel": "Community-Entdeckung",
+    "summary": "Replace fake pool with real Author Radar discovery",
+    "type": "feat",
+    "sinceDate": "2026-05-31",
+    "untilDate": "2026-06-02",
+    "commitCount": 1
+  },
+  {
+    "storyKey": "dashboard-2026-05-31",
+    "cluster": "dashboard",
+    "clusterLabel": "Dashboard & Analytics",
+    "summary": "Large KPI zone + move card to top of dashboard",
+    "type": "other",
+    "sinceDate": "2026-05-31",
+    "untilDate": "2026-06-02",
+    "commitCount": 9
+  },
+  {
+    "storyKey": "ux-2026-05-31",
+    "cluster": "ux",
+    "clusterLabel": "UI/UX-Verbesserungen",
+    "summary": "Remove duplicate 'Alle N jetzt voten' CTA from scan header",
+    "type": "feat",
+    "sinceDate": "2026-05-31",
+    "untilDate": "2026-06-02",
+    "commitCount": 5
+  },
+  {
+    "storyKey": "content_system-2026-05-31",
+    "cluster": "content_system",
+    "clusterLabel": "Content-System",
+    "summary": "Validated freetext, pending prominent, Realisiert badge to tooltip",
+    "type": "feat",
+    "sinceDate": "2026-05-31",
+    "untilDate": "2026-06-02",
+    "commitCount": 7
+  },
+  {
+    "storyKey": "infrastructure-2026-05-31",
+    "cluster": "infrastructure",
+    "clusterLabel": "Infrastruktur",
+    "summary": "Arch: vb_vote_outcomes clarified as cache index, added chain provenance fields",
+    "type": "other",
+    "sinceDate": "2026-05-31",
+    "untilDate": "2026-06-02",
+    "commitCount": 2
+  }
+]
