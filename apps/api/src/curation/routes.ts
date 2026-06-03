@@ -501,6 +501,29 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
     };
   });
 
+  // ── POST /api/me/votebroker-earnings/rebuild — rebuild cache from chain ──────
+  // The vb_vote_outcomes table is a cache. This rebuilds it from get_account_history.
+  // Safe to run at any time — upserts, never deletes matched data.
+  app.post("/api/me/votebroker-earnings/rebuild", async (request, reply) => {
+    const token   = (request.headers as Record<string, string>)["session"];
+    const session = token ? getSession(token) : null;
+    if (!session) return reply.code(401).send({ error: "unauthorized" });
+
+    try {
+      const { rebuildVoteOutcomes } = await import("../chain/rebuildVoteOutcomes.js");
+      const report = await rebuildVoteOutcomes(
+        session.user.username,
+        request.log as unknown as typeof console,
+      );
+      return report;
+    } catch (err) {
+      return reply.code(502).send({
+        error:  "rebuild_failed",
+        detail: err instanceof Error ? err.message : "unknown",
+      });
+    }
+  });
+
   // ── GET /api/me/votebroker-earnings — VoteBroker-attributed curation ────────
   app.get("/api/me/votebroker-earnings", async (request, reply) => {
     const token   = (request.headers as Record<string, string>)["session"];

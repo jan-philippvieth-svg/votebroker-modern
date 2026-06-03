@@ -124,9 +124,10 @@ function initSchema(db: Database): void {
       realized_sp     REAL,               -- actual curation_reward received (SP)
       realized_at     TEXT,               -- when the post paid out
       category        TEXT,               -- strategy category at vote time
-      -- Chain provenance — enables rebuild verification and debugging
+      -- Chain provenance — enables rebuild verification and debugging at the right layer
       vote_trx_id     TEXT,               -- transaction_id of the vote operation
       reward_trx_id   TEXT,               -- transaction_id of the curation_reward op
+      reward_block_num INTEGER,            -- block number of the curation_reward op
       recorded_at     TEXT DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_vb_outcomes_user   ON vb_vote_outcomes(username);
@@ -172,6 +173,13 @@ function runMigrations(db: Database): void {
     addIfMissing("failed_reason", "TEXT");
     addIfMissing("publish_tx_id", "TEXT");
     addIfMissing("published_permlink", "TEXT");
-    addIfMissing("screenshot_snap", "TEXT");  // devlog snapshot dir, e.g. "snap-20260602"
+    addIfMissing("screenshot_snap",   "TEXT");   // devlog snapshot dir, e.g. "snap-20260602"
+    // vb_vote_outcomes provenance fields (added after initial schema)
+    const outcomesCols = (db.prepare("PRAGMA table_info(vb_vote_outcomes)").all() as Array<{name:string}>).map(c=>c.name);
+    if (outcomesCols.length > 0) {
+      if (!outcomesCols.includes("vote_trx_id"))     db.exec("ALTER TABLE vb_vote_outcomes ADD COLUMN vote_trx_id TEXT");
+      if (!outcomesCols.includes("reward_trx_id"))   db.exec("ALTER TABLE vb_vote_outcomes ADD COLUMN reward_trx_id TEXT");
+      if (!outcomesCols.includes("reward_block_num")) db.exec("ALTER TABLE vb_vote_outcomes ADD COLUMN reward_block_num INTEGER");
+    }
   }
 }
