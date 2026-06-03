@@ -2573,14 +2573,31 @@ function VotePlanSection(props: {
     setOverrides(prev => { const m = new Map(prev); m.delete(key); return m; });
   }
 
-  // Transition to "generated" whenever a new plan arrives (reset confirms + overrides)
+  // Transition to "generated" whenever a new plan arrives — auto-fill remaining budget
   useEffect(() => {
     if (plan !== null) {
       setPhase("generated");
       setConfirmed(false); setExecLog([]); setExecIndex(0); setAborted(false);
       setOverrides(new Map());
-      setAdditions([]);
+
+      // Auto-fill: add fitting candidates from pre-scanned opportunities into the plan.
+      // The server plan only fetches independently — remaining budget often goes unused.
+      // This bridges the gap between server-plan and client-side opportunities.
+      const planKeys   = new Set(plan.plan.map(e => `${e.author}/${e.permlink}`));
+      const planCost   = plan.plan.reduce((s, e) => s + e.suggestedWeightBps / 5_000, 0);
+      let remaining    = Math.max(0, (plan.report.dynamicBudgetPct ?? 0) - planCost);
+      const autoAdded: VotePlanEntry[] = [];
+      for (const c of (props.additionalCandidates ?? [])) {
+        if (planKeys.has(`${c.author}/${c.permlink}`)) continue;
+        const cost = c.suggestedWeightBps / 5_000;
+        if (cost <= remaining + 0.001) {
+          autoAdded.push(c);
+          remaining -= cost;
+        }
+      }
+      setAdditions(autoAdded);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan]);
 
   // Report live metrics upward — only when a plan exists (avoid showing 0%/20% before first plan)
@@ -2697,20 +2714,10 @@ function VotePlanSection(props: {
                       VP morgen: <b style={{ color: origVpMorgen >= 80 ? "#15803d" : "#d97706" }}>{origVpMorgen.toFixed(1)}%</b>
                       {" → "}<b style={{ color: effVpMorgen >= 80 ? "#15803d" : "#d97706", fontSize: "0.95rem" }}>{effVpMorgen.toFixed(1)}%</b>
                     </span>
-                    {addlPossible > 0 ? (
-                      <button
-                        type="button"
-                        onClick={() => setAdditions(prev => {
-                          const alreadyKeys = new Set([...prev, ...entries].map(x => `${x.author}/${x.permlink}`));
-                          const toAdd = fittingCandidates.filter(c => !alreadyKeys.has(`${c.author}/${c.permlink}`));
-                          return [...prev, ...toAdd];
-                        })}
-                        style={{ background: "#dbeafe", border: "1.5px solid #3b82f6", borderRadius: "8px", color: "#1d4ed8", cursor: "pointer", fontSize: "0.82rem", fontWeight: 700, padding: "0.25rem 0.75rem" }}
-                      >
-                        + {addlPossible} weitere Vote{addlPossible !== 1 ? "s" : ""} hinzufügen
-                      </button>
-                    ) : additions.length > 0 || props.additionalCandidates?.length === 0 ? null : (
-                      <span style={{ color: "#94a3b8", fontSize: "0.78rem" }}>Keine weiteren passenden Kandidaten</span>
+                    {additions.length > 0 && (
+                      <span style={{ color: "#0369a1", fontSize: "0.78rem" }}>
+                        ✓ {additions.length} Opportunit{additions.length === 1 ? "y" : "ies"} automatisch ergänzt
+                      </span>
                     )}
                     {plan?.report.dynamicBudgetPct !== undefined && (
                       <span style={{ color: "#64748b", fontSize: "0.78rem" }}>
