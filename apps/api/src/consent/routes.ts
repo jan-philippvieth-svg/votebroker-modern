@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getSession } from "../auth/sessionStore.js";
 import { consentCatalog, getConsentState, grantConsent, revokeConsent } from "./consentStore.js";
 
-const consentTypeSchema = z.enum(["login", "target_vote", "fee_post_vote", "auto_vote", "ai_strategy"]);
+const consentTypeSchema = z.enum(["login", "target_vote", "fee_post_vote", "auto_vote", "ai_strategy", "community_intelligence"]);
 const consentRequestSchema = z.object({
   type: consentTypeSchema
 });
