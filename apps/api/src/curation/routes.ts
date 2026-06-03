@@ -5,6 +5,7 @@ import { fetchVoteHistory } from "../chain/voteHistory.js";
 import { fetchRecentPostsWithVotes, fetchRecentPostsDebug, type PostOpportunity } from "../chain/recentPosts.js";
 import { getSession } from "../auth/sessionStore.js";
 import { getGrowthData } from "./growthService.js";
+import { getDb } from "../db/index.js";
 
 // ── Shared schemas ────────────────────────────────────────────────────────────
 
@@ -313,9 +314,27 @@ function buildVotePlan(params: {
   return { entries: included, report };
 }
 
+// ── Recent VoteBroker votes from audit_events (chain timing buffer) ───────────
+// The Steem node may not reflect a vote in active_votes immediately after
+// broadcast. We read audit_events as a local buffer so the plan generator
+// never re-suggests a post that VoteBroker already voted, even before chain sync.
+
+function getRecentlyVotedKeys(voter: string, windowMs = 2 * 24 * 3600 * 1000): Set<string> {
+  const since = new Date(Date.now() - windowMs).toISOString();
+  const rows = getDb().prepare(`
+    SELECT author, permlink FROM audit_events
+    WHERE username = ? AND type IN ('vote_broadcast_success', 'vote_broadcast_attempt')
+      AND author IS NOT NULL AND created_at >= ?
+  `).all(voter, since) as Array<{ author: string; permlink: string }>;
+  return new Set(rows.map(r => `${r.author}/${r.permlink}`));
+}
+
 // ── Batch fetch helper ────────────────────────────────────────────────────────
 
 async function fetchAllPosts(authors: string[], voter: string): Promise<Map<string, PostOpportunity[]>> {
+  // Build local voted-key set to catch votes not yet visible on-chain
+  const recentlyVoted = getRecentlyVotedKeys(voter);
+
   const map = new Map<string, PostOpportunity[]>();
   const BATCH = 5;
   for (let i = 0; i < authors.length; i += BATCH) {
@@ -325,7 +344,18 @@ async function fetchAllPosts(authors: string[], voter: string): Promise<Map<stri
     );
     for (let j = 0; j < results.length; j++) {
       const r = results[j];
-      if (r.status === "fulfilled") map.set(batch[j], r.value);
+      if (r.status === "fulfilled") {
+        // Apply local buffer: mark as alreadyVoted if in audit_events even if
+        // the chain hasn't synced yet
+        const posts = r.value.map(p => {
+          const key = `${p.author}/${p.permlink}`;
+          if (!p.alreadyVoted && recentlyVoted.has(key)) {
+            return { ...p, alreadyVoted: true, eligible: false };
+          }
+          return p;
+        });
+        map.set(batch[j], posts);
+      }
     }
   }
   return map;
