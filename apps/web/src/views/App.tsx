@@ -1139,10 +1139,17 @@ const CONSENT_META: Record<ConsentType, {
     note: "Voting-Daten werden nicht gespeichert oder an Dritte weitergegeben.",
     required: false,
   },
+  community_intelligence: {
+    icon: "👥",
+    label: "Community Intelligence",
+    description: "Anonymisiert an Community-Empfehlungen teilnehmen — deine Autoren-Präferenzen fließen in den Author Radar ein.",
+    note: "Kein Benutzername und keine Strategie wird veröffentlicht. Opt-out jederzeit möglich.",
+    required: false,
+  },
 };
 
 // Ordered display
-const CONSENT_ORDER: ConsentType[] = ["login", "target_vote", "auto_vote", "fee_post_vote", "ai_strategy"];
+const CONSENT_ORDER: ConsentType[] = ["login", "target_vote", "auto_vote", "fee_post_vote", "ai_strategy", "community_intelligence"];
 
 function ConsentPanel(props: {
   catalog: ConsentRecord[];

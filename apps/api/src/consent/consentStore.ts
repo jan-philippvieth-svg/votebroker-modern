@@ -32,6 +32,12 @@ export const consentCatalog: Record<ConsentType, Omit<ConsentRecord, "id" | "use
     title: "AI Strategie Optimierung",
     description: "VoteBroker analysiert deine Voting-Historie um personalisierte Strategie-Empfehlungen zu erstellen.",
     scope: ["Voting-Historie lokal analysieren", "Autor-Rankings berechnen", "Strategie-Vorschlaege generieren", "Keine Weitergabe an Dritte"]
+  },
+  community_intelligence: {
+    type: "community_intelligence",
+    title: "Community Intelligence",
+    description: "Anonymisiert an Community-Empfehlungen teilnehmen — deine Autoren-Praeferenzen fliessen in den Author Radar ein.",
+    scope: ["Autoren-Praeferenzen anonymisiert aggregieren", "Author-Radar-Empfehlungen verbessern", "Kein Benutzername oder Strategie veroeffentlicht", "Opt-out jederzeit moeglich"]
   }
 };
 

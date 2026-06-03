@@ -192,7 +192,7 @@ export interface VoteExecutionResponse {
   transactionId: string;
 }
 
-export type ConsentType = "login" | "target_vote" | "fee_post_vote" | "auto_vote" | "ai_strategy";
+export type ConsentType = "login" | "target_vote" | "fee_post_vote" | "auto_vote" | "ai_strategy" | "community_intelligence";
 
 export interface ConsentRecord {
   id?: string;
