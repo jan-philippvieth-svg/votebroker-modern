@@ -750,8 +750,8 @@ function PendingDebugPanel({ data }: { data: PendingCuration }) {
                       <th style={{ ...tdL, fontWeight: 600 }}>Autor/Permlink</th>
                       <th style={{ ...tdR, fontWeight: 600 }}>Pool SBD</th>
                       <th style={{ ...tdR, fontWeight: 600 }}>Weight %</th>
-                      <th style={{ ...tdR, fontWeight: 600, color: C.ok }}>≈ SP (weight)</th>
-                      <th style={{ ...tdR, fontWeight: 600, color: C.dim }}>SP (rshares)</th>
+                      <th style={{ ...tdR, fontWeight: 600, color: C.ok }}>≈ STEEM (weight)</th>
+                      <th style={{ ...tdR, fontWeight: 600, color: C.dim }}>≈ STEEM (rshares)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -862,7 +862,7 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
           <>
             <Hero
               val={pendingCuration.pendingSp.toFixed(3)}
-              unit="SP"
+              unit="STEEM"
               col={C.warn}
               sub={`≈ ${fmtUsd(pendingCuration.pendingUsd)}`}
             />
@@ -874,7 +874,7 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
                 <div style={{ background:C.warn+"10", borderRadius:"8px", padding:"0.45rem 0.65rem", border:`1px solid ${C.warn}25` }}>
                   <div style={{ color:C.muted, fontSize:"0.72rem", fontWeight:600, marginBottom:"0.15rem" }}>Nächster Payout</div>
                   <div style={{ color:C.warn, fontWeight:900, fontSize:"1rem" }}>{nextPayoutLabel}</div>
-                  <div style={{ color:C.dim, fontSize:"0.78rem" }}>{nextPayout.estimatedSp.toFixed(3)} SP · {fmtUsd(nextPayout.estimatedUsd)}</div>
+                  <div style={{ color:C.dim, fontSize:"0.78rem" }}>≈ {nextPayout.estimatedSp.toFixed(3)} STEEM · {fmtUsd(nextPayout.estimatedUsd)}</div>
                 </div>
               </>
             )}
@@ -915,14 +915,14 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
               <>
                 <Hero
                   val={totalSp > 0 ? totalSp.toFixed(3) : "—"}
-                  unit="SP"
+                  unit="STEEM"
                   col={C.purple}
                   sub={totalSp > 0 ? `≈ ${fmtUsd(totalSp * sbdPrStm)}` : "Attribution läuft"}
                 />
                 {votes > 0 && <Row size="0.9rem" label="Votes gesamt"  value={String(votes)}/>}
                 {realSp > 0 && <Row size="0.9rem" label="Realisiert"   value={`${realSp.toFixed(3)} SP`}/>}
-                {pendSp > 0 && <Row size="0.9rem" label="Pending"      value={`${pendSp.toFixed(3)} SP`} col={C.warn}/>}
-                {spPV > 0    && <><Divider/><Row size="0.9rem" label="Ø SP pro Vote" value={`${spPV.toFixed(4)} SP`} col={C.purple} bold/></>}
+                {pendSp > 0 && <Row size="0.9rem" label="Pending"      value={`${pendSp.toFixed(3)} STEEM`} col={C.warn}/>}
+                {spPV > 0    && <><Divider/><Row size="0.9rem" label="Ø pro Vote" value={`≈ ${spPV.toFixed(4)} STEEM`} col={C.purple} bold/></>}
                 {since && (
                   <div style={{ color:C.dim, fontSize:"0.8rem", marginTop:"0.5rem" }}>
                     Attribution seit {since}
@@ -1376,14 +1376,14 @@ function VBEarningsChart({ data, pendingSp, sbdPerSteem }: {
             <div>Realisiert: <b style={{ color:"#4ade80" }}>{hovD.realizedSp.toFixed(4)} SP</b></div>
           )}
           {hovD.pendingSp > 0 && (
-            <div>Pending: <b style={{ color:ORANGE }}>{hovD.pendingSp.toFixed(4)} SP</b></div>
+            <div>Pending: <b style={{ color:ORANGE }}>{hovD.pendingSp.toFixed(4)} STEEM</b></div>
           )}
           {hovD.totalSp > 0 && (
             <div style={{ borderTop:"1px solid #334155", marginTop:"0.2rem", paddingTop:"0.2rem" }}>
-              Gesamt: <b style={{ color:"#fff" }}>{hovD.totalSp.toFixed(4)} SP</b>
+              Gesamt: <b style={{ color:"#fff" }}>{hovD.totalSp.toFixed(4)} STEEM</b>
             </div>
           )}
-          <div>Kumuliert: <b style={{ color:"#c4b5fd" }}>{hovD.cumTotalSp.toFixed(3)} SP</b></div>
+          <div>Kumuliert: <b style={{ color:"#c4b5fd" }}>{hovD.cumTotalSp.toFixed(3)} STEEM</b></div>
           {hovD.totalSp > 0 && sbdPerSteem > 0 && (
             <div style={{ color:"#64748b" }}>
               ≈ {(hovD.totalSp * sbdPerSteem).toFixed(4)} SBD
@@ -1432,7 +1432,7 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, t }: {
   const since      = data?.attributionStart ?? "";
   const totalVotes = data?.totals.voteCount ?? 0;
   const gameTip    = totalVotes > 0 && spPerVote > 0
-    ? `${totalVotes} VoteBroker-Votes${since ? " seit " + since : ""} · davon ${todayVotes > 0 ? todayVotes + " heute" : "0 heute"} · Ø ${spPerVote.toFixed(4)} SP pro Vote`
+    ? `${totalVotes} VoteBroker-Votes${since ? " seit " + since : ""} · davon ${todayVotes > 0 ? todayVotes + " heute" : "0 heute"} · Ø ${spPerVote.toFixed(4)} STEEM pro Vote`
     : todayVotes > 0
     ? `✅ ${todayVotes} Votes heute durch VoteBroker verteilt`
     : `🌱 Starte heute deinen ersten VoteBroker-Run`;
@@ -1514,7 +1514,7 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, t }: {
               {/* Total SP */}
               <div style={{ fontSize:"2.4rem", fontWeight:900, color:PURPLE, letterSpacing:"-2px", lineHeight:1 }}>
                 {totalSp > 0 ? totalSp.toFixed(3) : "—"}
-                <span style={{ fontSize:"1rem", fontWeight:700, marginLeft:"0.3rem", opacity:0.65 }}>SP</span>
+                <span style={{ fontSize:"1rem", fontWeight:700, marginLeft:"0.3rem", opacity:0.65 }}>STEEM</span>
               </div>
 
               {/* SBD equiv */}
@@ -1533,7 +1533,7 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, t }: {
                 )}
                 {pendingSp > 0 && (
                   <span style={{ color:ORANGE, fontWeight:600 }}>
-                    +{pendingSp.toFixed(3)} pending
+                    +{pendingSp.toFixed(3)} STEEM pending
                   </span>
                 )}
               </div>
@@ -1541,12 +1541,12 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, t }: {
               {/* Rate */}
               {data.totals.voteCount > 0 && totalSp > 0 && (
                 <div style={{ fontSize:"0.7rem", color:C.dim, marginTop:"0.12rem" }}>
-                  Ø <b style={{ color:PURPLE }}>{(totalSp / data.totals.voteCount).toFixed(4)} SP</b> pro Vote
+                  Ø <b style={{ color:PURPLE }}>{(totalSp / data.totals.voteCount).toFixed(4)} STEEM</b> pro Vote
                 </div>
               )}
 
               {/* Tooltip anchor */}
-              <div title={`Attribution seit: ${data.attributionStart ?? "—"}\nRealisiert (on-chain): ${realizedSp.toFixed(4)} SP aus ${data.totals.realizedCount} Payouts\nPending (offene Posts): ${pendingSp.toFixed(4)} SP`}
+              <div title={`Attribution seit: ${data.attributionStart ?? "—"}\nRealisiert (on-chain): ${realizedSp.toFixed(4)} SP aus ${data.totals.realizedCount} Payouts\nPending (offene Posts): ≈ ${pendingSp.toFixed(4)} STEEM`}
                 style={{ position:"absolute", top:"0.4rem", right:"0.5rem",
                   fontSize:"0.62rem", color:C.faint, cursor:"help" }}>ℹ</div>
             </div>
