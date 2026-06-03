@@ -3702,6 +3702,9 @@ function WhaleSignalSection({ data, loading, onAddToStrategy }: {
   loading:         boolean;
   onAddToStrategy: (username: string, category: StrategyCategory) => void;
 }) {
+  const [addedAuthors, setAddedAuthors] = useState<Set<string>>(new Set());
+  const [adding, setAdding]             = useState<string | null>(null);
+
   if (loading) return (
     <div style={{ padding: "2rem", textAlign: "center", color: CD.dim, fontSize: "0.85rem" }}>
       Signal-Voter werden geladen…
@@ -3713,6 +3716,19 @@ function WhaleSignalSection({ data, loading, onAddToStrategy }: {
   const age = data.computedAt
     ? Math.round((Date.now() - new Date(data.computedAt).getTime()) / 3_600_000)
     : null;
+
+  function handleAdd(author: string) {
+    if (adding === author) return;
+    setAdding(author);
+    try {
+      onAddToStrategy(author, "normal");
+      // addAuthorToStrategy is synchronous (updates state + triggers auto-save via useEffect).
+      // Mark as added immediately — the auto-save runs in the background.
+      setAddedAuthors(prev => new Set([...prev, author]));
+    } finally {
+      setAdding(null);
+    }
+  }
 
   return (
     <div style={{ maxWidth: "960px", margin: "0 auto", marginBottom: "0.5rem" }}>
@@ -3742,50 +3758,57 @@ function WhaleSignalSection({ data, loading, onAddToStrategy }: {
             </tr>
           </thead>
           <tbody>
-            {data.signals.slice(0, 30).map((s: WhaleSignalEntry, i: number) => (
-              <tr key={s.author} style={{
-                borderBottom: `1px solid ${CD.border}`,
-                background: i % 2 === 0 ? "transparent" : CD.tag,
-              }}>
-                <td style={{ padding: "0.45rem 0.6rem", fontWeight: 700 }}>
-                  <a href={`https://steemit.com/@${s.author}`} target="_blank" rel="noreferrer"
-                    style={{ color: CD.info, textDecoration: "none" }}>
-                    @{s.author}
-                  </a>
-                </td>
-                <td style={{ textAlign: "center", padding: "0.45rem 0.6rem" }}>
-                  <span style={{
-                    background: s.whaleCount >= 3 ? "#dcfce7" : s.whaleCount >= 2 ? "#fef9c3" : CD.tag,
-                    color: s.whaleCount >= 3 ? "#15803d" : s.whaleCount >= 2 ? "#854d0e" : CD.dim,
-                    fontWeight: 700, borderRadius: "999px",
-                    padding: "0.1rem 0.55rem", fontSize: "0.78rem",
-                  }}>{s.whaleCount}</span>
-                </td>
-                <td style={{ textAlign: "center", padding: "0.45rem 0.6rem", color: CD.text }}>
-                  {s.totalWhaleVotes}
-                </td>
-                <td style={{ padding: "0.45rem 0.6rem", color: CD.dim, fontSize: "0.75rem", maxWidth: "220px" }}>
-                  {s.whales.slice(0, 4).join(", ")}{s.whales.length > 4 ? ` +${s.whales.length - 4}` : ""}
-                </td>
-                <td style={{ textAlign: "center", padding: "0.45rem 0.6rem" }}>
-                  {s.inMyStrategy
-                    ? <span style={{ color: CD.ok, fontWeight: 700, fontSize: "0.75rem" }}>✓ drin</span>
-                    : <span style={{ color: CD.faint, fontSize: "0.75rem" }}>—</span>}
-                </td>
-                <td style={{ padding: "0.45rem 0.6rem" }}>
-                  {!s.inMyStrategy && (
-                    <button
-                      onClick={() => onAddToStrategy(s.author, "normal")}
-                      style={{
-                        fontSize: "0.7rem", padding: "0.2rem 0.55rem",
-                        background: CD.info, color: "#fff",
-                        border: "none", borderRadius: "6px", cursor: "pointer",
-                      }}
-                    >+ Hinzufügen</button>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {data.signals.slice(0, 30).map((s: WhaleSignalEntry, i: number) => {
+              const inStrategy = s.inMyStrategy || addedAuthors.has(s.author);
+              const isAdding   = adding === s.author;
+              return (
+                <tr key={s.author} style={{
+                  borderBottom: `1px solid ${CD.border}`,
+                  background: i % 2 === 0 ? "transparent" : CD.tag,
+                }}>
+                  <td style={{ padding: "0.45rem 0.6rem", fontWeight: 700 }}>
+                    <a href={`https://steemit.com/@${s.author}`} target="_blank" rel="noreferrer"
+                      style={{ color: CD.info, textDecoration: "none" }}>
+                      @{s.author}
+                    </a>
+                  </td>
+                  <td style={{ textAlign: "center", padding: "0.45rem 0.6rem" }}>
+                    <span style={{
+                      background: s.whaleCount >= 3 ? "#dcfce7" : s.whaleCount >= 2 ? "#fef9c3" : CD.tag,
+                      color: s.whaleCount >= 3 ? "#15803d" : s.whaleCount >= 2 ? "#854d0e" : CD.dim,
+                      fontWeight: 700, borderRadius: "999px",
+                      padding: "0.1rem 0.55rem", fontSize: "0.78rem",
+                    }}>{s.whaleCount}</span>
+                  </td>
+                  <td style={{ textAlign: "center", padding: "0.45rem 0.6rem", color: CD.text }}>
+                    {s.totalWhaleVotes}
+                  </td>
+                  <td style={{ padding: "0.45rem 0.6rem", color: CD.dim, fontSize: "0.75rem", maxWidth: "220px" }}>
+                    {s.whales.slice(0, 4).join(", ")}{s.whales.length > 4 ? ` +${s.whales.length - 4}` : ""}
+                  </td>
+                  <td style={{ textAlign: "center", padding: "0.45rem 0.6rem" }}>
+                    {inStrategy
+                      ? <span style={{ color: CD.ok, fontWeight: 700, fontSize: "0.75rem" }}>✓ drin</span>
+                      : <span style={{ color: CD.faint, fontSize: "0.75rem" }}>—</span>}
+                  </td>
+                  <td style={{ padding: "0.45rem 0.6rem" }}>
+                    {!inStrategy && (
+                      <button
+                        disabled={isAdding}
+                        onClick={() => handleAdd(s.author)}
+                        style={{
+                          fontSize: "0.7rem", padding: "0.2rem 0.55rem",
+                          background: isAdding ? CD.dim : CD.info, color: "#fff",
+                          border: "none", borderRadius: "6px",
+                          cursor: isAdding ? "default" : "pointer",
+                          opacity: isAdding ? 0.7 : 1,
+                        }}
+                      >{isAdding ? "Wird hinzugefügt…" : "+ Hinzufügen"}</button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
