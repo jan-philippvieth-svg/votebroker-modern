@@ -505,7 +505,19 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
 
   async function load() { setLoading(true); try { setData(await gcd(session.token)); } finally { setLoading(false); } }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load();
+    // Auto-refresh when window regains focus (user returns to tab)
+    const onFocus = () => void load();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Today's date string YYYY-MM-DD (UTC)
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayDevlog  = data?.drafts.find(d => d.dateStr === todayStr && d.type === "devlog-post");
+  const hasTodayDraft = !!todayDevlog;
 
   async function loadScreenshots() {
     const res = await listScreenshots(session.token);
@@ -621,6 +633,25 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
             title="Generiert heutigen Devlog-Draft (Änderungen seit letztem Devlog)"
           >+ Devlog</button>
         </div>
+        {/* Banner: today's devlog missing */}
+        {!loading && !hasTodayDraft && (
+          <div style={{
+            background: C.warn + "18", border: `1px solid ${C.warn}55`,
+            borderRadius: "6px", padding: "0.5rem 0.65rem", marginBottom: "0.5rem",
+          }}>
+            <p style={{ color: C.warn, fontSize: "0.75rem", fontWeight: 700, margin: "0 0 0.3rem" }}>
+              📋 Heutiger Devlog fehlt
+            </p>
+            <button
+              style={{ ...btnStyle(C.warn), fontSize: "0.7rem", width: "100%" }}
+              type="button" disabled={saving}
+              onClick={() => void doGenerate(false, false)}
+            >
+              Jetzt generieren
+            </button>
+          </div>
+        )}
+
         {loading ? <p style={{ color: C.dim }}>Loading…</p> : drafts.length === 0 ? (
           <div>
             <p style={{ color: C.dim, fontSize: "0.8rem", marginBottom: "0.6rem" }}>Keine Drafts vorhanden.</p>
@@ -631,18 +662,31 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-            {drafts.map(draft => (
-              <div key={draft.filename} onClick={() => void openPreview(draft.filename)}
-                style={{ padding: "0.5rem 0.6rem", borderRadius: "5px", cursor: "pointer", background: selected === draft.filename ? C.info + "22" : "transparent", border: `1px solid ${selected === draft.filename ? C.info : C.border}`, transition: "all 0.1s" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.15rem" }}>
-                  <span style={{ color: C.text, fontSize: "0.78rem", fontWeight: 500 }}>{draft.type}</span>
-                  <span style={tagStyle(STATUS_COLORS[draft.status])}>{draft.status}</span>
+            {drafts.map(draft => {
+              const isToday = draft.dateStr === todayStr;
+              return (
+                <div key={draft.filename} onClick={() => void openPreview(draft.filename)}
+                  style={{
+                    padding: "0.5rem 0.6rem", borderRadius: "5px", cursor: "pointer",
+                    background: selected === draft.filename ? C.info + "22"
+                      : isToday ? C.ok + "11" : "transparent",
+                    border: `1px solid ${selected === draft.filename ? C.info
+                      : isToday ? C.ok + "55" : C.border}`,
+                    transition: "all 0.1s",
+                  }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.15rem" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                      {isToday && <span style={{ color: C.ok, fontSize: "0.62rem", fontWeight: 700 }}>HEUTE</span>}
+                      <span style={{ color: C.text, fontSize: "0.78rem", fontWeight: 500 }}>{draft.type}</span>
+                    </div>
+                    <span style={tagStyle(STATUS_COLORS[draft.status])}>{draft.status}</span>
+                  </div>
+                  <p style={{ color: C.dim, fontSize: "0.7rem", margin: 0 }}>{draft.dateStr} · {draft.wordCount ?? 0}w</p>
+                  {draft.scheduledFor && <p style={{ color: C.purple, fontSize: "0.68rem", margin: "0.1rem 0 0" }}>📅 {new Date(draft.scheduledFor).toLocaleDateString("en-GB")}</p>}
+                  {draft.publishTxId && <p style={{ color: C.ok, fontSize: "0.68rem", margin: "0.1rem 0 0" }}>✓ TX: {draft.publishTxId.slice(0,10)}…</p>}
                 </div>
-                <p style={{ color: C.dim, fontSize: "0.7rem", margin: 0 }}>{draft.dateStr} · {draft.wordCount ?? 0}w</p>
-                {draft.scheduledFor && <p style={{ color: C.purple, fontSize: "0.68rem", margin: "0.1rem 0 0" }}>📅 {new Date(draft.scheduledFor).toLocaleDateString("en-GB")}</p>}
-                {draft.publishTxId && <p style={{ color: C.ok, fontSize: "0.68rem", margin: "0.1rem 0 0" }}>✓ TX: {draft.publishTxId.slice(0,10)}…</p>}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
