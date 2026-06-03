@@ -616,6 +616,9 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
   const drafts = data?.drafts ?? [];
   const selectedDraft = drafts.find(d => d.filename === selected) ?? null;
 
+  const PLACEHOLDER_MARKER = "Keine Commit-Daten";
+  const hasPlaceholder = !!(preview?.content && preview.content.includes(PLACEHOLDER_MARKER));
+
   const STATUS_COLORS: Record<DraftStatus, string> = {
     draft: C.dim, reviewed: C.info, approved: C.ok, scheduled: C.purple, publishing: C.warn, published: C.ok, failed: C.err
   };
@@ -766,7 +769,15 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
                   >🔧 URLs fix</button>
 
                   <button style={btnStyle(C.info)} type="button" onClick={() => setEditMode(true)}>Bearbeiten</button>
-                  {selectedDraft?.status === "draft" && <button style={btnStyle(C.info)} type="button" disabled={saving} onClick={() => void setStatus(selected, "reviewed")}>Review ✓</button>}
+                  {selectedDraft?.status === "draft" && (
+                    <button
+                      style={{ ...btnStyle(C.info), opacity: hasPlaceholder ? 0.45 : 1 }}
+                      type="button"
+                      disabled={saving || hasPlaceholder}
+                      title={hasPlaceholder ? "Draft enthält ungefüllte Commit-Daten — bitte Inhalt zuerst manuell ergänzen oder neu generieren" : undefined}
+                      onClick={() => void setStatus(selected, "reviewed")}
+                    >Review ✓</button>
+                  )}
                   {selectedDraft?.status === "reviewed" && <button style={btnStyle(C.ok)} type="button" disabled={saving} onClick={() => void setStatus(selected, "approved")}>Freigeben</button>}
                   {selectedDraft?.status === "approved" && <button style={btnStyle(C.purple)} type="button" disabled={saving} onClick={() => void setStatus(selected, "scheduled")}>Einplanen →</button>}
                   {selectedDraft?.status === "scheduled" && <button style={{ ...btnStyle(C.ok), fontWeight: 700 }} type="button" disabled={saving} onClick={() => void doPublish(selected)}>🚀 Publizieren</button>}
@@ -841,6 +852,17 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
               <div style={{ marginBottom: "0.6rem", padding: "0.5rem 0.75rem", background: C.bg1, border: `1px solid ${C.border}`, borderRadius: "6px", fontSize: "0.78rem", color: C.dim }}>
                 Keine Screenshots vorhanden.
                 Führe <code>python3 tools/showcase/capture.py</code> aus oder nutze "+ Screenshots" beim Generieren.
+              </div>
+            )}
+            {hasPlaceholder && !editMode && (
+              <div style={{ background: "#fff7ed", border: `1px solid ${C.warn}`, borderRadius: "6px", padding: "0.6rem 0.9rem", marginBottom: "0.5rem", display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
+                <span style={{ fontSize: "1.1rem", lineHeight: 1.3 }}>⚠</span>
+                <div>
+                  <div style={{ fontWeight: 700, color: C.warn, fontSize: "0.82rem" }}>Draft enthält ungefüllte Commit-Daten</div>
+                  <div style={{ color: "#92400e", fontSize: "0.78rem", marginTop: "0.2rem" }}>
+                    Der Abschnitt „Was wurde umgesetzt" ist leer. Bitte Inhalt manuell ergänzen oder den Draft neu generieren — Review ist bis dahin gesperrt.
+                  </div>
+                </div>
               </div>
             )}
             {editMode ? (
