@@ -244,5 +244,13 @@ function runMigrations(db: Database): void {
       if (!outcomesCols.includes("reward_trx_id"))   db.exec("ALTER TABLE vb_vote_outcomes ADD COLUMN reward_trx_id TEXT");
       if (!outcomesCols.includes("reward_block_num")) db.exec("ALTER TABLE vb_vote_outcomes ADD COLUMN reward_block_num INTEGER");
     }
+    // vb_global_vote_outcomes: post-context columns for copilot training data
+    const gvoCols = (db.prepare("PRAGMA table_info(vb_global_vote_outcomes)").all() as Array<{name:string}>).map(c=>c.name);
+    if (gvoCols.length > 0) {
+      if (!gvoCols.includes("post_pending_payout_sbd"))    db.exec("ALTER TABLE vb_global_vote_outcomes ADD COLUMN post_pending_payout_sbd REAL");
+      if (!gvoCols.includes("post_active_votes_count"))    db.exec("ALTER TABLE vb_global_vote_outcomes ADD COLUMN post_active_votes_count INTEGER");
+      if (!gvoCols.includes("post_net_votes"))             db.exec("ALTER TABLE vb_global_vote_outcomes ADD COLUMN post_net_votes INTEGER");
+      if (!gvoCols.includes("post_author_reputation"))     db.exec("ALTER TABLE vb_global_vote_outcomes ADD COLUMN post_author_reputation REAL");
+    }
   }
 }

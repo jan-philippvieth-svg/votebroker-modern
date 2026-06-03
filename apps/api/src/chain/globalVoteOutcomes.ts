@@ -27,6 +27,115 @@ export interface GlobalVoteOutcomeSummary {
   rebuiltAt:      string;
 }
 
+// ── Real-time capture at vote broadcast ──────────────────────────────────────
+//
+// Called fire-and-forget immediately after a successful vote broadcast.
+// Captures everything knowable at vote time: VP, post state, competition.
+// This is the primary source of training data for the future vote copilot.
+
+export async function recordVoteAtBroadcast(params: {
+  voter:         string;
+  author:        string;
+  permlink:      string;
+  weightBps:     number;
+  transactionId: string | null;
+  strategyCategory?: string | null;
+}): Promise<void> {
+  const db     = getDb();
+  const client = createSteemClient();
+  const votedAt = new Date().toISOString();
+
+  // Fetch post state + voter account in parallel
+  const [post, accounts] = await Promise.all([
+    client.database.call("get_content", [params.author, params.permlink]) as Promise<{
+      created?: string;
+      pending_payout_value?: string;
+      active_votes?: unknown[];
+      net_votes?: number;
+      author?: string;
+    }>,
+    client.database.getAccounts([params.voter, params.author]) as Promise<Array<{
+      name: string;
+      reputation?: number | string;
+      voting_manabar?: { current_mana: string | number; last_update_time: number };
+      vesting_shares?: string;
+      delegated_vesting_shares?: string;
+      received_vesting_shares?: string;
+      vote_count?: number;
+    }>>,
+  ]);
+
+  const voterAccount  = accounts.find(a => a.name === params.voter);
+  const authorAccount = accounts.find(a => a.name === params.author);
+
+  // ── VP at vote time ──────────────────────────────────────────────────────────
+  let vpAtVoteBps: number | null = null;
+  if (voterAccount?.voting_manabar) {
+    const manabar     = voterAccount.voting_manabar;
+    const vestShares  = parseFloat(String(voterAccount.vesting_shares ?? "0").split(" ")[0]);
+    const delegated   = parseFloat(String(voterAccount.delegated_vesting_shares ?? "0").split(" ")[0]);
+    const received    = parseFloat(String(voterAccount.received_vesting_shares ?? "0").split(" ")[0]);
+    const effectiveV  = (vestShares - delegated + received) * 1_000_000;
+    const storedMana  = Number(manabar.current_mana);
+    const lastUpdate  = manabar.last_update_time;
+    const nowSec      = Math.floor(Date.now() / 1000);
+    const regenMana   = ((nowSec - lastUpdate) / (5 * 86400)) * effectiveV;
+    const currentMana = Math.min(effectiveV, storedMana + regenMana);
+    vpAtVoteBps       = effectiveV > 0 ? Math.round((currentMana / effectiveV) * 10_000) : null;
+  }
+
+  // ── Post timing ─────────────────────────────────────────────────────────────
+  let postCreatedAt: string | null = null;
+  let voteDelayMinutes: number | null = null;
+  if (post?.author && post.created) {
+    postCreatedAt = post.created;
+    const postMs  = new Date(post.created + "Z").getTime();
+    const voteMs  = new Date(votedAt).getTime();
+    voteDelayMinutes = !isNaN(postMs) ? Math.round((voteMs - postMs) / 60_000 * 10) / 10 : null;
+  }
+
+  // ── Post competition snapshot ────────────────────────────────────────────────
+  const pendingPayoutSbd    = post?.pending_payout_value
+    ? parseFloat(String(post.pending_payout_value).split(" ")[0]) : null;
+  const activeVotesCount    = Array.isArray(post?.active_votes) ? post.active_votes.length : null;
+  const netVotes            = typeof post?.net_votes === "number" ? post.net_votes : null;
+  const authorReputation    = authorAccount?.reputation !== undefined
+    ? Number(authorAccount.reputation) : null;
+
+  // ── Estimated vote value (SBD) ───────────────────────────────────────────────
+  // Approximation: we don't have reward fund data here, store null for now.
+  // The rebuild job fills estimated_vote_value_sbd from the snapshot.
+  const estimatedVoteValueSbd: number | null = null;
+
+  // ── Upsert ───────────────────────────────────────────────────────────────────
+  db.prepare(`
+    INSERT INTO vb_global_vote_outcomes
+      (voter, author, permlink, post_created_at, voted_at, vote_delay_minutes,
+       weight_bps, vp_at_vote_bps, estimated_vote_value_sbd,
+       strategy_category, is_self_post, source_vote_trx_id,
+       post_pending_payout_sbd, post_active_votes_count,
+       post_net_votes, post_author_reputation)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(voter, author, permlink) DO UPDATE SET
+      vp_at_vote_bps           = COALESCE(excluded.vp_at_vote_bps, vp_at_vote_bps),
+      post_created_at          = COALESCE(excluded.post_created_at, post_created_at),
+      vote_delay_minutes       = COALESCE(excluded.vote_delay_minutes, vote_delay_minutes),
+      post_pending_payout_sbd  = COALESCE(excluded.post_pending_payout_sbd, post_pending_payout_sbd),
+      post_active_votes_count  = COALESCE(excluded.post_active_votes_count, post_active_votes_count),
+      post_net_votes           = COALESCE(excluded.post_net_votes, post_net_votes),
+      post_author_reputation   = COALESCE(excluded.post_author_reputation, post_author_reputation),
+      recorded_at              = datetime('now')
+  `).run(
+    params.voter, params.author, params.permlink,
+    postCreatedAt, votedAt, voteDelayMinutes,
+    params.weightBps, vpAtVoteBps, estimatedVoteValueSbd,
+    params.strategyCategory ?? null,
+    params.voter === params.author ? 1 : 0,
+    params.transactionId ?? null,
+    pendingPayoutSbd, activeVotesCount, netVotes, authorReputation,
+  );
+}
+
 // ── Populate from existing data ───────────────────────────────────────────────
 
 export async function populateGlobalVoteOutcomes(

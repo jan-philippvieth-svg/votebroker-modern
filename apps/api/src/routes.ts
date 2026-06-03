@@ -402,6 +402,17 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       detail: `broadcast accepted | txId=${transactionId}`
     });
 
+    // Capture copilot training data: VP, post state, competition — fire and forget
+    import("./chain/globalVoteOutcomes.js").then(({ recordVoteAtBroadcast }) =>
+      recordVoteAtBroadcast({
+        voter:         session.user.username,
+        author:        input.data.author,
+        permlink:      input.data.permlink,
+        weightBps:     input.data.weightBps,
+        transactionId: transactionId ?? null,
+      }).catch(err => request.log.warn({ err }, "recordVoteAtBroadcast failed (non-critical)"))
+    ).catch(() => {/* import failed — non-critical */});
+
     return {
       status: "broadcast",
       voter: session.user.username,
