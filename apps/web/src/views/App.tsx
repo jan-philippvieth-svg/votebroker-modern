@@ -1211,15 +1211,14 @@ function ConsentPanel(props: {
                 opacity: disabled && !meta.required ? 0.7 : 1,
               }}
             >
-              {/* Status indicator */}
-              <div style={{ fontSize: "1.25rem", lineHeight: 1, marginTop: "0.1rem", flexShrink: 0 }}>
-                {active ? "✅" : "⬜"}
+              {/* Type icon */}
+              <div style={{ fontSize: "1.2rem", lineHeight: 1, marginTop: "0.1rem", flexShrink: 0 }}>
+                {meta.icon}
               </div>
 
               {/* Content */}
               <div style={{ flex: 1 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.2rem" }}>
-                  <span style={{ fontSize: "0.95rem" }}>{meta.icon}</span>
                   <span style={{ color: "#17202a", fontWeight: 600, fontSize: "0.9rem" }}>{meta.label}</span>
                   {meta.required && (
                     <span style={{ background: "#1b4332", color: "#16a34a", border: "1px solid #3fb95055", borderRadius: "4px", padding: "0.05rem 0.4rem", fontSize: "0.68rem", fontWeight: 600 }}>
@@ -1238,36 +1237,55 @@ function ConsentPanel(props: {
                 </p>
               </div>
 
-              {/* Toggle */}
-              <div style={{ flexShrink: 0 }}>
+              {/* Toggle switch */}
+              <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: "0.25rem" }}>
                 {meta.required ? (
-                  <span style={{ color: "#16a34a", fontSize: "0.78rem", fontWeight: 600 }}>Immer aktiv</span>
-                ) : active ? (
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => props.onRevoke(type)}
-                    style={{
-                      background: "#dde8ed", border: "1px solid #f8514955", borderRadius: "5px",
-                      color: "#dc2626", cursor: disabled ? "default" : "pointer",
-                      fontSize: "0.78rem", padding: "0.3rem 0.7rem", fontWeight: 600,
-                    }}
-                  >
-                    {loading ? "..." : "Deaktivieren"}
-                  </button>
+                  <>
+                    {/* Required = locked ON */}
+                    <div style={{
+                      width: "44px", height: "24px", borderRadius: "12px",
+                      background: "#16a34a", position: "relative", cursor: "not-allowed",
+                      opacity: 0.75,
+                    }}>
+                      <div style={{
+                        position: "absolute", top: "3px", right: "3px",
+                        width: "18px", height: "18px", borderRadius: "50%",
+                        background: "#ffffff", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                      }}/>
+                    </div>
+                    <span style={{ fontSize: "0.62rem", color: "#16a34a", fontWeight: 600 }}>System</span>
+                  </>
                 ) : (
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => props.onGrant(type)}
-                    style={{
-                      background: "#2563eb14", border: "1px solid #1f6feb", borderRadius: "5px",
-                      color: "#2563eb", cursor: disabled ? "default" : "pointer",
-                      fontSize: "0.78rem", padding: "0.3rem 0.7rem", fontWeight: 600,
-                    }}
-                  >
-                    {loading ? "..." : "Aktivieren"}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => active ? props.onRevoke(type) : props.onGrant(type)}
+                      aria-label={active ? "Deaktivieren" : "Aktivieren"}
+                      style={{
+                        width: "44px", height: "24px", borderRadius: "12px",
+                        background: loading ? "#9ca3af" : active ? "#16a34a" : "#d1d5db",
+                        border: "none", padding: 0, position: "relative",
+                        cursor: disabled ? "not-allowed" : "pointer",
+                        transition: "background 0.2s ease",
+                        outline: "none",
+                      }}
+                    >
+                      <div style={{
+                        position: "absolute", top: "3px",
+                        left: active ? "23px" : "3px",
+                        width: "18px", height: "18px", borderRadius: "50%",
+                        background: "#ffffff", boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
+                        transition: "left 0.2s ease",
+                      }}/>
+                    </button>
+                    <span style={{
+                      fontSize: "0.62rem", fontWeight: 700,
+                      color: loading ? "#9ca3af" : active ? "#16a34a" : "#9ca3af",
+                    }}>
+                      {loading ? "…" : active ? "Aktiv" : "Inaktiv"}
+                    </span>
+                  </>
                 )}
               </div>
             </div>
