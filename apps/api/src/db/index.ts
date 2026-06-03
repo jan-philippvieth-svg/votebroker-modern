@@ -251,6 +251,7 @@ function runMigrations(db: Database): void {
       if (!gvoCols.includes("post_active_votes_count"))    db.exec("ALTER TABLE vb_global_vote_outcomes ADD COLUMN post_active_votes_count INTEGER");
       if (!gvoCols.includes("post_net_votes"))             db.exec("ALTER TABLE vb_global_vote_outcomes ADD COLUMN post_net_votes INTEGER");
       if (!gvoCols.includes("post_author_reputation"))     db.exec("ALTER TABLE vb_global_vote_outcomes ADD COLUMN post_author_reputation REAL");
+      if (!gvoCols.includes("post_final_payout_sbd"))      db.exec("ALTER TABLE vb_global_vote_outcomes ADD COLUMN post_final_payout_sbd REAL");
     }
   }
 }

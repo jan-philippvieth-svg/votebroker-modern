@@ -191,14 +191,15 @@ export async function populateGlobalVoteOutcomes(
     INSERT INTO vb_global_vote_outcomes
       (voter, author, permlink, post_created_at, voted_at, vote_delay_minutes,
        weight_bps, strategy_category, is_self_post,
-       realized_curation_sp, realized_at,
+       realized_curation_sp, realized_at, post_final_payout_sbd,
        source_vote_trx_id, source_reward_trx_id)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     ON CONFLICT(voter, author, permlink) DO UPDATE SET
       post_created_at      = COALESCE(excluded.post_created_at, post_created_at),
       vote_delay_minutes   = COALESCE(excluded.vote_delay_minutes, vote_delay_minutes),
       realized_curation_sp = COALESCE(excluded.realized_curation_sp, realized_curation_sp),
       realized_at          = COALESCE(excluded.realized_at, realized_at),
+      post_final_payout_sbd = COALESCE(excluded.post_final_payout_sbd, post_final_payout_sbd),
       source_reward_trx_id = COALESCE(excluded.source_reward_trx_id, source_reward_trx_id),
       recorded_at          = datetime('now')
   `);
@@ -209,17 +210,27 @@ export async function populateGlobalVoteOutcomes(
     const category = categoryMap.get(vote.author) ?? null;
     const isSelf   = vote.author === username ? 1 : 0;
 
-    let postCreatedAt: string | null = null;
-    let delayMinutes: number | null  = null;
+    let postCreatedAt: string | null    = null;
+    let delayMinutes: number | null     = null;
+    let finalPayoutSbd: number | null   = null;
     try {
       const post = await client.database.call("get_content", [vote.author, vote.permlink]) as {
         created?: string; author?: string;
+        total_payout_value?: string;
+        curator_payout_value?: string;
       };
       if (post?.author && post.created) {
         postCreatedAt = post.created;
         const postMs  = new Date(post.created + "Z").getTime();
         const voteMs  = new Date(vote.created_at.endsWith("Z") ? vote.created_at : vote.created_at + "Z").getTime();
         delayMinutes  = isNaN(postMs) || isNaN(voteMs) ? null : Math.round((voteMs - postMs) / 60_000 * 10) / 10;
+      }
+      // Final payout = author payout + curator payout (only meaningful after post paid out)
+      if (reward?.realized_at && post?.total_payout_value && post?.curator_payout_value) {
+        const authorPayout   = parseFloat(String(post.total_payout_value).split(" ")[0]) || 0;
+        const curatorPayout  = parseFloat(String(post.curator_payout_value).split(" ")[0]) || 0;
+        const total = authorPayout + curatorPayout;
+        if (total > 0) finalPayoutSbd = Math.round(total * 1000) / 1000;
       }
     } catch { /* best effort */ }
 
@@ -235,6 +246,7 @@ export async function populateGlobalVoteOutcomes(
       vote.weight_bps, category, isSelf,
       reward?.realized_sp ?? null,
       reward?.realized_at ?? null,
+      finalPayoutSbd,
       vote.transaction_id ?? null,
       reward?.reward_trx_id ?? null,
     );
