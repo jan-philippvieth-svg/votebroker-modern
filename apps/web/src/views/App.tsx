@@ -1832,37 +1832,48 @@ function CurationDnaPanel(props: {
                   </button>
                 </div>
 
-                {/* ── Strategie-Modus ── */}
-                <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.25rem", alignItems: "center", flexWrap: "wrap" as const }}>
-                  <span style={{ color: "#94a3b8", fontSize: "0.72rem", fontWeight: 600, whiteSpace: "nowrap" as const }}>Strategie:</span>
-                  {([
-                    { label: "Maximale Reichweite", pct: 70, icon: "🌐", sub: "mehr Votes, VP sinkt etwas" },
-                    { label: "Ausgewogen",           pct: 80, icon: "⚖️", sub: "Standard" },
-                    { label: "VP-Erholung",          pct: 90, icon: "🔋", sub: "weniger Votes, VP erholt sich schnell" },
-                  ] as const).map(m => {
-                    const active = props.targetVotingPowerPct === m.pct;
-                    return (
-                      <button
-                        key={m.pct}
-                        type="button"
-                        title={m.sub}
-                        onClick={() => props.onGenerateWithTarget(m.pct)}
-                        disabled={props.planLoading}
-                        style={{
-                          background: active ? "#0ea5e9" : "#f1f5f9",
-                          border: active ? "none" : "1.5px solid #e2e8f0",
-                          borderRadius: "20px", color: active ? "#fff" : "#475569",
-                          cursor: "pointer", fontSize: "0.78rem",
-                          fontWeight: active ? 800 : 600,
-                          padding: "0.35rem 0.85rem",
-                          display: "flex", alignItems: "center", gap: "0.3rem",
-                        }}
-                      >
-                        <span>{m.icon}</span> {m.label}
-                      </button>
-                    );
-                  })}
-                </div>
+                {/* ── Ziel VP morgen ── */}
+                {(() => {
+                  const currentVp = props.accountSnapshot
+                    ? props.accountSnapshot.votingPowerBps / 100
+                    : null;
+                  const targets = [98, 95, 90, 85, 80] as const;
+                  return (
+                    <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.25rem", alignItems: "center", flexWrap: "wrap" as const }}>
+                      <span style={{ color: "#94a3b8", fontSize: "0.72rem", fontWeight: 600, whiteSpace: "nowrap" as const }}>
+                        Ziel VP morgen:
+                      </span>
+                      {targets.map(pct => {
+                        const active  = props.targetVotingPowerPct === pct;
+                        const budget  = currentVp !== null ? Math.max(0, Math.min(100, currentVp + 20) - pct) : null;
+                        const label   = pct >= 95 ? "Schonend" : pct >= 90 ? "Ausgewogen" : pct >= 85 ? "Standard" : pct >= 80 ? "Aktiv" : "Aggressiv";
+                        return (
+                          <button
+                            key={pct}
+                            type="button"
+                            title={budget !== null ? `Budget: ≈${budget.toFixed(1)}% VP · ${label}` : label}
+                            onClick={() => props.onGenerateWithTarget(pct)}
+                            disabled={props.planLoading}
+                            style={{
+                              background: active ? "#0ea5e9" : "#f1f5f9",
+                              border: active ? "none" : "1.5px solid #e2e8f0",
+                              borderRadius: "20px", color: active ? "#fff" : "#475569",
+                              cursor: "pointer", fontSize: "0.78rem",
+                              fontWeight: active ? 800 : 600,
+                              padding: "0.35rem 0.85rem",
+                              display: "flex", flexDirection: "column" as const, alignItems: "center",
+                            }}
+                          >
+                            <span style={{ fontWeight: 800 }}>{pct}%</span>
+                            {budget !== null && (
+                              <span style={{ fontSize: "0.62rem", opacity: 0.75 }}>≈{budget.toFixed(0)}% VP</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
 
                 {/* ── KPI-Kacheln ── */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.75rem", marginBottom: "1.5rem" }}>
