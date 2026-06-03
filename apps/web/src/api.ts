@@ -495,6 +495,7 @@ export interface PostOpportunity {
   postScore:      number;
   alreadyVoted:   boolean;
   eligible:       boolean;
+  isSelfPost:     boolean;
   warning:        string | null;
 }
 

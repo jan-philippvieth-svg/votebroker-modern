@@ -2961,8 +2961,47 @@ function OpenVoteOpportunities(props: {
     letterSpacing: "0.5px", margin: 0, fontWeight: 600,
   };
 
+  // Self-posts from the voter — eligible immediately (visibility > curation timing)
+  const selfPostOpps = (props.opportunities ?? []).filter(
+    p => p.isSelfPost && p.eligible && !p.alreadyVoted
+  );
+
   return (
     <div>
+      {/* Self-post alert — shown prominently when own post is detected */}
+      {selfPostOpps.length > 0 && (
+        <div style={{
+          background: "linear-gradient(135deg, #0f2318 0%, #0d2233 100%)",
+          border: "1px solid #16a34a55",
+          borderRadius: "10px",
+          padding: "0.85rem 1rem",
+          marginBottom: "0.85rem",
+          display: "flex", flexDirection: "column" as const, gap: "0.5rem",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <span style={{ fontSize: "1.1rem" }}>🚀</span>
+            <span style={{ color: "#4ade80", fontWeight: 700, fontSize: "0.88rem" }}>
+              Eigener neuer Post erkannt
+            </span>
+          </div>
+          {selfPostOpps.map(p => (
+            <div key={`${p.author}/${p.permlink}`} style={{ paddingLeft: "1.6rem" }}>
+              <div style={{ color: "#e2e8f0", fontSize: "0.85rem", fontWeight: 600, marginBottom: "0.15rem" }}>
+                {p.title || `${p.author}/${p.permlink}`}
+              </div>
+              <div style={{ color: "#94a3b8", fontSize: "0.78rem" }}>
+                veröffentlicht vor {p.ageMinutes < 60
+                  ? `${p.ageMinutes} Min.`
+                  : `${(p.ageMinutes / 60).toFixed(1)} Std.`}
+              </div>
+              <div style={{ color: "#6ee7b7", fontSize: "0.78rem", marginTop: "0.1rem" }}>
+                Empfehlung: Sofort voten für maximale Sichtbarkeit
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* KPI-Header — nur wenn bereits gescannt */}
       {props.opportunities !== null && (
         <div style={{ display: "flex", alignItems: "center", gap: "1.5rem", marginBottom: "1rem", flexWrap: "wrap" as const }}>

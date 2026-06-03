@@ -14,6 +14,7 @@ export interface PostOpportunity {
   postScore:      number;
   alreadyVoted:   boolean;
   eligible:       boolean;
+  isSelfPost:     boolean;   // author === voterUsername → visibility vote, skip curation timing
   warning:        string | null;
 }
 
@@ -123,8 +124,9 @@ export async function fetchRecentPostsDebug(
       continue;
     }
 
-    // Step 5: too new
-    if (ageMs < MIN_AGE_MS) {
+    // Step 5: too new — self-posts bypass this (visibility > curation timing)
+    const isSelfPost = author === voterUsername;
+    if (!isSelfPost && ageMs < MIN_AGE_MS) {
       debug.push({ author, permlink: post.permlink, title: post.title, createdRaw: post.created, createdParsed: createdStr, ageMinutes, remainingHours, alreadyVoted, rejectedBy: `too_new (${ageMinutes} min < 5 min minimum)` });
       continue;
     }
@@ -167,9 +169,19 @@ function mapPost(post: RawPost, voterUsername: string, nowMs: number): PostOppor
   const remainingMs    = PAYOUT_WINDOW_MS - ageMs;
   const remainingHours = Math.max(0, Math.round(remainingMs / 3_600_000 * 10) / 10);
   const alreadyVoted   = post.active_votes?.some(v => v.voter === voterUsername) ?? false;
-  const withinWindow   = ageMs >= MIN_AGE_MS && remainingMs > 0;
-  const eligible       = !alreadyVoted && withinWindow;
-  const postScore      = calcPostScore(ageMinutes, remainingHours);
+  const isSelfPost     = post.author === voterUsername;
+
+  // Self-posts skip curation timing: goal is visibility, not curation reward.
+  // The 5-min minimum only matters for strangers' posts (early vote = less curation).
+  // For own posts: vote immediately to maximize Social Proof and ranking.
+  const withinWindow = isSelfPost
+    ? remainingMs > 0                        // only payout window matters
+    : ageMs >= MIN_AGE_MS && remainingMs > 0; // strangers: also needs 5-min minimum
+
+  const eligible   = !alreadyVoted && withinWindow;
+  const postScore  = isSelfPost && ageMinutes < 30
+    ? 100                                    // self-posts always get top score when fresh
+    : calcPostScore(ageMinutes, remainingHours);
 
   let warning: string | null = null;
   if (eligible && remainingHours > 0 && remainingHours < WARN_EXPIRY_H) {
@@ -183,6 +195,6 @@ function mapPost(post: RawPost, voterUsername: string, nowMs: number): PostOppor
     permlink: post.permlink,
     title:    post.title || `${post.author}/${post.permlink}`,
     ageMinutes, remainingHours, postScore,
-    alreadyVoted, eligible, warning,
+    alreadyVoted, isSelfPost, eligible, warning,
   };
 }
