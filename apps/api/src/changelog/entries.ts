@@ -120,8 +120,9 @@ export const knownIssues: KnownIssue[] = [
     id: "dashboard-demo-data",
     title: "Dashboard Demo Data",
     description: "The Curated Value, Fee Coverage, and chart sections still show placeholder data. Real data requires a persistent vote log.",
-    state: "planned",
+    state: "resolved",
     component: "ui",
-    addedDate: "2026-05-31"
+    addedDate: "2026-05-31",
+    updatedDate: "2026-06-03"
   }
 ];
