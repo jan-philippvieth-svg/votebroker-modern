@@ -574,7 +574,7 @@ function OperativeKPIRow({ snapshot, snapshotLoading, snapshotRefreshedAt, oppor
             <div style={{ display:"flex", alignItems:"baseline", gap:"0.4rem", marginBottom:"0.4rem" }}>
               <span style={{ color:vpCol(vpPct), fontSize:"2.6rem", fontWeight:900, lineHeight:1, letterSpacing:"-1px" }}>{vpPct.toFixed(1)}%</span>
               <span style={{ color:C.dim, fontSize:"0.85rem", fontWeight:600 }}>VP</span>
-              {snapshot&&<span style={{ color:C.info, fontSize:"0.9rem", fontWeight:700, marginLeft:"auto" }}>{fmtUsd(snapshot.currentVoteUsd)}<span style={{ color:C.dim, fontSize:"0.72rem", fontWeight:400 }}>/vote</span></span>}
+              {snapshot&&<span style={{ color:C.info, fontSize:"0.9rem", fontWeight:700, marginLeft:"auto" }}>{fmtUsd(snapshot.currentVoteUsd)}<span style={{ color:C.dim, fontSize:"0.78rem", fontWeight:400 }}>/vote</span></span>}
             </div>
             <div style={{ height:"7px", background:C.inner, borderRadius:"4px", overflow:"hidden", marginBottom:"0.4rem", border:`1px solid ${C.border}` }}>
               <div style={{ height:"100%", width:`${vpPct}%`, background:vpCol(vpPct), borderRadius:"4px", transition:"width 0.6s" }}/>
@@ -583,19 +583,19 @@ function OperativeKPIRow({ snapshot, snapshotLoading, snapshotRefreshedAt, oppor
               const regenH=vpPct>=99.9?0:(100-vpPct)/20*24;
               const to90=vpPct>=90?null:(90-vpPct)/20*24;
               return (
-                <div style={{ display:"flex", gap:"0.5rem", fontSize:"0.75rem" }}>
+                <div style={{ display:"flex", gap:"0.5rem", fontSize:"0.85rem" }}>
                   {to90&&<span style={{ color:C.ok, fontWeight:600 }}>→ 90% in {to90<1?`${Math.round(to90*60)}m`:`${to90.toFixed(1)}h`}</span>}
                   {regenH>0&&<span style={{ color:C.dim, marginLeft:"auto" }}>voll in {regenH<1?`${Math.round(regenH*60)}m`:`${regenH.toFixed(1)}h`}</span>}
                   {regenH===0&&<span style={{ color:C.ok, marginLeft:"auto" }}>✓ voll geladen</span>}
                 </div>
               );
             })()}
-            {snapshot&&<div style={{ color:C.dim, fontSize:"0.73rem", marginTop:"0.4rem" }}>{snapshot.steemPowerSp.toFixed(0)} SP · 100%: {fmtUsd(snapshot.fullPowerVoteUsd)}</div>}
+            {snapshot&&<div style={{ color:C.dim, fontSize:"0.85rem", marginTop:"0.4rem" }}>{snapshot.steemPowerSp.toFixed(0)} SP · 100%: {fmtUsd(snapshot.fullPowerVoteUsd)}</div>}
           </>
         ):(
           <div style={{ color:C.dim, fontSize:"0.82rem" }}>{snapshotLoading?"Lädt…":"—"}</div>
         )}
-        {snapshotRefreshedAt&&<div style={{ color:C.faint, fontSize:"0.65rem", marginTop:"0.3rem" }}>{fmtAge(snapshotRefreshedAt.toISOString(),t)}</div>}
+        {snapshotRefreshedAt&&<div style={{ color:C.faint, fontSize:"0.73rem", marginTop:"0.3rem" }}>{fmtAge(snapshotRefreshedAt.toISOString(),t)}</div>}
       </div>
 
       {/* Offene Chancen */}
@@ -612,7 +612,7 @@ function OperativeKPIRow({ snapshot, snapshotLoading, snapshotRefreshedAt, oppor
         <div style={{ color:openOpps.length>0?C.warn:opportunities!==null?C.ok:C.muted, fontSize:"2.6rem", fontWeight:900, lineHeight:1, letterSpacing:"-1px", marginBottom:"0.5rem" }}>
           {openOpps.length>0?openOpps.length:opportunities===null?"—":"0"}
         </div>
-        <div style={{ fontSize:"0.8rem", display:"flex", flexDirection:"column" as const, gap:"0.2rem" }}>
+        <div style={{ fontSize:"0.9rem", display:"flex", flexDirection:"column" as const, gap:"0.2rem" }}>
           {openOpps.length>0&&<span style={{ color:C.warn, fontWeight:700 }}>{openOpps.filter(p=>p.postScore>=80).length} {t("oppOptimalWindow")}</span>}
           {opportunitiesMeta&&<span style={{ color:C.dim }}>{opportunitiesMeta.scannedAuthors}/{opportunitiesMeta.requestedAuthors} {t("oppScanned")}</span>}
           {opportunities===null&&<span style={{ color:C.muted }}>{t("oppTapToDiscover")}</span>}
@@ -823,7 +823,7 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
               </>
             )}
             {pendingCuration.computedAt && (
-              <div style={{ color:C.faint, fontSize:"0.65rem", marginTop:"0.6rem" }}>
+              <div style={{ color:C.faint, fontSize:"0.73rem", marginTop:"0.6rem" }}>
                 Stand: {new Date(pendingCuration.computedAt).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})} Uhr
                 {pendingCuration.sbdPerSteemUsed && (
                   <span> · {pendingCuration.sbdPerSteemUsed.toFixed(4)} SBD/STEEM</span>
