@@ -521,6 +521,54 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
+  // ── GET /api/community/whale-signals — read cached whale discovery ───────────
+  app.get("/api/community/whale-signals", async (request, reply) => {
+    const token   = (request.headers as Record<string, string>)["session"];
+    const session = token ? getSession(token) : null;
+    if (!session) return reply.code(401).send({ error: "unauthorized" });
+
+    const rulesRow = getDb().prepare(
+      "SELECT rules_json FROM strategy_rules WHERE username = ?"
+    ).get(session.user.username) as { rules_json: string } | undefined;
+    const myAuthors = new Set<string>(
+      rulesRow ? (JSON.parse(rulesRow.rules_json) as Array<{ username: string; category: string }>)
+        .filter(r => r.category !== "ignorieren").map(r => r.username) : []
+    );
+
+    const { getWhaleSignals } = await import("./chain/whaleSignals.js");
+    const result = getWhaleSignals(myAuthors);
+
+    // Annotate with inMyStrategy
+    return {
+      ...result,
+      signals: result.signals.map(s => ({
+        ...s,
+        inMyStrategy: myAuthors.has(s.author),
+      })),
+    };
+  });
+
+  // ── POST /api/community/whale-signals/refresh — operator-triggered rebuild ───
+  app.post("/api/community/whale-signals/refresh", async (request, reply) => {
+    const opToken = (request.headers as Record<string, string>)["x-operator-token"];
+    if (!opToken || opToken !== operatorConfig.token) {
+      return reply.code(403).send({ error: "operator_token_required" });
+    }
+    try {
+      const { rebuildWhaleSignals, SEED_WHALES } = await import("./chain/whaleSignals.js");
+      const result = await rebuildWhaleSignals(
+        SEED_WHALES, 30,
+        request.log as unknown as typeof console,
+      );
+      return { ...result, refreshedAt: new Date().toISOString() };
+    } catch (err) {
+      return reply.code(502).send({
+        error: "whale_signals_refresh_failed",
+        detail: err instanceof Error ? err.message : "unknown",
+      });
+    }
+  });
+
   app.get("/api/community/overview", async (request, reply) => {
     const query = z.object({
       username: z.string().min(1).optional(),

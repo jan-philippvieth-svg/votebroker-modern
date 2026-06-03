@@ -179,6 +179,56 @@ function initSchema(db: Database): void {
       updated_at                   TEXT DEFAULT (datetime('now'))
     );
 
+    -- Whale vote signal cache: which authors do known whale accounts vote on regularly?
+    -- Rebuilt by background job, not on every page load.
+    CREATE TABLE IF NOT EXISTS vb_whale_author_signals (
+      author               TEXT NOT NULL,
+      whale                TEXT NOT NULL,
+      -- Vote activity (from vote ops, available now)
+      vote_count           INTEGER NOT NULL DEFAULT 1,
+      distinct_posts       INTEGER,          -- unique permlinks voted
+      avg_vote_weight_bps  INTEGER,          -- avg weight of whale's votes on this author
+      first_voted_at       TEXT,             -- earliest whale vote on this author
+      last_voted_at        TEXT NOT NULL,    -- most recent whale vote
+      last_voted_permlink  TEXT,             -- permlink of most recent whale vote
+      -- Timing stats (from enrichment pass via get_content, filled later)
+      -- Key insight: when does the whale typically vote relative to post creation?
+      -- VoteBroker should be in BEFORE the whale arrives.
+      avg_vote_delay_min   REAL,            -- avg minutes after post creation
+      median_vote_delay_min REAL,           -- median (more robust than avg)
+      min_vote_delay_min   REAL,            -- earliest vote delay seen
+      p25_vote_delay_min   REAL,            -- 25th percentile
+      p75_vote_delay_min   REAL,            -- 75th percentile
+      typical_vote_window  TEXT,            -- e.g. "5-30min" | "1-6h" | "6h+" (computed)
+      timing_sample_size   INTEGER,         -- how many posts timing was computed from
+      -- Vote value (from get_content enrichment, filled later)
+      total_vote_value_sbd REAL,            -- sum of vote values in SBD
+      avg_vote_value_sbd   REAL,            -- avg vote value per post
+      avg_post_payout_sbd  REAL,            -- avg final post payout (post quality signal)
+      -- Meta
+      period_days          INTEGER NOT NULL DEFAULT 30,
+      computed_at          TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (author, whale)
+    );
+
+    -- Raw vote-level detail for timing enrichment (populated during whale scan)
+    -- Enrichment pass fetches get_content per permlink and computes vote_delay_min
+    CREATE TABLE IF NOT EXISTS vb_whale_vote_details (
+      whale            TEXT NOT NULL,
+      author           TEXT NOT NULL,
+      permlink         TEXT NOT NULL,
+      voted_at         TEXT NOT NULL,
+      vote_weight_bps  INTEGER,
+      vote_delay_min   REAL,          -- NULL until enriched via get_content
+      post_created_at  TEXT,          -- NULL until enriched
+      enriched_at      TEXT,          -- NULL until enriched
+      PRIMARY KEY (whale, author, permlink)
+    );
+    CREATE INDEX IF NOT EXISTS idx_whale_details_enrichment
+      ON vb_whale_vote_details(whale, author) WHERE enriched_at IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_whale_signals_author ON vb_whale_author_signals(author);
+    CREATE INDEX IF NOT EXISTS idx_whale_signals_whale  ON vb_whale_author_signals(whale);
+
     -- Global vote outcome analytics index.
     -- Source of truth: Steem blockchain. This table is a reconstructable cache.
     -- Purpose: learn optimal vote timing from real curation reward outcomes.
