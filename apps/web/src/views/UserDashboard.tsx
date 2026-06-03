@@ -602,22 +602,72 @@ function OperativeKPIRow({ snapshot, snapshotLoading, snapshotRefreshedAt, oppor
       <div
         style={{ ...card, cursor:"pointer" }}
         onClick={() => {
-          // Only trigger a fresh scan if no data loaded yet — avoids overwriting
-          // locally-voted posts with stale server data (race condition after vote)
           if (opportunities === null) onLoadOpps();
           onTabChange("dna");
         }}
       >
         <p style={{ ...lbl, margin:"0 0 0.6rem" }}>{t("kpiOpenOpps")}</p>
-        <div style={{ color:openOpps.length>0?C.warn:opportunities!==null?C.ok:C.muted, fontSize:"2.6rem", fontWeight:900, lineHeight:1, letterSpacing:"-1px", marginBottom:"0.5rem" }}>
-          {openOpps.length>0?openOpps.length:opportunities===null?"—":"0"}
-        </div>
-        <div style={{ fontSize:"0.9rem", display:"flex", flexDirection:"column" as const, gap:"0.2rem" }}>
-          {openOpps.length>0&&<span style={{ color:C.warn, fontWeight:700 }}>{openOpps.filter(p=>p.postScore>=80).length} {t("oppOptimalWindow")}</span>}
-          {opportunitiesMeta&&<span style={{ color:C.dim }}>{opportunitiesMeta.scannedAuthors}/{opportunitiesMeta.requestedAuthors} {t("oppScanned")}</span>}
-          {opportunities===null&&<span style={{ color:C.muted }}>{t("oppTapToDiscover")}</span>}
-          {opportunities!==null&&openOpps.length===0&&<span style={{ color:C.info }}>{t("oppVotedRescan")}</span>}
-        </div>
+
+        {opportunities === null ? (
+          /* Not yet scanned */
+          <>
+            <div style={{ color:C.muted, fontSize:"2.6rem", fontWeight:900, lineHeight:1, letterSpacing:"-1px", marginBottom:"0.5rem" }}>—</div>
+            <div style={{ fontSize:"0.9rem", color:C.muted }}>{t("oppTapToDiscover")}</div>
+          </>
+        ) : openOpps.length > 0 ? (
+          /* Open votes available */
+          <>
+            <div style={{ color:C.warn, fontSize:"2.6rem", fontWeight:900, lineHeight:1, letterSpacing:"-1px", marginBottom:"0.5rem" }}>
+              {openOpps.length}
+            </div>
+            <div style={{ fontSize:"0.9rem", display:"flex", flexDirection:"column" as const, gap:"0.2rem" }}>
+              {openOpps.filter(p=>p.postScore>=80).length > 0 && (
+                <span style={{ color:C.warn, fontWeight:700 }}>
+                  {openOpps.filter(p=>p.postScore>=80).length} {t("oppOptimalWindow")}
+                </span>
+              )}
+              {opportunitiesMeta && (
+                <span style={{ color:C.dim }}>
+                  {opportunitiesMeta.scannedAuthors}/{opportunitiesMeta.requestedAuthors} {t("oppScanned")}
+                </span>
+              )}
+            </div>
+          </>
+        ) : (
+          /* All voted — positive empty state */
+          <>
+            <div style={{ color:C.ok, fontSize:"1.6rem", fontWeight:900, lineHeight:1, marginBottom:"0.4rem" }}>
+              ✓
+            </div>
+            <div style={{ fontSize:"0.9rem", display:"flex", flexDirection:"column" as const, gap:"0.25rem" }}>
+              <span style={{ color:C.ok, fontWeight:700 }}>Alles gevotet</span>
+              {opportunitiesMeta && (
+                <span style={{ color:C.dim }}>
+                  {opportunitiesMeta.scannedAuthors}/{opportunitiesMeta.requestedAuthors} Autoren geprüft
+                </span>
+              )}
+              <span style={{ color:C.dim }}>Keine offenen Beiträge gefunden</span>
+              {(() => {
+                // Estimate next scan: look at already-voted posts' remaining hours
+                const voted = (opportunities ?? []).filter(p => p.alreadyVoted && p.remainingHours > 0);
+                const minRemaining = voted.length > 0
+                  ? Math.min(...voted.map(p => p.remainingHours))
+                  : null;
+                // Suggest a re-scan after ~60 min (typical new post window)
+                return (
+                  <span style={{ color:C.faint, fontSize:"0.85rem", marginTop:"0.1rem" }}>
+                    Nächster Scan empfohlen in{" "}
+                    <b style={{ color:C.dim }}>
+                      {minRemaining !== null && minRemaining < 2
+                        ? "~30 Min."
+                        : "~60 Min."}
+                    </b>
+                  </span>
+                );
+              })()}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
