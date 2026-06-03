@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { getDb } from "../db/index.js";
 const CONTENT_DIR = (() => {
@@ -73,6 +73,44 @@ export function getLastDevlogDate(): string | null {
   return row?.date_str ?? null;
 }
 
+/**
+ * Reads the "Was als Nächstes kommt" section from the most recent devlog file.
+ * Returns the bullet points as a string array so they can be carried forward.
+ */
+export function getLastDevlogNextItems(): string[] {
+  const db  = getDb();
+  const CONTENT_DIR = (() => {
+    if (process.env.VOTEBROKER_CONTENT_DIR) return process.env.VOTEBROKER_CONTENT_DIR;
+    const dbPath = process.env.VOTEBROKER_DB_PATH;
+    if (dbPath) return resolve(dbPath, "..", "content");
+    if (existsSync("/app/data")) return "/app/data/content";
+    return resolve("docs/content");
+  })();
+
+  const row = db.prepare(`
+    SELECT filename FROM content_drafts
+    WHERE type = 'devlog-post'
+    ORDER BY date_str DESC LIMIT 2
+  `).all() as Array<{ filename: string }>;
+
+  // Try the second-to-last first (last = today's, skip it)
+  for (const r of row) {
+    try {
+      const content = readFileSync(resolve(CONTENT_DIR, r.filename), "utf8");
+      const nextMatch = content.match(/## Was als Nächstes kommt\s*\n+([\s\S]*?)(?:\n---|\n## |$)/);
+      if (!nextMatch) continue;
+      const items = nextMatch[1]
+        .split("\n")
+        .map(l => l.replace(/^[-*]\s*/, "").trim())
+        .filter(l => l.length > 0 && !l.startsWith("*") && !l.includes("eintragen"));
+      if (items.length > 0) return items;
+    } catch {
+      continue;
+    }
+  }
+  return [];
+}
+
 // ── Markdown builder ───────────────────────────────────────────────────────────
 
 const TYPE_LABEL: Record<DevlogChange["type"], string> = {
@@ -133,9 +171,13 @@ function buildDraftMarkdown(
     ? buildChangesSection(opts.changes)
     : "*Keine Commit-Daten — bitte manuell ergänzen oder via generate.py mit git-Integration generieren.*";
 
-  const nextSection = opts.nextItems && opts.nextItems.length > 0
-    ? opts.nextItems.map(i => `- ${i}`).join("\n")
-    : "*Nächste geplante Schritte hier eintragen.*";
+  // nextItems: explicit → carry-forward from last devlog → omit section
+  const resolvedNext = opts.nextItems && opts.nextItems.length > 0
+    ? opts.nextItems
+    : getLastDevlogNextItems();
+  const nextSection = resolvedNext.length > 0
+    ? resolvedNext.map(i => `- ${i}`).join("\n")
+    : null;
 
   const screenshotsSection = opts.screenshots && opts.screenshots.length > 0
     ? "\n" + buildScreenshotsSection(opts.screenshots) + "\n"
@@ -165,13 +207,7 @@ Heute (${dateStr}):
 - **${stats.uniqueAuthors.length}** Autoren unterstützt: ${authorList}
 - **${stats.activeUsers.length}** aktive Kuratoren
 ${stats.errors > 0 ? `- **${stats.errors}** Fehler protokolliert — Details im Admin-Log\n` : ""}
----
-
-## Was als Nächstes kommt
-
-${nextSection}
-
----
+${nextSection ? `---\n\n## Was als Nächstes kommt\n\n${nextSection}\n\n` : ""}---
 
 *VoteBroker — Community Curation auf Steem · [votebroker.org](https://votebroker.org)*
 `;
