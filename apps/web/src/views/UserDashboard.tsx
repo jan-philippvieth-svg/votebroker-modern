@@ -750,8 +750,8 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
     </div>
   );
 
-  const Row = ({ label, value, col, bold }: { label: string; value: string; col?: string; bold?: boolean }) => (
-    <div style={{ display:"flex", justifyContent:"space-between", fontSize:"0.8rem", padding:"0.12rem 0" }}>
+  const Row = ({ label, value, col, bold, size }: { label: string; value: string; col?: string; bold?: boolean; size?: string }) => (
+    <div style={{ display:"flex", justifyContent:"space-between", fontSize: size ?? "0.8rem", padding:"0.12rem 0" }}>
       <span style={{ color:C.dim }}>{label}</span>
       <span style={{ color:col ?? C.text, fontWeight:bold ? 700 : 600 }}>{value}</span>
     </div>
@@ -863,15 +863,12 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
                   col={C.purple}
                   sub={totalSp > 0 ? `≈ ${fmtUsd(totalSp * sbdPrStm)}` : "Attribution läuft"}
                 />
-                {/* Secondary details — slightly larger than default 0.8rem for readability */}
-                <div style={{ fontSize:"0.87rem" }}>
-                  {votes > 0 && <Row label="Votes gesamt"  value={String(votes)}/>}
-                  {realSp > 0 && <Row label="Realisiert"   value={`${realSp.toFixed(3)} SP`}/>}
-                  {pendSp > 0 && <Row label="Pending"      value={`${pendSp.toFixed(3)} SP`} col={C.warn}/>}
-                  {spPV > 0    && <><Divider/><Row label="Ø SP pro Vote" value={`${spPV.toFixed(4)} SP`} col={C.purple} bold/></>}
-                </div>
+                {votes > 0 && <Row size="0.9rem" label="Votes gesamt"  value={String(votes)}/>}
+                {realSp > 0 && <Row size="0.9rem" label="Realisiert"   value={`${realSp.toFixed(3)} SP`}/>}
+                {pendSp > 0 && <Row size="0.9rem" label="Pending"      value={`${pendSp.toFixed(3)} SP`} col={C.warn}/>}
+                {spPV > 0    && <><Divider/><Row size="0.9rem" label="Ø SP pro Vote" value={`${spPV.toFixed(4)} SP`} col={C.purple} bold/></>}
                 {since && (
-                  <div style={{ color:C.dim, fontSize:"0.73rem", marginTop:"0.5rem" }}>
+                  <div style={{ color:C.dim, fontSize:"0.8rem", marginTop:"0.5rem" }}>
                     Attribution seit {since}
                   </div>
                 )}
