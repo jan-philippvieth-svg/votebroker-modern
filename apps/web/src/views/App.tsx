@@ -6,6 +6,7 @@ import {
   BarChart3,
   CheckCircle2,
   ChevronDown,
+  Circle,
   Clock3,
   Gauge,
   LineChart,
@@ -1244,55 +1245,52 @@ function ConsentPanel(props: {
                 </p>
               </div>
 
-              {/* Toggle switch */}
-              <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: "0.25rem" }}>
+              {/* Status pill — same style as AuthorityPanel (.status-pill) */}
+              <div style={{ flexShrink: 0 }}>
                 {meta.required ? (
-                  <>
-                    {/* Required = locked ON */}
-                    <div style={{
-                      width: "44px", height: "24px", borderRadius: "12px",
-                      background: "#16a34a", position: "relative", cursor: "not-allowed",
-                      opacity: 0.75,
-                    }}>
-                      <div style={{
-                        position: "absolute", top: "3px", right: "3px",
-                        width: "18px", height: "18px", borderRadius: "50%",
-                        background: "#ffffff", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-                      }}/>
-                    </div>
-                    <span style={{ fontSize: "0.62rem", color: "#16a34a", fontWeight: 600 }}>System</span>
-                  </>
+                  /* System consent — locked ON, non-interactive */
+                  <div style={{
+                    display: "inline-flex", alignItems: "center", gap: "6px",
+                    background: "#0f2318", border: "1px solid #16a34a44",
+                    borderRadius: "999px", padding: "6px 12px",
+                    color: "#4ade80", fontWeight: 700, fontSize: "0.78rem",
+                    cursor: "not-allowed", opacity: 0.85,
+                  }}>
+                    <CheckCircle2 size={14} />
+                    Aktiv
+                  </div>
                 ) : (
-                  <>
-                    <button
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => active ? props.onRevoke(type) : props.onGrant(type)}
-                      aria-label={active ? "Deaktivieren" : "Aktivieren"}
-                      style={{
-                        width: "44px", height: "24px", borderRadius: "12px",
-                        background: loading ? "#9ca3af" : active ? "#16a34a" : "#d1d5db",
-                        border: "none", padding: 0, position: "relative",
-                        cursor: disabled ? "not-allowed" : "pointer",
-                        transition: "background 0.2s ease",
-                        outline: "none",
-                      }}
-                    >
-                      <div style={{
-                        position: "absolute", top: "3px",
-                        left: active ? "23px" : "3px",
-                        width: "18px", height: "18px", borderRadius: "50%",
-                        background: "#ffffff", boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
-                        transition: "left 0.2s ease",
-                      }}/>
-                    </button>
-                    <span style={{
-                      fontSize: "0.62rem", fontWeight: 700,
-                      color: loading ? "#9ca3af" : active ? "#16a34a" : "#9ca3af",
-                    }}>
-                      {loading ? "…" : active ? "Aktiv" : "Inaktiv"}
-                    </span>
-                  </>
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => active ? props.onRevoke(type) : props.onGrant(type)}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: "6px",
+                      background: loading
+                        ? "#1e2733"
+                        : active  ? "#0f2318" : "#1a1f25",
+                      border: `1px solid ${loading ? "#607078" : active ? "#16a34a55" : "#374151"}`,
+                      borderRadius: "999px",
+                      padding: "6px 12px",
+                      color: loading ? "#9ca3af" : active ? "#4ade80" : "#9ca3af",
+                      fontWeight: 700, fontSize: "0.78rem",
+                      cursor: disabled ? "not-allowed" : "pointer",
+                      transition: "background 0.15s, border-color 0.15s, color 0.15s",
+                      outline: "none",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {loading ? (
+                      <span style={{ display: "inline-block", width: "14px", height: "14px",
+                        border: "2px solid #607078", borderTopColor: "transparent",
+                        borderRadius: "50%", animation: "spin 0.7s linear infinite" }}/>
+                    ) : active ? (
+                      <CheckCircle2 size={14} />
+                    ) : (
+                      <Circle size={14} />
+                    )}
+                    {loading ? "…" : active ? "Aktiv" : "Inaktiv"}
+                  </button>
                 )}
               </div>
             </div>
