@@ -727,10 +727,11 @@ function PendingDebugPanel({ data }: { data: PendingCuration }) {
   );
 }
 
-function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, pendingLoading, t }: {
+function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, pendingLoading, lifetimeEarnings, t }: {
   snapshot: SteemAccountSnapshot|null;
   todayStats: TodayStats|null; todayLoading: boolean;
   pendingCuration: PendingCuration|null; pendingLoading: boolean;
+  lifetimeEarnings: VBEarningsResult|null;
   t: ReturnType<typeof createTranslator>;
 }) {
   const voteUsd       = snapshot?.currentVoteUsd ?? 0;
@@ -834,41 +835,48 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
         )}
       </div>
 
-      {/* ── 30 Tage ── */}
-      <div style={{
-        ...card,
-        borderTop:`4px solid ${C.purple}`,
-        background:"linear-gradient(160deg,#faf5ff 0%,#ffffff 55%)",
-      }}>
-        <p style={{ ...lbl, margin:"0 0 0.85rem", color:C.purple }}>Verdient · 30 Tage</p>
-        {pendingLoading ? (
-          <div style={{ color:C.dim, fontSize:"0.88rem" }}>Lädt…</div>
-        ) : !pendingCuration ? (
-          <div style={{ color:C.dim, fontSize:"0.88rem" }}>—</div>
-        ) : (
-          <>
-            <Hero
-              val={pendingCuration.earned30dSp.toFixed(3)}
-              unit="SP"
-              col={C.purple}
-              sub={`≈ ${fmtUsd(pendingCuration.earned30dUsd)}`}
-            />
-            <Row label="Payouts"        value={String(pendingCuration.earned30dCount)}/>
-            <Divider/>
-            <Row label="Ø / Payout"
-              value={pendingCuration.earned30dCount > 0
-                ? `${(pendingCuration.earned30dSp / pendingCuration.earned30dCount).toFixed(4)} SP`
-                : "—"}/>
-            {pendingCuration.earned30dCount > 0 && (
-              <Row
-                label="Ø / Tag"
-                value={`${(pendingCuration.earned30dSp / 30).toFixed(3)} SP`}
-                col={C.purple} bold
-              />
+      {/* ── VoteBroker Lifetime ── */}
+      {(() => {
+        const lft   = lifetimeEarnings;
+        const realSp  = lft?.totals.realizedSp ?? 0;
+        const pendSp  = pendingCuration?.pendingSp ?? 0;
+        const totalSp = realSp + pendSp;
+        const votes   = lft?.totals.voteCount ?? 0;
+        const spPV    = votes > 0 && totalSp > 0 ? totalSp / votes : 0;
+        const since   = lft?.attributionStart ?? null;
+        const sbdPrStm = snapshot?.sbdPerSteem ?? 0.051;
+        const loading  = !lft && pendingLoading;
+        return (
+          <div style={{
+            ...card,
+            borderTop:`4px solid ${C.purple}`,
+            background:"linear-gradient(160deg,#faf5ff 0%,#ffffff 55%)",
+          }}>
+            <p style={{ ...lbl, margin:"0 0 0.85rem", color:C.purple }}>VoteBroker Lifetime</p>
+            {loading ? (
+              <div style={{ color:C.dim, fontSize:"0.88rem" }}>Lädt…</div>
+            ) : (
+              <>
+                <Hero
+                  val={totalSp > 0 ? totalSp.toFixed(3) : "—"}
+                  unit="SP"
+                  col={C.purple}
+                  sub={totalSp > 0 ? `≈ ${fmtUsd(totalSp * sbdPrStm)}` : "Attribution läuft"}
+                />
+                {votes > 0 && <Row label="Votes gesamt"  value={String(votes)}/>}
+                {realSp > 0 && <Row label="Realisiert"   value={`${realSp.toFixed(3)} SP`}/>}
+                {pendSp > 0 && <Row label="Pending"      value={`${pendSp.toFixed(3)} SP`} col={C.warn}/>}
+                {spPV > 0    && <><Divider/><Row label="Ø SP pro Vote" value={`${spPV.toFixed(4)} SP`} col={C.purple} bold/></>}
+                {since && (
+                  <div style={{ color:C.faint, fontSize:"0.65rem", marginTop:"0.5rem" }}>
+                    Attribution seit {since}
+                  </div>
+                )}
+              </>
             )}
-          </>
-        )}
-      </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -1673,6 +1681,9 @@ export function UserDashboard(props: {
   const [pendingCuration,  setPendingCuration]  =useState<PendingCuration|null>(null);
   const [pendingLoading,   setPendingLoading]   =useState(true);
 
+  // Lifetime VoteBroker earnings — fetched once, not period-dependent
+  const [lifetimeEarnings, setLifetimeEarnings] =useState<VBEarningsResult|null>(null);
+
   const loadTodayStats = () => {
     setTodayLoading(true);
     fetchTodayStats(props.session.token)
@@ -1694,6 +1705,9 @@ export function UserDashboard(props: {
   useEffect(()=>{
     loadTodayStats();
     loadPendingCuration();
+    // Lifetime fetch — "all" period, run once
+    fetchVBEarnings(props.session.token, "all")
+      .then(setLifetimeEarnings).catch(()=>{});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[props.session.token]);
 
@@ -1741,6 +1755,7 @@ export function UserDashboard(props: {
         snapshot={snapshot}
         todayStats={todayStats} todayLoading={todayLoading}
         pendingCuration={pendingCuration} pendingLoading={pendingLoading}
+        lifetimeEarnings={lifetimeEarnings}
         t={t}
       />
 
