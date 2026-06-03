@@ -863,12 +863,15 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
                   col={C.purple}
                   sub={totalSp > 0 ? `≈ ${fmtUsd(totalSp * sbdPrStm)}` : "Attribution läuft"}
                 />
-                {votes > 0 && <Row label="Votes gesamt"  value={String(votes)}/>}
-                {realSp > 0 && <Row label="Realisiert"   value={`${realSp.toFixed(3)} SP`}/>}
-                {pendSp > 0 && <Row label="Pending"      value={`${pendSp.toFixed(3)} SP`} col={C.warn}/>}
-                {spPV > 0    && <><Divider/><Row label="Ø SP pro Vote" value={`${spPV.toFixed(4)} SP`} col={C.purple} bold/></>}
+                {/* Secondary details — slightly larger than default 0.8rem for readability */}
+                <div style={{ fontSize:"0.87rem" }}>
+                  {votes > 0 && <Row label="Votes gesamt"  value={String(votes)}/>}
+                  {realSp > 0 && <Row label="Realisiert"   value={`${realSp.toFixed(3)} SP`}/>}
+                  {pendSp > 0 && <Row label="Pending"      value={`${pendSp.toFixed(3)} SP`} col={C.warn}/>}
+                  {spPV > 0    && <><Divider/><Row label="Ø SP pro Vote" value={`${spPV.toFixed(4)} SP`} col={C.purple} bold/></>}
+                </div>
                 {since && (
-                  <div style={{ color:C.faint, fontSize:"0.65rem", marginTop:"0.5rem" }}>
+                  <div style={{ color:C.dim, fontSize:"0.73rem", marginTop:"0.5rem" }}>
                     Attribution seit {since}
                   </div>
                 )}
