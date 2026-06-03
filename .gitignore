@@ -10,3 +10,9 @@ coverage
 *.log
 *.tsbuildinfo
 votebroker-*.png
+
+# Screenshot pipeline generated output
+tools/showcase/__pycache__/
+tools/showcase/output/
+tools/showcase/raw/
+tools/showcase/debug.png
