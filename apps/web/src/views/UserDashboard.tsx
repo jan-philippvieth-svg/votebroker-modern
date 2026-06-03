@@ -875,10 +875,12 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
 
 // ── Alle Durchläufe heute ─────────────────────────────────────────────────────
 
-function AllRunsPanel({ todayStats, snapshot }: {
+function AllRunsPanel({ todayStats, snapshot, timezone, locale }: {
   todayStats: TodayStats|null;
   snapshot: SteemAccountSnapshot|null;
+  timezone?: string; locale?: string;
 }) {
+  const fmt = makeFmt(timezone??"", locale??"de");
   const [expandedRun, setExpandedRun] = useState<number|null>(null);
 
   if (!todayStats || todayStats.runs.length === 0) return null;
@@ -905,7 +907,7 @@ function AllRunsPanel({ todayStats, snapshot }: {
 
       <div style={{ display:"flex", flexDirection:"column" as const, gap:"0.5rem" }}>
         {runsWithVp.map(({ run, vpBeforeRun, vpAfterRun, consumed }, i) => {
-          const time      = new Date(run.startedAt).toLocaleTimeString("de-DE", { hour:"2-digit", minute:"2-digit" });
+          const time      = fmt.time(run.startedAt);
           const val       = (run.weightBps / 10000) * voteUsd;
           const expanded  = expandedRun === i;
           // Votes belonging to this run
@@ -958,7 +960,7 @@ function AllRunsPanel({ todayStats, snapshot }: {
                       <div style={{ display:"flex", gap:"0.75rem", color:C.dim }}>
                         <span>{fmtUsd((v.weightBps / 10000) * voteUsd)}</span>
                         <span style={{ color:C.ok }}>+{fmtUsd((v.weightBps / 10000) * voteUsd * 0.25)}</span>
-                        <span style={{ color:C.faint }}>{new Date(v.votedAt).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})}</span>
+                        <span style={{ color:C.faint }}>{fmt.time(v.votedAt)}</span>
                       </div>
                     </div>
                   ))}
@@ -989,10 +991,12 @@ function AllRunsPanel({ todayStats, snapshot }: {
 
 // ── VP-Graph mit Tooltip (heute, aus Vote-Events rekonstruiert) ───────────────
 
-function VpGraphToday({ todayStats, snapshot }: {
+function VpGraphToday({ todayStats, snapshot, timezone, locale }: {
   todayStats: TodayStats|null;
   snapshot: SteemAccountSnapshot|null;
+  timezone?: string; locale?: string;
 }) {
+  const fmt = makeFmt(timezone??"", locale??"de");
   const [hoverIdx, setHoverIdx] = useState<number|null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -1117,7 +1121,7 @@ function VpGraphToday({ todayStats, snapshot }: {
           }}>
             {/* Header */}
             <div style={{ fontWeight:800, fontSize:"0.88rem", color:"#fff", marginBottom:"0.3rem", display:"flex", justifyContent:"space-between", alignItems:"baseline" }}>
-              <span>{new Date(hovered.time).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})} Uhr</span>
+              <span>{fmt.time(hovered.time)} Uhr</span>
               {hovered.runIdx >= 0 && <span style={{ color:"#94a3b8", fontWeight:600, fontSize:"0.75rem" }}>Durchlauf #{hovered.runIdx+1}</span>}
             </div>
             {hovered.weightBps > 0 ? (
@@ -1296,7 +1300,7 @@ function VBEarningsChart({ data, pendingSp, sbdPerSteem }: {
           boxShadow:"0 4px 12px rgba(0,0,0,0.3)",
         }}>
           <div style={{ fontWeight:700, color:"#c4b5fd", marginBottom:"0.25rem" }}>
-            {new Date(hovD.date+"T12:00:00Z").toLocaleDateString("de-DE",{day:"numeric",month:"short"})}
+            {new Date(hovD.date+"T12:00:00Z").toLocaleDateString("de-DE",{day:"numeric",month:"short", timeZone:"UTC"})}
           </div>
           {hovD.votes > 0 && (
             <div style={{ color:"#94a3b8", marginBottom:"0.2rem" }}>
@@ -1375,7 +1379,7 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, t }: {
         <div style={{ display:"flex", alignItems:"center", gap:"0.5rem" }}>
           <span style={{ fontSize:"0.95rem" }}>💜</span>
           <span style={{ fontSize:"0.82rem", fontWeight:700, color:C.text, letterSpacing:"-0.2px" }}>
-            Verdienst durch VoteBroker
+            Curation-Rewards durch VoteBroker
           </span>
         </div>
         <div style={{ display:"flex", gap:"0.2rem" }}>
@@ -1618,8 +1622,27 @@ function AuthorGrid({ rules, openOpps, snapshot, dnaMap, onTabChange, t }: {
 
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 
+// ── Timezone-aware formatting ─────────────────────────────────────────────────
+
+function makeFmt(timezone: string, locale: string) {
+  const tz = timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const lc = locale === "de" ? "de-DE" : "en-GB";
+  return {
+    time:     (d: Date | string) => new Date(d).toLocaleTimeString(lc, { timeZone: tz, hour: "2-digit", minute: "2-digit" }),
+    datetime: (d: Date | string) => new Date(d).toLocaleString(lc, { timeZone: tz, day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }),
+    date:     (d: Date | string) => new Date(d).toLocaleDateString(lc, { timeZone: tz, day: "numeric", month: "short" }),
+    dateShort:(d: Date | string) => new Date(d).toLocaleDateString(lc, { timeZone: tz, month: "numeric", day: "numeric" }),
+    // Returns local day string YYYY-MM-DD for grouping (respects timezone boundary)
+    dayKey:   (d: Date | string) => {
+      const dt = new Date(d);
+      return new Intl.DateTimeFormat("sv-SE", { timeZone: tz }).format(dt); // sv-SE gives YYYY-MM-DD
+    },
+    tz,
+  };
+}
+
 export function UserDashboard(props: {
-  session: AuthSession; locale: Locale;
+  session: AuthSession; locale: Locale; timezone?: string;
   snapshot: SteemAccountSnapshot|null; snapshotLoading: boolean; snapshotRefreshedAt?: Date;
   strategyRules: StrategyRuleLite[]|null;
   opportunities: PostOpportunity[]|null; opportunitiesLoading: boolean;
@@ -1631,6 +1654,7 @@ export function UserDashboard(props: {
   onGenerateVotes:()=>void; onLoadOpportunities:()=>void; onRefreshSnapshot?:()=>void;
 }) {
   const t=createTranslator(props.locale);
+  const fmt=makeFmt(props.timezone??"",props.locale);
   const { snapshot,strategyRules,opportunities,opportunitiesMeta,curationProfile }=props;
 
   const rules     =sortRules(strategyRules??[]);
@@ -1723,8 +1747,8 @@ export function UserDashboard(props: {
       {/* 2b. Letzter Durchlauf + VP-Graph */}
       {(todayStats?.lastRun || (todayStats && todayStats.votes.length > 0)) && (
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"1rem" }}>
-          <AllRunsPanel todayStats={todayStats} snapshot={snapshot}/>
-          <VpGraphToday todayStats={todayStats} snapshot={snapshot}/>
+          <AllRunsPanel todayStats={todayStats} snapshot={snapshot} timezone={props.timezone} locale={props.locale}/>
+          <VpGraphToday todayStats={todayStats} snapshot={snapshot} timezone={props.timezone} locale={props.locale}/>
         </div>
       )}
 

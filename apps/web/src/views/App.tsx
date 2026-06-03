@@ -141,6 +141,14 @@ function voteErrorMessage(err: unknown): { message: string; code: string; hint?:
 
 export function App() {
   const [locale, setLocale] = useState<Locale>(() => (window.localStorage.getItem("votebroker.locale") as Locale | null) ?? "de");
+  const [timezone, setTimezoneRaw] = useState<string>(() =>
+    window.localStorage.getItem("votebroker.timezone") ??
+    Intl.DateTimeFormat().resolvedOptions().timeZone
+  );
+  const setTimezone = (tz: string) => {
+    window.localStorage.setItem("votebroker.timezone", tz);
+    setTimezoneRaw(tz);
+  };
   const [session, setSession] = useState<AuthSession | null>(() => {
     const raw = window.localStorage.getItem("votebroker.session");
     return raw ? JSON.parse(raw) as AuthSession : null;
@@ -865,6 +873,7 @@ export function App() {
         <UserDashboard
           session={session}
           locale={locale}
+          timezone={timezone}
           snapshot={accountSnapshot}
           snapshotLoading={snapshotLoading}
           snapshotRefreshedAt={snapshotRefreshedAt ?? undefined}
@@ -896,6 +905,11 @@ export function App() {
       {/* Tab: Billing / Einstellungen */}
       {activeTab === "billing" && (
         <div>
+          <TimezoneSettings
+            locale={locale} timezone={timezone}
+            onLocaleChange={changeLocale} onTimezoneChange={setTimezone}
+            t={t}
+          />
           <AuthorityPanel grantUrl={authorityGrantUrl} hasAuthority={hasAuthority} session={session} />
           <ConsentPanel
             catalog={consentCatalog}
@@ -3173,6 +3187,127 @@ function AccountSnapshotPanel(props: {
         <span style={{ color: "#888" }}>STEEM {props.snapshot.sbdPerSteem.toFixed(4)} SBD (Chain-Median)</span>
       </div>
     </section>
+  );
+}
+
+// ── Timezone list — curated IANA names with friendly labels ──────────────────
+
+const TIMEZONES: Array<{ value: string; label: string }> = [
+  { value: "Europe/Berlin",     label: "Europa/Berlin (MEZ/MESZ)" },
+  { value: "Europe/London",     label: "Europa/London (GMT/BST)" },
+  { value: "Europe/Paris",      label: "Europa/Paris" },
+  { value: "Europe/Vienna",     label: "Europa/Wien" },
+  { value: "Europe/Zurich",     label: "Europa/Zürich" },
+  { value: "Europe/Amsterdam",  label: "Europa/Amsterdam" },
+  { value: "Europe/Warsaw",     label: "Europa/Warschau" },
+  { value: "Europe/Stockholm",  label: "Europa/Stockholm" },
+  { value: "Europe/Moscow",     label: "Europa/Moskau" },
+  { value: "Asia/Dubai",        label: "Asien/Dubai (GST)" },
+  { value: "Asia/Kolkata",      label: "Asien/Kolkata (IST)" },
+  { value: "Asia/Singapore",    label: "Asien/Singapur (SGT)" },
+  { value: "Asia/Tokyo",        label: "Asien/Tokio (JST)" },
+  { value: "Asia/Seoul",        label: "Asien/Seoul (KST)" },
+  { value: "Asia/Shanghai",     label: "Asien/Shanghai (CST)" },
+  { value: "Australia/Sydney",  label: "Australien/Sydney (AEDT)" },
+  { value: "Pacific/Auckland",  label: "Pazifik/Auckland (NZST)" },
+  { value: "UTC",               label: "UTC / Greenwich" },
+  { value: "America/Sao_Paulo", label: "Amerika/São Paulo (BRT)" },
+  { value: "America/New_York",  label: "Amerika/New York (ET)" },
+  { value: "America/Chicago",   label: "Amerika/Chicago (CT)" },
+  { value: "America/Denver",    label: "Amerika/Denver (MT)" },
+  { value: "America/Los_Angeles", label: "Amerika/Los Angeles (PT)" },
+];
+
+function TimezoneSettings({ locale, timezone, onLocaleChange, onTimezoneChange, t }: {
+  locale: Locale;
+  timezone: string;
+  onLocaleChange: (l: Locale) => void;
+  onTimezoneChange: (tz: string) => void;
+  t: ReturnType<typeof createTranslator>;
+}) {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const localTime = now.toLocaleTimeString(locale === "de" ? "de-DE" : "en-GB", {
+    timeZone: timezone, hour: "2-digit", minute: "2-digit", second: "2-digit",
+  });
+  const localDate = now.toLocaleDateString(locale === "de" ? "de-DE" : "en-GB", {
+    timeZone: timezone, weekday: "long", day: "numeric", month: "long",
+  });
+
+  // Ensure selected timezone is in the list; add it if not
+  const inList = TIMEZONES.some(z => z.value === timezone);
+  const options = inList
+    ? TIMEZONES
+    : [{ value: timezone, label: `${timezone} (Browser)` }, ...TIMEZONES];
+
+  const panelStyle: React.CSSProperties = {
+    background: "#ffffff", border: "1px solid #e5e7eb", borderRadius: "12px",
+    padding: "1.25rem 1.5rem", marginBottom: "1rem",
+  };
+  const lbl: React.CSSProperties = {
+    fontSize: "0.75rem", fontWeight: 600, color: "#6b7280",
+    textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "0.5rem",
+  };
+  const sel: React.CSSProperties = {
+    background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: "8px",
+    color: "#111827", cursor: "pointer", fontSize: "0.88rem",
+    padding: "0.5rem 0.75rem", width: "100%",
+  };
+
+  return (
+    <div style={{ maxWidth: "520px", padding: "1.25rem 1.5rem" }}>
+      <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#111827", margin: "0 0 1.25rem" }}>
+        ⚙ Einstellungen
+      </h2>
+
+      {/* Sprache */}
+      <div style={panelStyle}>
+        <p style={lbl}>Sprache</p>
+        <select style={sel} value={locale}
+          onChange={e => onLocaleChange(e.target.value as Locale)}>
+          {locales.map(l => (
+            <option key={l.code} value={l.code}>{l.label}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Zeitzone */}
+      <div style={panelStyle}>
+        <p style={lbl}>Zeitzone</p>
+        <select style={sel} value={timezone}
+          onChange={e => onTimezoneChange(e.target.value)}>
+          {options.map(z => (
+            <option key={z.value} value={z.value}>{z.label}</option>
+          ))}
+        </select>
+
+        {/* Live-Uhr */}
+        <div style={{
+          marginTop: "0.85rem", background: "#f0fdf4", border: "1px solid #bbf7d0",
+          borderRadius: "8px", padding: "0.65rem 0.9rem",
+          display: "flex", alignItems: "center", gap: "0.75rem",
+        }}>
+          <span style={{ fontSize: "1.2rem" }}>🕒</span>
+          <div>
+            <div style={{ fontSize: "1.4rem", fontWeight: 800, color: "#15803d",
+              letterSpacing: "-0.5px", fontVariantNumeric: "tabular-nums" }}>
+              {localTime}
+            </div>
+            <div style={{ fontSize: "0.73rem", color: "#6b7280", marginTop: "0.1rem" }}>
+              {localDate} · {timezone}
+            </div>
+          </div>
+        </div>
+
+        <p style={{ fontSize: "0.72rem", color: "#9ca3af", margin: "0.6rem 0 0" }}>
+          Alle Daten werden intern in UTC gespeichert. Die Zeitzone beeinflusst nur die Darstellung.
+        </p>
+      </div>
+    </div>
   );
 }
 
