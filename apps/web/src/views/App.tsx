@@ -371,12 +371,17 @@ export function App() {
     const clean = username.replace(/^@/, "").toLowerCase().trim();
     if (!clean) return;
     const base = Math.max(5, curationProfile?.powerStable.maxAvgWeightPct ?? 20);
+    // Dust floors per category — must match server-side CATEGORY_DUST_BPS
+    const dustFloor: Record<StrategyCategory, number> = {
+      immer_voten: 50, lieblingsautor: 30, bevorzugt: 15,
+      normal: 10, niedrig: 5, ignorieren: 0,
+    };
     const maxFor: Record<StrategyCategory, number> = {
-      immer_voten:    Math.min(100, Math.round(base * 3)),
-      lieblingsautor: Math.min(100, Math.round(base * 2.5)),
-      bevorzugt:      Math.min(100, Math.round(base * 1.5)),
-      normal:         Math.min(100, Math.round(base)),
-      niedrig:        Math.max(1,   Math.round(base * 0.4)),
+      immer_voten:    Math.min(100, Math.max(dustFloor.immer_voten,    Math.round(base * 3))),
+      lieblingsautor: Math.min(100, Math.max(dustFloor.lieblingsautor, Math.round(base * 2.5))),
+      bevorzugt:      Math.min(100, Math.max(dustFloor.bevorzugt,      Math.round(base * 1.5))),
+      normal:         Math.min(100, Math.max(dustFloor.normal,         Math.round(base))),
+      niedrig:        Math.min(100, Math.max(dustFloor.niedrig,        Math.round(base * 0.4))),
       ignorieren:     0,
     };
     const newRule: StrategyRule = {
