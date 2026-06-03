@@ -782,11 +782,11 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
         ) : (
           <>
             <Hero val={String(todayStats.totalVotes)} unit="Votes" col={C.info}/>
-            <Row label="Durchläufe"    value={String(todayStats.runsCount)}/>
-            <Row label="Autoren"        value={String(todayStats.uniqueAuthors)}/>
+            <Row size="0.9rem" label="Durchläufe"    value={String(todayStats.runsCount)}/>
+            <Row size="0.9rem" label="Autoren"        value={String(todayStats.uniqueAuthors)}/>
             <Divider/>
-            <Row label="VP verbraucht"   value={`−${vpConsumedPct.toFixed(1)}%`} col={C.warn} bold/>
-            <Row label="→ Pending Pool" value={`+${fmtUsd(estCuration)}`}        col={C.ok}  bold/>
+            <Row size="0.9rem" label="VP verbraucht"   value={`−${vpConsumedPct.toFixed(1)}%`} col={C.warn} bold/>
+            <Row size="0.9rem" label="→ Pending Pool" value={`+${fmtUsd(estCuration)}`}        col={C.ok}  bold/>
           </>
         )}
       </div>
@@ -810,8 +810,8 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
               col={C.ok}
               sub={`≈ ${fmtUsd(pendingCuration.pendingUsd)}`}
             />
-            <Row label="Offene Posts"   value={String(pendingCuration.postCount)}/>
-            <Row label="Votes (7d)"     value={String(pendingCuration.voteCount)}/>
+            <Row size="0.9rem" label="Offene Posts"   value={String(pendingCuration.postCount)}/>
+            <Row size="0.9rem" label="Votes (7d)"     value={String(pendingCuration.voteCount)}/>
             {nextPayout && nextPayoutLabel && (
               <>
                 <Divider/>
