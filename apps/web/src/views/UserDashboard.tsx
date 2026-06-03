@@ -867,10 +867,10 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
         ) : (
           <>
             <Hero
-              val={pendingCuration.pendingSp.toFixed(3)}
-              unit="STEEM"
+              val={fmtUsd(pendingCuration.pendingUsd)}
+              unit=""
               col={C.warn}
-              sub={`≈ ${fmtUsd(pendingCuration.pendingUsd)}`}
+              sub={`${pendingCuration.pendingSp.toFixed(3)} STEEM`}
             />
             <Row size="0.9rem" label="Offene Posts"   value={String(pendingCuration.postCount)}/>
             <Row size="0.9rem" label="Votes (7d)"     value={String(pendingCuration.voteCount)}/>
@@ -920,10 +920,10 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
             ) : (
               <>
                 <Hero
-                  val={totalSp > 0 ? totalSp.toFixed(3) : "—"}
-                  unit="STEEM"
+                  val={totalSp > 0 ? fmtUsd(totalSp * sbdPrStm) : "—"}
+                  unit=""
                   col={C.purple}
-                  sub={totalSp > 0 ? `≈ ${fmtUsd(totalSp * sbdPrStm)}` : "Attribution läuft"}
+                  sub={totalSp > 0 ? `${totalSp.toFixed(3)} STEEM` : "Attribution läuft"}
                 />
                 {votes > 0 && <Row size="0.9rem" label="Votes gesamt"  value={String(votes)}/>}
                 {realSp > 0 && <Row size="0.9rem" label="Realisiert"   value={`${realSp.toFixed(3)} SP`}/>}
@@ -1517,16 +1517,15 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, t }: {
                 padding:"0.1rem 0", lineHeight:1,
               }}>→</div>
 
-              {/* Total SP */}
+              {/* Total — USD primär */}
               <div style={{ fontSize:"2.4rem", fontWeight:900, color:PURPLE, letterSpacing:"-2px", lineHeight:1 }}>
-                {totalSp > 0 ? totalSp.toFixed(3) : "—"}
-                <span style={{ fontSize:"1rem", fontWeight:700, marginLeft:"0.3rem", opacity:0.65 }}>STEEM</span>
+                {totalSp > 0 ? fmtUsd(usdApprox) : "—"}
               </div>
 
-              {/* SBD equiv */}
+              {/* STEEM sekundär */}
               {totalSp > 0 && (
                 <div style={{ fontSize:"0.75rem", color:C.dim, marginTop:"0.15rem" }}>
-                  ≈ {usdApprox.toFixed(3)} SBD
+                  {totalSp.toFixed(3)} STEEM
                 </div>
               )}
 
@@ -1534,7 +1533,7 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, t }: {
               <div style={{ fontSize:"0.73rem", marginTop:"0.2rem", display:"flex", gap:"0.6rem", flexWrap:"wrap" }}>
                 {realizedSp > 0 && (
                   <span style={{ color:C.ok, fontWeight:600 }}>
-                    {realizedSp.toFixed(3)} realisiert
+                    {realizedSp.toFixed(3)} SP realisiert
                   </span>
                 )}
                 {pendingSp > 0 && (
