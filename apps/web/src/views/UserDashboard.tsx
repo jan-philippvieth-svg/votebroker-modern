@@ -1426,10 +1426,17 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, recent
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    setLoading(true);
-    fetchVBEarnings(session.token, period)
-      .then(setData).catch(()=>setData(null))
-      .finally(()=>setLoading(false));
+    // session/period changes: fetch immediately
+    // recentVotesCount changes: debounce 800ms so last audit_event is committed
+    const delay = recentVotesCount > 0 ? 800 : 0;
+    const t = setTimeout(() => {
+      setLoading(true);
+      fetchVBEarnings(session.token, period)
+        .then(setData).catch(()=>setData(null))
+        .finally(()=>setLoading(false));
+    }, delay);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.token, period, recentVotesCount]);
 
   const sbdPrStm = snapshot?.sbdPerSteem ?? 0.051;
@@ -1787,17 +1794,20 @@ export function UserDashboard(props: {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[props.session.token]);
 
-  // Refresh all live data whenever a vote is executed.
-  // Uses voteExecutionCount (uncapped) instead of recentVotes.length (capped at 20)
-  // so refreshes keep firing beyond the 20th vote.
+  // Refresh live data after each vote.
+  // Today-stats and pending-curation refresh immediately (their sources are instant).
+  // Earnings/chart refresh is debounced by 800ms so the last vote's audit_event
+  // is guaranteed to be committed before the read — fixes "1 vote behind" bug.
   const voteExecCount = props.voteExecutionCount ?? 0;
   useEffect(()=>{
-    if (voteExecCount > 0) {
-      loadTodayStats();
-      loadPendingCuration();
+    if (voteExecCount === 0) return;
+    loadTodayStats();
+    loadPendingCuration();
+    const t = setTimeout(() => {
       fetchVBEarnings(props.session.token, "all")
         .then(setLifetimeEarnings).catch(()=>{});
-    }
+    }, 800);
+    return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[voteExecCount]);
 
