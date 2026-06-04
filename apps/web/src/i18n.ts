@@ -405,6 +405,19 @@ const translations = {
     consentLabelCommunity:  "Community Intelligence",
     consentDescCommunity:   "Anonymisiert an Community-Empfehlungen teilnehmen — deine Autoren-Präferenzen fließen in den Author Radar ein.",
 
+    // ── Consent Notes (Fußzeilen je Consent-Typ) ─────────────────────────────
+    consentNoteLogin:       "Erforderlich für alle anderen Funktionen.",
+    consentNoteTargetVote:  "Erforderlich für die Quote-Funktion.",
+    consentNoteAutoVote:    "Kann jederzeit deaktiviert werden.",
+    consentNoteFeePost:     "Nur ausgeführt wenn eine Rechnung vorliegt.",
+    consentNoteAiStrategy:  "Keine Daten an Dritte.",
+    consentNoteCommunity:   "Opt-out jederzeit möglich.",
+
+    // ── Consent History ───────────────────────────────────────────────────────
+    consentHistoryTitle:    "Letzte Änderungen",
+    consentStatusGranted:   "✓ Aktiviert",
+    consentStatusRevoked:   "✗ Deaktiviert",
+
     // ── Feature Blurbs (Landing / Welcome) ───────────────────────────────────
     featureAuthorsTitle:    "Deine Lieblingsautoren immer im Blick",
     featureVpTitle:         "Voting Power gesund halten",
@@ -906,6 +919,19 @@ const translations = {
     consentLabelCommunity:  "Community Intelligence",
     consentDescCommunity:   "Participate anonymously in community recommendations — your author preferences contribute to the Author Radar.",
 
+    // ── Consent Notes ─────────────────────────────────────────────────────────
+    consentNoteLogin:       "Required for all other functions.",
+    consentNoteTargetVote:  "Required for the quote function.",
+    consentNoteAutoVote:    "Can be deactivated at any time.",
+    consentNoteFeePost:     "Only executed when an invoice is outstanding.",
+    consentNoteAiStrategy:  "No data shared with third parties.",
+    consentNoteCommunity:   "Opt-out at any time.",
+
+    // ── Consent History ───────────────────────────────────────────────────────
+    consentHistoryTitle:    "Recent Changes",
+    consentStatusGranted:   "✓ Activated",
+    consentStatusRevoked:   "✗ Deactivated",
+
     // ── Feature Blurbs ────────────────────────────────────────────────────────
     featureAuthorsTitle:    "Always keep an eye on your favorite authors",
     featureVpTitle:         "Keep Voting Power healthy",
@@ -1288,6 +1314,15 @@ const translations = {
     whaleExplainStep3:  "Puntuaciones altas significan que curadores experimentados han reconocido calidad.",
     whaleExplainStep4:  "Esto te permite encontrar autores antes que a través de Trending o Hot.",
     whaleExplainWhyTitle:  "¿Por qué es útil?",
+    consentHistoryTitle:  "Últimos cambios",
+    consentNoteAiStrategy:  "Sin datos compartidos con terceros.",
+    consentNoteAutoVote:  "Puede desactivarse en cualquier momento.",
+    consentNoteCommunity:  "Opt-out en cualquier momento.",
+    consentNoteFeePost:  "Solo se ejecuta cuando hay una factura pendiente.",
+    consentNoteLogin:  "Requerido para todas las demás funciones.",
+    consentNoteTargetVote:  "Requerido para la función de cotización.",
+    consentStatusGranted:  "✓ Activado",
+    consentStatusRevoked:  "✗ Desactivado",
     // ── Full coverage — keys from DE/EN ─────────────────────────────────────────
     actNewPost:                  "nuevo post",
     actNoActivity:               "Sin actividad aún",
@@ -1701,6 +1736,15 @@ const translations = {
     whaleExplainStep3:  "높은 점수는 경험 많은 큐레이터들이 품질을 인정했다는 의미입니다.",
     whaleExplainStep4:  "트렌딩이나 핫보다 먼저 작성자를 발견할 수 있습니다.",
     whaleExplainWhyTitle:  "왜 유용한가요?",
+    consentHistoryTitle:  "최근 변경사항",
+    consentNoteAiStrategy:  "제3자와 데이터 공유 없음.",
+    consentNoteAutoVote:  "언제든지 비활성화할 수 있습니다.",
+    consentNoteCommunity:  "언제든지 옵트아웃 가능.",
+    consentNoteFeePost:  "청구서가 있을 때만 실행됩니다.",
+    consentNoteLogin:  "다른 모든 기능에 필요합니다.",
+    consentNoteTargetVote:  "견적 기능에 필요합니다.",
+    consentStatusGranted:  "✓ 활성화됨",
+    consentStatusRevoked:  "✗ 비활성화됨",
     // ── Full coverage — keys from DE/EN ─────────────────────────────────────────
     actNewPost:                  "새 게시물",
     actNoActivity:               "아직 활동 없음",
@@ -2114,6 +2158,15 @@ const translations = {
     whaleExplainStep3:  "高分数意味着有经验的策展人认可了质量。",
     whaleExplainStep4:  "这让你比通过 Trending 或 Hot 更早发现作者。",
     whaleExplainWhyTitle:  "为什么有用？",
+    consentHistoryTitle:  "最近变更",
+    consentNoteAiStrategy:  "不与第三方共享数据。",
+    consentNoteAutoVote:  "可随时停用。",
+    consentNoteCommunity:  "随时可以退出。",
+    consentNoteFeePost:  "仅在有未付账单时执行。",
+    consentNoteLogin:  "所有其他功能都需要此项。",
+    consentNoteTargetVote:  "报价功能需要此项。",
+    consentStatusGranted:  "✓ 已激活",
+    consentStatusRevoked:  "✗ 已停用",
     // ── Full coverage — keys from DE/EN ─────────────────────────────────────────
     actNewPost:                  "新帖子",
     actNoActivity:               "尚无活动",
@@ -2659,6 +2712,15 @@ const translations = {
     whaleWhyTitle:               "Почему рекомендован?",
     whaleWhyTotalVotes:          "получено {{n}} кураторских голосов",
     whaleWhyVotedBy:             "проголосован {{n}} сигнальными кураторами",
+    consentHistoryTitle:         "Последние изменения",
+    consentNoteAiStrategy:       "Данные не передаются третьим лицам.",
+    consentNoteAutoVote:         "Можно отключить в любое время.",
+    consentNoteCommunity:        "Отказ от участия в любое время.",
+    consentNoteFeePost:          "Выполняется только при наличии задолженности.",
+    consentNoteLogin:            "Требуется для всех остальных функций.",
+    consentNoteTargetVote:       "Требуется для функции котировки.",
+    consentStatusGranted:        "✓ Активировано",
+    consentStatusRevoked:        "✗ Деактивировано",
   },
 
 } satisfies Record<Locale, Record<string, string>>;

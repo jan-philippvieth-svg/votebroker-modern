@@ -955,6 +955,7 @@ export function App() {
             session={session}
             state={consentState}
             t={t}
+            locale={locale}
           />
         </div>
       )}
@@ -1138,12 +1139,12 @@ function getConsentMeta(t: ReturnType<typeof createTranslator>): Record<ConsentT
   icon: string; label: string; description: string; note: string; required: boolean;
 }> {
   return {
-    login:                { icon: "🔐", label: t("consentLabelLogin"),      description: t("consentDescLogin"),      note: "Erforderlich für alle anderen Funktionen.", required: true  },
-    target_vote:          { icon: "📊", label: t("consentLabelTargetVote"), description: t("consentDescTargetVote"), note: "Erforderlich für die Quote-Funktion.",     required: false },
-    auto_vote:            { icon: "🤖", label: t("consentLabelAutoVote"),   description: t("consentDescAutoVote"),   note: "Kann jederzeit deaktiviert werden.",       required: false },
-    fee_post_vote:        { icon: "💰", label: t("consentLabelFeePost"),    description: t("consentDescFeePost"),    note: "Nur ausgeführt wenn eine Rechnung vorliegt.", required: false },
-    ai_strategy:          { icon: "🧬", label: t("consentLabelAiStrategy"), description: t("consentDescAiStrategy"), note: "Keine Daten an Dritte.",                  required: false },
-    community_intelligence:{ icon: "👥",label: t("consentLabelCommunity"), description: t("consentDescCommunity"),  note: "Opt-out jederzeit möglich.",               required: false },
+    login:                { icon: "🔐", label: t("consentLabelLogin"),      description: t("consentDescLogin"),      note: t("consentNoteLogin"),      required: true  },
+    target_vote:          { icon: "📊", label: t("consentLabelTargetVote"), description: t("consentDescTargetVote"), note: t("consentNoteTargetVote"), required: false },
+    auto_vote:            { icon: "🤖", label: t("consentLabelAutoVote"),   description: t("consentDescAutoVote"),   note: t("consentNoteAutoVote"),   required: false },
+    fee_post_vote:        { icon: "💰", label: t("consentLabelFeePost"),    description: t("consentDescFeePost"),    note: t("consentNoteFeePost"),    required: false },
+    ai_strategy:          { icon: "🧬", label: t("consentLabelAiStrategy"), description: t("consentDescAiStrategy"), note: t("consentNoteAiStrategy"), required: false },
+    community_intelligence:{ icon: "👥",label: t("consentLabelCommunity"), description: t("consentDescCommunity"),  note: t("consentNoteCommunity"),  required: false },
   };
 }
 
@@ -1159,6 +1160,7 @@ function ConsentPanel(props: {
   session: AuthSession | null;
   state: ConsentState | null;
   t: ReturnType<typeof createTranslator>;
+  locale?: import("../i18n").Locale;
 }) {
   const activeTypes = new Set(props.state?.active.map((r) => r.type) ?? []);
   const history = props.state?.history.filter(r => r.status === "revoked").slice(0, 5) ?? [];
@@ -1300,16 +1302,16 @@ function ConsentPanel(props: {
       {history.length > 0 && (
         <div style={{ marginTop: "1rem", padding: "0.75rem 1rem", background: "#ffffff", border: "1px solid #21262d", borderRadius: "6px" }}>
           <p style={{ color: "#607078", fontSize: "0.73rem", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 0.5rem", fontWeight: 600 }}>
-            Letzte Änderungen
+            {props.t("consentHistoryTitle")}
           </p>
           {history.map(record => (
             <div key={record.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.78rem", color: "#607078", marginBottom: "0.2rem" }}>
               <span style={{ color: record.status === "granted" ? "#16a34a" : "#dc2626" }}>
-                {record.status === "granted" ? "✓ Aktiviert" : "✗ Deaktiviert"}
+                {record.status === "granted" ? props.t("consentStatusGranted") : props.t("consentStatusRevoked")}
               </span>
               <span>{getConsentMeta(props.t)[record.type as ConsentType]?.label ?? record.title}</span>
               <span style={{ color: "#8fa4b0" }}>
-                {new Date(record.revokedAt ?? record.createdAt ?? "").toLocaleDateString("de-DE")}
+                {new Date(record.revokedAt ?? record.createdAt ?? "").toLocaleDateString(props.locale ?? "de")}
               </span>
             </div>
           ))}
