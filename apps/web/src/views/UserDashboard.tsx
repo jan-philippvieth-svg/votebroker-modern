@@ -911,10 +911,10 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
         return (
           <div style={{
             ...card,
-            borderTop:`4px solid ${C.purple}`,
-            background:"linear-gradient(160deg,#faf5ff 0%,#ffffff 55%)",
+            borderTop:`4px solid ${C.ok}`,
+            background:"linear-gradient(160deg,#f0fdf4 0%,#ffffff 55%)",
           }}>
-            <p style={{ ...lbl, margin:"0 0 0.85rem", color:C.purple }}>VoteBroker Lifetime</p>
+            <p style={{ ...lbl, margin:"0 0 0.85rem", color:C.ok }}>VoteBroker Lifetime</p>
             {loading ? (
               <div style={{ color:C.dim, fontSize:"0.88rem" }}>Lädt…</div>
             ) : (
