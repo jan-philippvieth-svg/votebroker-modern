@@ -1722,6 +1722,7 @@ export function UserDashboard(props: {
   votePlan: VotePlanResponse|null;
   curationProfile: CurationProfile|null;
   recentVotes: RecentVote[];
+  voteExecutionCount?: number;   // uncapped counter — increments per vote for reliable refresh
   onTabChange:(tab:"dna"|"dashboard"|"community"|"billing")=>void;
   onGenerateVotes:()=>void; onLoadOpportunities:()=>void; onRefreshSnapshot?:()=>void;
 }) {
@@ -1775,18 +1776,19 @@ export function UserDashboard(props: {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[props.session.token]);
 
-  // Refresh today stats + lifetime earnings whenever recentVotes changes (= after a vote run)
-  const recentVotesLen = props.recentVotes.length;
+  // Refresh all live data whenever a vote is executed.
+  // Uses voteExecutionCount (uncapped) instead of recentVotes.length (capped at 20)
+  // so refreshes keep firing beyond the 20th vote.
+  const voteExecCount = props.voteExecutionCount ?? 0;
   useEffect(()=>{
-    if (recentVotesLen > 0) {
+    if (voteExecCount > 0) {
       loadTodayStats();
       loadPendingCuration();
-      // Refresh lifetime so chart vote count matches Heute-Kachel
       fetchVBEarnings(props.session.token, "all")
         .then(setLifetimeEarnings).catch(()=>{});
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[recentVotesLen]);
+  },[voteExecCount]);
 
   return (
     <div style={{ padding:"1.5rem 2rem", display:"flex", flexDirection:"column" as const, gap:"1.5rem" }}>
@@ -1809,7 +1811,7 @@ export function UserDashboard(props: {
         pendingCuration={pendingCuration}
         todayStats={todayStats}
         snapshot={snapshot}
-        recentVotesCount={props.recentVotes.length}
+        recentVotesCount={voteExecCount}
         t={t}
       />
 

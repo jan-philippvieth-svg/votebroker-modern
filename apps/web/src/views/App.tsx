@@ -201,6 +201,7 @@ export function App() {
   const [planLoading, setPlanLoading] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
   const [recentVotes, setRecentVotes] = useState<RecentVote[]>([]);
+  const [voteExecutionCount, setVoteExecutionCount] = useState(0); // uncapped, increments per vote
   const [snapshotRefreshedAt, setSnapshotRefreshedAt] = useState<Date | null>(null);
   const [strategyRules, setStrategyRules] = useState<StrategyRule[] | null>(() => {
     try {
@@ -517,6 +518,7 @@ export function App() {
           weightPct: Math.round(target.weightBps / 100 * 10) / 10,
           votedAt: new Date().toISOString(),
         }, ...prev].slice(0, 20));
+        setVoteExecutionCount(n => n + 1);
       } catch (err) {
         const msg  = err instanceof Error ? err.message : String(err);
         const code = err instanceof VoteBroadcastError ? err.code : "broadcast_failed";
@@ -559,6 +561,7 @@ export function App() {
       weightPct: Math.round(target.weightBps / 100 * 10) / 10,
       votedAt:   new Date().toISOString(),
     }, ...prev].slice(0, 20));
+    setVoteExecutionCount(n => n + 1);
     // Mark as voted in opportunities + recentlyVoted guard
     const key = `${target.author}/${target.permlink}`;
     recentlyVotedKeysRef.current.add(key);
@@ -902,6 +905,7 @@ export function App() {
           votePlan={votePlan}
           curationProfile={curationProfile}
           recentVotes={recentVotes}
+          voteExecutionCount={voteExecutionCount}
           onTabChange={setActiveTab}
           onGenerateVotes={generateVotes}
           onLoadOpportunities={loadOpportunities}
