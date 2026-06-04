@@ -2650,13 +2650,17 @@ function VotePlanSection(props: {
       } catch (err) {
         const msg = err instanceof Error ? err.message : "unbekannter Fehler";
         // Classify error type for smart handling
-        const isAlreadyVoted = msg.includes("already_voted") || msg.includes("already") || msg.includes("duplicate");
-        const isPostMissing  = msg.includes("post_not_found") || msg.includes("nicht gefunden");
-        const skipWithoutStop = isAlreadyVoted || isPostMissing;
+        const isAlreadyVoted    = msg.includes("already_voted") || msg.includes("already") || msg.includes("duplicate");
+        const isPostMissing     = msg.includes("post_not_found") || msg.includes("nicht gefunden");
+        // Post-specific chain rejections: skip and continue (not a systemic error)
+        const isPostSpecific    = msg.includes("Invalid cast") || msg.includes("object_type")
+                                || msg.includes("cashout_time") || msg.includes("cannot_vote")
+                                || msg.includes("post_rejected") || msg.includes("Post vom Node abgelehnt");
+        const skipWithoutStop   = isAlreadyVoted || isPostMissing || isPostSpecific;
 
         const entry: VoteLogEntry = {
           author: e.author, permlink: e.permlink, title: e.title,
-          status: isAlreadyVoted ? "skipped" : "failed",
+          status: (isAlreadyVoted || isPostSpecific) ? "skipped" : "failed",
           message: msg,
         };
         log.push(entry);

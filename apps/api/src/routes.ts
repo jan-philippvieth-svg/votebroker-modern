@@ -369,17 +369,21 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
           detail:   `chain rejection: ${chainMsg}`
         });
         // Map known Steem chain errors to actionable messages
-        const isAuthority   = /unknown key|missing authority|not_valid_key|no_active_key/i.test(chainMsg);
-        const isDuplicate   = /duplicate|already voted|already_voted/i.test(chainMsg);
-        const isPostMissing = /unknown key|invalid_post/i.test(chainMsg) && !isAuthority;
+        const isAuthority    = /unknown key|missing authority|not_valid_key|no_active_key/i.test(chainMsg);
+        const isDuplicate    = /duplicate|already voted|already_voted/i.test(chainMsg);
+        const isPostMissing  = /unknown key|invalid_post/i.test(chainMsg) && !isAuthority;
+        // Post-specific rejections: chain rejects this particular post, not a systemic error
+        const isPostSpecific = /Invalid cast|object_type|cashout_time|cannot_vote/i.test(chainMsg) && !isAuthority;
         return reply.code(400).send({
-          error:  isDuplicate   ? "already_voted"
-                : isAuthority  ? "missing_posting_authority"
-                : isPostMissing? "post_not_found"
+          error:  isDuplicate    ? "already_voted"
+                : isAuthority   ? "missing_posting_authority"
+                : isPostMissing ? "post_not_found"
+                : isPostSpecific? "post_rejected"
                 : "chain_rejected",
-          hint:   isDuplicate   ? "Du hast diesen Post bereits gevoted."
-                : isAuthority  ? "Posting Authority für @votebroker fehlt. Bitte in den Einstellungen erteilen."
-                : isPostMissing? "Post nicht gefunden — Author/Permlink ungültig oder Post existiert nicht."
+          hint:   isDuplicate    ? "Du hast diesen Post bereits gevoted."
+                : isAuthority   ? "Posting Authority für @votebroker fehlt. Bitte in den Einstellungen erteilen."
+                : isPostMissing ? "Post nicht gefunden — Author/Permlink ungültig oder Post existiert nicht."
+                : isPostSpecific? `Post vom Node abgelehnt (übersprungen): ${chainMsg}`
                 : `Blockchain-Fehler: ${chainMsg}`,
           detail: chainMsg
         });

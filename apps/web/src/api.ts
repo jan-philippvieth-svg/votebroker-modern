@@ -373,6 +373,8 @@ export async function executeVote(token: string, payload: {
       "Dieser Post wurde bereits gevoted.");
     if (code === "post_not_found") throw new VoteBroadcastError(code,
       "Post nicht gefunden — Author oder Permlink ungültig.");
+    if (code === "post_rejected") throw new VoteBroadcastError(code,
+      (errorBody as { hint?: string }).hint ?? "Post vom Node abgelehnt.");
     if (code === "chain_rejected") {
       const detail = (errorBody as { detail?: string }).detail ?? "";
       throw new VoteBroadcastError(code,
