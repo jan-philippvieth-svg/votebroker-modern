@@ -6,16 +6,18 @@ const MIN_AGE_MS       = 5 * 60 * 1000;   // 5 min curation minimum
 const WARN_EXPIRY_H    = 24;              // warn when < 24h remaining
 
 export interface PostOpportunity {
-  author:         string;
-  permlink:       string;
-  title:          string;
-  ageMinutes:     number;
-  remainingHours: number;
-  postScore:      number;
-  alreadyVoted:   boolean;
-  eligible:       boolean;
-  isSelfPost:     boolean;   // author === voterUsername → visibility vote, skip curation timing
-  warning:        string | null;
+  author:          string;
+  permlink:        string;
+  title:           string;
+  ageMinutes:      number;
+  remainingHours:  number;
+  postScore:       number;
+  alreadyVoted:    boolean;
+  eligible:        boolean;
+  isSelfPost:      boolean;   // author === voterUsername → visibility vote, skip curation timing
+  warning:         string | null;
+  activeVotesCount: number;   // number of existing votes — high counts may cause node issues
+  community:       string | null; // parent_permlink if it looks like a community (hive-XXXXXX)
 }
 
 export interface PostDebugEntry {
@@ -30,12 +32,15 @@ export interface PostDebugEntry {
   rejectedBy:  string | null;   // null = eligible
 }
 
+const HIGH_VOTE_WARN_THRESHOLD = 150; // posts with >150 votes may cause node issues
+
 interface RawPost {
-  author:        string;
-  permlink:      string;
-  title:         string;
-  created:       string;
-  active_votes?: Array<{ voter: string; weight: number }>;
+  author:          string;
+  permlink:        string;
+  title:           string;
+  created:         string;
+  parent_permlink?: string;  // community name if community post (e.g. "hive-129948")
+  active_votes?:   Array<{ voter: string; weight: number }>;
 }
 
 function calcPostScore(ageMinutes: number, remainingHours: number): number {
@@ -183,11 +188,19 @@ function mapPost(post: RawPost, voterUsername: string, nowMs: number): PostOppor
     ? 100                                    // self-posts always get top score when fresh
     : calcPostScore(ageMinutes, remainingHours);
 
+  const activeVotesCount = post.active_votes?.length ?? 0;
+  const community = post.parent_permlink?.startsWith("hive-") ? post.parent_permlink : null;
+
   let warning: string | null = null;
   if (eligible && remainingHours > 0 && remainingHours < WARN_EXPIRY_H) {
     warning = remainingHours < 6
       ? `⚡ Nur noch ${remainingHours.toFixed(1)}h bis Auszahlung — letzte Chance`
       : `⚠ Post läuft in ${remainingHours.toFixed(0)}h ab`;
+  }
+  // Warn if post has unusually many votes — may cause node rejection on broadcast
+  if (eligible && activeVotesCount > HIGH_VOTE_WARN_THRESHOLD) {
+    const extra = `⚠ ${activeVotesCount} bestehende Votes — Node-Ablehnung möglich`;
+    warning = warning ? `${warning} · ${extra}` : extra;
   }
 
   return {
@@ -196,5 +209,6 @@ function mapPost(post: RawPost, voterUsername: string, nowMs: number): PostOppor
     title:    post.title || `${post.author}/${post.permlink}`,
     ageMinutes, remainingHours, postScore,
     alreadyVoted, isSelfPost, eligible, warning,
+    activeVotesCount, community,
   };
 }

@@ -489,16 +489,18 @@ export interface CurationProfile {
 }
 
 export interface PostOpportunity {
-  author:         string;
-  permlink:       string;
-  title:          string;
-  ageMinutes:     number;
-  remainingHours: number;
-  postScore:      number;
-  alreadyVoted:   boolean;
-  eligible:       boolean;
-  isSelfPost:     boolean;
-  warning:        string | null;
+  author:           string;
+  permlink:         string;
+  title:            string;
+  ageMinutes:       number;
+  remainingHours:   number;
+  postScore:        number;
+  alreadyVoted:     boolean;
+  eligible:         boolean;
+  isSelfPost:       boolean;
+  warning:          string | null;
+  activeVotesCount: number;
+  community:        string | null;
 }
 
 // ── Vote Plan (Generate Votes) ────────────────────────────────────────────────

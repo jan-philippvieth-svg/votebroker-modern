@@ -243,7 +243,7 @@ function buildVotePlan(params: {
           suggestedWeightBps: newBps,
           suggestedWeightPct: Math.round(newBps / 100 * 10) / 10,
           expectedVoteUsd:    Math.round((newBps / 10_000) * params.currentVoteUsd * 10_000) / 10_000,
-          reasons: buildReasons({ username: e.author, category: cat, maxWeightPct: 0, minWeightPct: 0, enabled: true, selectionReasons: [] }, { author: e.author, permlink: e.permlink, title: e.title, ageMinutes: e.ageMinutes, remainingHours: e.remainingHours, postScore: e.postScore, eligible: true, alreadyVoted: false, isSelfPost: false, warning: e.warning }, true),
+          reasons: buildReasons({ username: e.author, category: cat, maxWeightPct: 0, minWeightPct: 0, enabled: true, selectionReasons: [] }, { author: e.author, permlink: e.permlink, title: e.title, ageMinutes: e.ageMinutes, remainingHours: e.remainingHours, postScore: e.postScore, eligible: true, alreadyVoted: false, isSelfPost: false, warning: e.warning, activeVotesCount: 0, community: null }, true),
         };
       });
     } else {
@@ -254,7 +254,7 @@ function buildVotePlan(params: {
           suggestedWeightBps: dustBps,
           suggestedWeightPct: Math.round(dustBps / 100 * 10) / 10,
           expectedVoteUsd:    Math.round((dustBps / 10_000) * params.currentVoteUsd * 10_000) / 10_000,
-          reasons: buildReasons({ username: e.author, category: cat, maxWeightPct: 0, minWeightPct: 0, enabled: true, selectionReasons: [] }, { author: e.author, permlink: e.permlink, title: e.title, ageMinutes: e.ageMinutes, remainingHours: e.remainingHours, postScore: e.postScore, eligible: true, alreadyVoted: false, isSelfPost: false, warning: e.warning }, true),
+          reasons: buildReasons({ username: e.author, category: cat, maxWeightPct: 0, minWeightPct: 0, enabled: true, selectionReasons: [] }, { author: e.author, permlink: e.permlink, title: e.title, ageMinutes: e.ageMinutes, remainingHours: e.remainingHours, postScore: e.postScore, eligible: true, alreadyVoted: false, isSelfPost: false, warning: e.warning, activeVotesCount: 0, community: null }, true),
         };
       });
     }
