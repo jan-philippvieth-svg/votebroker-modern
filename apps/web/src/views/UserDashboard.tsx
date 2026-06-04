@@ -790,12 +790,12 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
   lifetimeEarnings: VBEarningsResult|null;
   t: ReturnType<typeof createTranslator>;
 }) {
-  const voteUsd       = snapshot?.currentVoteUsd ?? 0;
-  const sbdPerSteem   = snapshot?.sbdPerSteem ?? 0;
-  const estCuration   = todayStats
-    ? todayStats.votes.reduce((s, v) => s + (v.weightBps / 10000) * voteUsd * 0.25, 0) : 0;
+  const voteUsd          = snapshot?.currentVoteUsd ?? 0;
+  const sbdPerSteem      = snapshot?.sbdPerSteem ?? 0;
+  const estVoteValue     = todayStats ? (todayStats.totalWeightBps / 10000) * voteUsd : 0;
+  const estCuration      = estVoteValue * 0.25;
   const estCurationSteem = sbdPerSteem > 0 ? estCuration / sbdPerSteem : null;
-  const vpConsumedPct = todayStats ? todayStats.totalWeightBps / 5000 : 0;
+  const vpConsumedPct    = todayStats ? todayStats.totalWeightBps / 5000 : 0;
 
   // Big hero number + unit
   const Hero = ({ val, unit, col, sub }: { val: string; unit: string; col: string; sub?: string }) => (
@@ -843,8 +843,9 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
             <Row size="0.9rem" label="Durchläufe"    value={String(todayStats.runsCount)}/>
             <Row size="0.9rem" label="Autoren"        value={String(todayStats.uniqueAuthors)}/>
             <Divider/>
-            <Row size="0.9rem" label="VP verbraucht"   value={`−${vpConsumedPct.toFixed(1)}%`} col={C.warn} bold/>
-            <Row size="0.9rem" label="→ Pending Pool"
+            <Row size="0.9rem" label="VP verbraucht"       value={`−${vpConsumedPct.toFixed(1)}%`} col={C.warn} bold/>
+            <Row size="0.9rem" label="Ges. Vote-Wert"      value={fmtUsd(estVoteValue)} col={C.text}/>
+            <Row size="0.9rem" label="Erwartete Curation"
               value={estCurationSteem !== null
                 ? `+${fmtUsd(estCuration)} · ≈${estCurationSteem.toFixed(3)} STEEM`
                 : `+${fmtUsd(estCuration)}`}
