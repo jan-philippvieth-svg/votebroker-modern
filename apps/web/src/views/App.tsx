@@ -3802,25 +3802,40 @@ function WhaleSignalSection({ data, loading, onAddToStrategy, t }: {
         >{explainOpen ? "▲" : "▼"} {t("whaleExplainTitle")}</button>
       </div>
 
-      {/* ── Erklärungskarte (ausklappbar) ── */}
+      {/* ── Mini-Tutorial (ausklappbar) ── */}
       {explainOpen && (
         <div style={{
           background: "#f0f9ff", border: `1px solid #bae6fd`, borderRadius: "12px",
           padding: "1rem 1.25rem", marginBottom: "1rem",
+          display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem",
         }}>
-          <p style={{ margin: "0 0 0.65rem", fontSize: "0.82rem", color: "#0c4a6e", lineHeight: 1.55 }}>
-            {t("whaleExplainBody")}
-          </p>
-          <div style={{ display: "flex", flexWrap: "wrap" as const, gap: "0.4rem" }}>
-            {([
-              "whaleBenefitEarly","whaleBenefitTrends","whaleBenefitExpand",
-              "whaleBenefitCuration","whaleBenefitLess",
-            ] as const).map(k => (
-              <span key={k} style={{
-                background: "#fff", border: "1px solid #bae6fd", borderRadius: "999px",
-                padding: "0.15rem 0.65rem", fontSize: "0.72rem", color: "#0369a1", fontWeight: 600,
-              }}>✓ {t(k)}</span>
-            ))}
+          {/* Wie funktioniert es */}
+          <div>
+            <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "#0369a1", marginBottom: "0.5rem", textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>
+              {t("whaleExplainTitle").replace("🐋 ", "")}
+            </div>
+            <ol style={{ margin: 0, paddingLeft: "1.2rem", fontSize: "0.78rem", color: "#0c4a6e", lineHeight: 1.6 }}>
+              {(["whaleExplainStep1","whaleExplainStep2","whaleExplainStep3","whaleExplainStep4"] as const).map(k => (
+                <li key={k} style={{ marginBottom: "0.2rem" }}>{t(k)}</li>
+              ))}
+            </ol>
+            <div style={{ marginTop: "0.65rem", padding: "0.5rem 0.75rem", background: "#e0f2fe", borderRadius: "8px", fontSize: "0.72rem", color: "#075985", fontStyle: "italic" }}>
+              💡 {t("whaleExplainExample")}
+            </div>
+          </div>
+          {/* Warum nützlich */}
+          <div>
+            <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "#0369a1", marginBottom: "0.5rem", textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>
+              {t("whaleExplainWhyTitle")}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column" as const, gap: "0.3rem" }}>
+              {(["whaleBenefitEarly","whaleBenefitTrends","whaleBenefitExpand","whaleBenefitCuration","whaleBenefitLess"] as const).map(k => (
+                <div key={k} style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.78rem", color: "#0c4a6e" }}>
+                  <span style={{ color: "#0ea5e9", fontWeight: 700, flexShrink: 0 }}>✓</span>
+                  {t(k)}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
