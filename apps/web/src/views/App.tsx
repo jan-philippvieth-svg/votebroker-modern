@@ -886,6 +886,7 @@ export function App() {
             onGenerateVotes={generateVotes}
             onGenerateWithTarget={generateVotes}
             targetVotingPowerPct={targetVotingPowerPct}
+            locale={locale}
           />
       )}
 
@@ -920,6 +921,7 @@ export function App() {
             data={whaleSignals}
             loading={whaleSignalsLoading}
             onAddToStrategy={addAuthorToStrategy}
+            t={t}
           />
           <div style={{ marginTop: "2rem" }}>
             <CommunityDiscoverySection
@@ -1541,7 +1543,9 @@ function CurationDnaPanel(props: {
   onGenerateVotes: () => void;
   onGenerateWithTarget: (targetPct: number) => void;
   targetVotingPowerPct: number;
+  locale?: import("../i18n").Locale;
 }) {
+  const t = createTranslator(props.locale ?? "de");
   const [addUsername, setAddUsername] = useState("");
   const [addCategory, setAddCategory] = useState<StrategyCategory>("bevorzugt");
   const [strategyOpen, setStrategyOpen] = useState(false);
@@ -1702,7 +1706,7 @@ function CurationDnaPanel(props: {
         <div style={{ flex: 1, minWidth: "200px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.15rem" }}>
             <span style={{ color: "#7c3aed", fontWeight: 800, fontSize: "1rem" }}>{p.dnaLabel}</span>
-            <span style={{ color: "#8fa4b0", fontSize: "0.72rem" }}>· Dein Kurator-Typ</span>
+            <span style={{ color: "#8fa4b0", fontSize: "0.72rem" }}>· {t("dnaCuratorType")}</span>
           </div>
           <p style={{ color: "#607078", fontSize: "0.78rem", margin: 0, lineHeight: 1.45, maxWidth: "520px" }}>{p.dnaDescription}</p>
         </div>
@@ -1848,12 +1852,12 @@ function CurationDnaPanel(props: {
                   return (
                     <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.25rem", alignItems: "center", flexWrap: "wrap" as const }}>
                       <span style={{ color: "#94a3b8", fontSize: "0.72rem", fontWeight: 600, whiteSpace: "nowrap" as const }}>
-                        Ziel VP morgen:
+                        {t("planTargetVpLabel")}
                       </span>
                       {targets.map(pct => {
                         const active  = props.targetVotingPowerPct === pct;
                         const budget  = currentVp !== null ? Math.max(0, Math.min(100, currentVp + 20) - pct) : null;
-                        const label   = pct >= 95 ? "Schonend" : pct >= 90 ? "Ausgewogen" : pct >= 85 ? "Standard" : pct >= 80 ? "Aktiv" : "Aggressiv";
+                        const label   = pct >= 95 ? t("planVpConservative") : pct >= 90 ? t("planVpBalanced") : pct >= 85 ? t("planVpStandard") : pct >= 80 ? t("planVpActive") : t("planVpAggressive");
                         return (
                           <button
                             key={pct}
@@ -1937,7 +1941,7 @@ function CurationDnaPanel(props: {
         {/* Stärkste Beziehungen */}
         {topAuthors.length > 0 && (
           <div style={{ background: "#f8fbfc", border: "1px solid #dde8ed", borderRadius: "10px", padding: "0.9rem 1rem" }}>
-            <p style={{ ...sectionLabel, marginBottom: "0.65rem" }}>Beziehungen</p>
+            <p style={{ ...sectionLabel, marginBottom: "0.65rem" }}>{t("dnaRelationships")}</p>
             {topAuthors.slice(0, 6).map(a => (
               <div key={a.username} style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginBottom: "0.3rem" }}>
                 <span style={{ color: "#2563eb", fontSize: "0.74rem", minWidth: "100px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, fontWeight: 600 }}>@{a.username}</span>
@@ -1953,7 +1957,7 @@ function CurationDnaPanel(props: {
         {/* Aktivitätsmuster */}
         {peakHours.length > 0 && (
           <div style={{ background: "#f8fbfc", border: "1px solid #dde8ed", borderRadius: "10px", padding: "0.9rem 1rem" }}>
-            <p style={{ ...sectionLabel, marginBottom: "0.65rem" }}>Aktivitätsmuster (UTC)</p>
+            <p style={{ ...sectionLabel, marginBottom: "0.65rem" }}>{t("dnaActivityPattern")}</p>
             {peakHours.slice(0, 5).map(h => (
               <div key={h.hour} style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginBottom: "0.25rem" }}>
                 <span style={{ color: "#607078", fontSize: "0.73rem", minWidth: "38px" }}>{String(h.hour).padStart(2, "0")}:00</span>
@@ -1969,7 +1973,7 @@ function CurationDnaPanel(props: {
         {/* Kurator-Level + Nachhaltigkeit */}
         <div style={{ display: "flex", flexDirection: "column" as const, gap: "0.75rem" }}>
           <div style={{ background: "#f8fbfc", border: "1px solid #dde8ed", borderRadius: "10px", padding: "0.9rem 1rem", flex: 1 }}>
-            <p style={{ ...sectionLabel, marginBottom: "0.4rem" }}>Nachhaltigkeit</p>
+            <p style={{ ...sectionLabel, marginBottom: "0.4rem" }}>{t("dnaSustainability")}</p>
             <p style={{ color: "#17202a", fontSize: "0.83rem", fontWeight: 700, margin: "0 0 0.2rem" }}>
               {p.powerStable.relevantAuthors} Autoren regelmäßig
             </p>
@@ -1997,7 +2001,7 @@ function CurationDnaPanel(props: {
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
             <span style={{ fontSize: "0.9rem" }}>🧬</span>
             <div>
-              <span style={{ color: "#17202a", fontWeight: 700, fontSize: "0.9rem" }}>Autoren-Strategie</span>
+              <span style={{ color: "#17202a", fontWeight: 700, fontSize: "0.9rem" }}>{t("dnaAuthorStrategy")}</span>
               {strategyRules && (
                 <span style={{ color: "#8fa4b0", fontSize: "0.73rem", marginLeft: "0.6rem" }}>
                   {strategyRules.filter(r => r.enabled).length} aktiv
@@ -3726,10 +3730,11 @@ function AuthorCard({ card, onAdd }: {
 
 // ── Whale Signal Section ──────────────────────────────────────────────────────
 
-function WhaleSignalSection({ data, loading, onAddToStrategy }: {
+function WhaleSignalSection({ data, loading, onAddToStrategy, t }: {
   data:            WhaleSignalsData | null;
   loading:         boolean;
   onAddToStrategy: (username: string, category: StrategyCategory) => void;
+  t:               ReturnType<typeof createTranslator>;
 }) {
   const [addedAuthors, setAddedAuthors] = useState<Set<string>>(new Set());
   const [adding, setAdding]             = useState<string | null>(null);
@@ -3763,26 +3768,26 @@ function WhaleSignalSection({ data, loading, onAddToStrategy }: {
     <div style={{ maxWidth: "960px", margin: "0 auto", marginBottom: "0.5rem" }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", marginBottom: "0.75rem" }}>
         <h2 style={{ fontSize: "1.15rem", fontWeight: 800, color: CD.text, margin: 0 }}>
-          Von Signal-Votern entdeckt
+          {t("whaleTitle")}
         </h2>
         <span style={{ fontSize: "0.75rem", color: CD.dim }}>
-          {data.trackedWhales.length} aktive Voter · {data.authorsFound} Autoren · {data.periodDays} Tage
-          {age !== null && ` · Stand vor ${age}h`}
+          {data.trackedWhales.length} {t("whaleActiveVoters")} · {data.authorsFound} {t("whaleAuthorsFound")} · {data.periodDays} {t("whalePeriodDays")}
+          {age !== null && ` · ${t("whaleDataAge")} ${age}${t("whaleDataAgeH")}`}
         </span>
       </div>
       <p style={{ fontSize: "0.78rem", color: CD.faint, marginBottom: "1rem", marginTop: 0 }}>
-        Autoren, auf deren Posts regelmäßig starke Kuratoren voten — automatisch aus aktuellen Blockchain-Daten ermittelt.
+        {t("whaleSubtitle")}
       </p>
 
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
           <thead>
             <tr style={{ borderBottom: `2px solid ${CD.border}` }}>
-              <th style={{ textAlign: "left", padding: "0.4rem 0.6rem", color: CD.dim, fontWeight: 600, fontSize: "0.72rem" }}>Autor</th>
-              <th style={{ textAlign: "center", padding: "0.4rem 0.6rem", color: CD.dim, fontWeight: 600, fontSize: "0.72rem" }}>Signal-Voter</th>
-              <th style={{ textAlign: "center", padding: "0.4rem 0.6rem", color: CD.dim, fontWeight: 600, fontSize: "0.72rem" }}>Votes</th>
-              <th style={{ textAlign: "left", padding: "0.4rem 0.6rem", color: CD.dim, fontWeight: 600, fontSize: "0.72rem" }}>Voter</th>
-              <th style={{ textAlign: "center", padding: "0.4rem 0.6rem", color: CD.dim, fontWeight: 600, fontSize: "0.72rem" }}>In Strategie</th>
+              <th style={{ textAlign: "left", padding: "0.4rem 0.6rem", color: CD.dim, fontWeight: 600, fontSize: "0.72rem" }}>{t("whaleColAuthor")}</th>
+              <th style={{ textAlign: "center", padding: "0.4rem 0.6rem", color: CD.dim, fontWeight: 600, fontSize: "0.72rem" }}>{t("whaleColSignalVoters")}</th>
+              <th style={{ textAlign: "center", padding: "0.4rem 0.6rem", color: CD.dim, fontWeight: 600, fontSize: "0.72rem" }}>{t("whaleColVotes")}</th>
+              <th style={{ textAlign: "left", padding: "0.4rem 0.6rem", color: CD.dim, fontWeight: 600, fontSize: "0.72rem" }}>{t("whaleColVoters")}</th>
+              <th style={{ textAlign: "center", padding: "0.4rem 0.6rem", color: CD.dim, fontWeight: 600, fontSize: "0.72rem" }}>{t("whaleColInStrategy")}</th>
               <th style={{ padding: "0.4rem 0.6rem" }}></th>
             </tr>
           </thead>
@@ -3817,8 +3822,8 @@ function WhaleSignalSection({ data, loading, onAddToStrategy }: {
                   </td>
                   <td style={{ textAlign: "center", padding: "0.45rem 0.6rem" }}>
                     {inStrategy
-                      ? <span style={{ color: CD.ok, fontWeight: 700, fontSize: "0.75rem" }}>✓ drin</span>
-                      : <span style={{ color: CD.faint, fontSize: "0.75rem" }}>—</span>}
+                      ? <span style={{ color: CD.ok, fontWeight: 700, fontSize: "0.75rem" }}>{t("whaleInStrategy")}</span>
+                      : <span style={{ color: CD.faint, fontSize: "0.75rem" }}>{t("whaleNotInStrategy")}</span>}
                   </td>
                   <td style={{ padding: "0.45rem 0.6rem" }}>
                     {!inStrategy && (
@@ -3832,7 +3837,7 @@ function WhaleSignalSection({ data, loading, onAddToStrategy }: {
                           cursor: isAdding ? "default" : "pointer",
                           opacity: isAdding ? 0.7 : 1,
                         }}
-                      >{isAdding ? "Wird hinzugefügt…" : "+ Hinzufügen"}</button>
+                      >{isAdding ? t("whaleAdding") : t("whaleAdd")}</button>
                     )}
                   </td>
                 </tr>

@@ -217,6 +217,90 @@ const translations = {
     timeDayAgo:         "T. her",
     timeToday:          "Heute",
     timeLast7Days:      "Letzte 7 Tage",
+
+    // ── Dashboard — Heute-Kachel ──────────────────────────────────────────────
+    cardHeute:              "Heute",
+    cardRuns:               "Durchläufe",
+    cardAuthors:            "Autoren",
+    cardVpConsumed:         "VP verbraucht",
+    cardTotalVoteValue:     "Ges. Vote-Wert",
+    cardExpectedCuration:   "Erwartete Curation",
+
+    // ── Dashboard — Erwartete Curation (7 Tage) ───────────────────────────────
+    cardExpCurationTitle:   "Erwartete Curation · 7 Tage",
+    cardOpenPosts:          "Offene Posts",
+    cardVotes7d:            "Votes (7d)",
+    cardNextPayout:         "Nächster Payout",
+    cardDataAt:             "Stand",
+
+    // ── Dashboard — VoteBroker Lifetime ──────────────────────────────────────
+    cardLifetimeTitle:      "VoteBroker Lifetime",
+    cardVotesTotal:         "Votes gesamt",
+    cardRealizedCuration:   "Realisierte Curation",
+    cardNoPayoutsYet:       "noch keine Payouts",
+    cardAttributionRunning: "Attribution läuft",
+    cardAttributionSince:   "Attribution seit",
+    cardAvgCurationPerVote: "Ø Curation pro Vote",
+
+    // ── Dashboard — AllRunsPanel ──────────────────────────────────────────────
+    cardRunsToday:          "Durchläufe heute",
+    cardRunLabel:           "Durchlauf",
+    cardUhr:                "Uhr",
+    cardVotesTotal2:        "Votes",
+    cardTotalToday:         "Gesamt heute",
+    cardTotalRun:           "Gesamt",
+    cardDistributed:        "verteilt",
+    cardCuration:           "Curation",
+    cardVpAfterRun:         "VP nach Durchlauf",
+
+    // ── Dashboard — VBEarningsCard ────────────────────────────────────────────
+    earningsRealizedSP:     "SP Curation realisiert",
+    earningsExpectedSTEEM:  "STEEM Curation erwartet",
+    earningsRealized:       "Realisiert (SP)",
+    earningsPending:        "Pending",
+    earningsCumulative:     "Kumuliert",
+    earningsTotal:          "Gesamt",
+    earningsVpTomorrow:     "VP morgen",
+    earnings7d:             "7 Tage",
+    earnings30d:            "30 Tage",
+    earnings90d:            "90 Tage",
+    earningsAllTime:        "All-time",
+
+    // ── Community / Whale Signals ─────────────────────────────────────────────
+    whaleTitle:             "Von Signal-Votern entdeckt",
+    whaleActiveVoters:      "aktive Voter",
+    whaleAuthorsFound:      "Autoren",
+    whalePeriodDays:        "Tage",
+    whaleDataAge:           "Stand vor",
+    whaleDataAgeH:          "h",
+    whaleSubtitle:          "Autoren, auf deren Posts regelmäßig starke Kuratoren voten — automatisch aus aktuellen Blockchain-Daten ermittelt.",
+    whaleColAuthor:         "Autor",
+    whaleColSignalVoters:   "Signal-Voter",
+    whaleColVotes:          "Votes",
+    whaleColVoters:         "Voter",
+    whaleColInStrategy:     "In Strategie",
+    whaleInStrategy:        "✓ drin",
+    whaleNotInStrategy:     "—",
+    whaleAdding:            "Wird hinzugefügt…",
+    whaleAdd:               "+ Hinzufügen",
+
+    // ── Vote-Plan — Ziel VP morgen ────────────────────────────────────────────
+    planTargetVpLabel:      "Ziel VP morgen:",
+    planVpBudget:           "≈% VP",
+    planVpConservative:     "Schonend",
+    planVpBalanced:         "Ausgewogen",
+    planVpStandard:         "Standard",
+    planVpActive:           "Aktiv",
+    planVpAggressive:       "Aggressiv",
+
+    // ── Vote-DNA Panel — Sichtbare Sektionen ──────────────────────────────────
+    dnaRelationships:       "Beziehungen",
+    dnaActivityPattern:     "Aktivitätsmuster (UTC)",
+    dnaSustainability:      "Nachhaltigkeit",
+    dnaAuthorStrategy:      "Autoren-Strategie",
+    dnaCuratorType:         "Dein Kurator-Typ",
+    dnaRecommended:         "Empfohlen",
+    dnaAddAuthor:           "+ Autor:",
   },
 
   en: {
@@ -427,6 +511,90 @@ const translations = {
     timeDayAgo:         "d ago",
     timeToday:          "Today",
     timeLast7Days:      "Last 7 days",
+
+    // ── Dashboard — Today card ────────────────────────────────────────────────
+    cardHeute:              "Today",
+    cardRuns:               "Runs",
+    cardAuthors:            "Authors",
+    cardVpConsumed:         "VP consumed",
+    cardTotalVoteValue:     "Total vote value",
+    cardExpectedCuration:   "Expected curation",
+
+    // ── Dashboard — Expected Curation (7 days) ────────────────────────────────
+    cardExpCurationTitle:   "Expected Curation · 7 Days",
+    cardOpenPosts:          "Open posts",
+    cardVotes7d:            "Votes (7d)",
+    cardNextPayout:         "Next payout",
+    cardDataAt:             "As of",
+
+    // ── Dashboard — VoteBroker Lifetime ──────────────────────────────────────
+    cardLifetimeTitle:      "VoteBroker Lifetime",
+    cardVotesTotal:         "Total votes",
+    cardRealizedCuration:   "Realized curation",
+    cardNoPayoutsYet:       "no payouts yet",
+    cardAttributionRunning: "Attribution running",
+    cardAttributionSince:   "Attribution since",
+    cardAvgCurationPerVote: "Avg curation per vote",
+
+    // ── Dashboard — AllRunsPanel ──────────────────────────────────────────────
+    cardRunsToday:          "Runs today",
+    cardRunLabel:           "Run",
+    cardUhr:                "",
+    cardVotesTotal2:        "Votes",
+    cardTotalToday:         "Total today",
+    cardTotalRun:           "Total",
+    cardDistributed:        "distributed",
+    cardCuration:           "Curation",
+    cardVpAfterRun:         "VP after run",
+
+    // ── Dashboard — VBEarningsCard ────────────────────────────────────────────
+    earningsRealizedSP:     "SP curation realized",
+    earningsExpectedSTEEM:  "STEEM curation expected",
+    earningsRealized:       "Realized (SP)",
+    earningsPending:        "Pending",
+    earningsCumulative:     "Cumulative",
+    earningsTotal:          "Total",
+    earningsVpTomorrow:     "VP tomorrow",
+    earnings7d:             "7 Days",
+    earnings30d:            "30 Days",
+    earnings90d:            "90 Days",
+    earningsAllTime:        "All-time",
+
+    // ── Community / Whale Signals ─────────────────────────────────────────────
+    whaleTitle:             "Discovered by Signal Curators",
+    whaleActiveVoters:      "active curators",
+    whaleAuthorsFound:      "authors",
+    whalePeriodDays:        "days",
+    whaleDataAge:           "data age",
+    whaleDataAgeH:          "h ago",
+    whaleSubtitle:          "Authors regularly voted by strong curators — auto-discovered from live blockchain data.",
+    whaleColAuthor:         "Author",
+    whaleColSignalVoters:   "Signal Curators",
+    whaleColVotes:          "Votes",
+    whaleColVoters:         "Curators",
+    whaleColInStrategy:     "In Strategy",
+    whaleInStrategy:        "✓ added",
+    whaleNotInStrategy:     "—",
+    whaleAdding:            "Adding…",
+    whaleAdd:               "+ Add",
+
+    // ── Vote-Plan — Target VP tomorrow ───────────────────────────────────────
+    planTargetVpLabel:      "Target VP tomorrow:",
+    planVpBudget:           "≈% VP",
+    planVpConservative:     "Conservative",
+    planVpBalanced:         "Balanced",
+    planVpStandard:         "Standard",
+    planVpActive:           "Active",
+    planVpAggressive:       "Aggressive",
+
+    // ── Vote-DNA Panel — Visible sections ────────────────────────────────────
+    dnaRelationships:       "Relationships",
+    dnaActivityPattern:     "Activity Pattern (UTC)",
+    dnaSustainability:      "Sustainability",
+    dnaAuthorStrategy:      "Author Strategy",
+    dnaCuratorType:         "Your curator type",
+    dnaRecommended:         "Recommended",
+    dnaAddAuthor:           "+ Author:",
   },
 
   // ES / KO / ZH: legacy keys only — dashboard keys fall back to EN
@@ -560,5 +728,11 @@ export type TranslationKey = keyof typeof translations.en;
 export function createTranslator(locale: Locale) {
   const dict = translations[locale] as Record<string, string>;
   const en   = translations.en as Record<string, string>;
-  return (key: TranslationKey): string => dict[key] ?? en[key] ?? key;
+  return (key: TranslationKey): string => {
+    const val = dict[key] ?? en[key];
+    if (val !== undefined) return val;
+    // Phase 2: missing key visible in UI — never silently falls through
+    if (import.meta.env.DEV) return `⚠ ${key}`;
+    return key; // production: show key name as fallback
+  };
 }

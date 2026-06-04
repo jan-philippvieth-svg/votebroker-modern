@@ -832,7 +832,7 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
         borderTop:`4px solid ${C.info}`,
         background:"linear-gradient(160deg,#f0f9ff 0%,#ffffff 55%)",
       }}>
-        <p style={{ ...lbl, margin:"0 0 0.85rem", color:C.info }}>Heute</p>
+        <p style={{ ...lbl, margin:"0 0 0.85rem", color:C.info }}>{t("cardHeute")}</p>
         {todayLoading ? (
           <div style={{ color:C.dim, fontSize:"0.88rem" }}>Lädt…</div>
         ) : !todayStats || todayStats.totalVotes === 0 ? (
@@ -840,12 +840,12 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
         ) : (
           <>
             <Hero val={String(todayStats.totalVotes)} unit="Votes" col={C.info}/>
-            <Row size="0.9rem" label="Durchläufe"    value={String(todayStats.runsCount)}/>
-            <Row size="0.9rem" label="Autoren"        value={String(todayStats.uniqueAuthors)}/>
+            <Row size="0.9rem" label={t("cardRuns")}    value={String(todayStats.runsCount)}/>
+            <Row size="0.9rem" label={t("cardAuthors")} value={String(todayStats.uniqueAuthors)}/>
             <Divider/>
-            <Row size="0.9rem" label="VP verbraucht"       value={`−${vpConsumedPct.toFixed(1)}%`} col={C.warn} bold/>
-            <Row size="0.9rem" label="Ges. Vote-Wert"      value={fmtUsd(estVoteValue)} col={C.text}/>
-            <Row size="0.9rem" label="Erwartete Curation"
+            <Row size="0.9rem" label={t("cardVpConsumed")}      value={`−${vpConsumedPct.toFixed(1)}%`} col={C.warn} bold/>
+            <Row size="0.9rem" label={t("cardTotalVoteValue")}  value={fmtUsd(estVoteValue)} col={C.text}/>
+            <Row size="0.9rem" label={t("cardExpectedCuration")}
               value={estCurationSteem !== null
                 ? `+${fmtUsd(estCuration)} · ≈${estCurationSteem.toFixed(3)} STEEM`
                 : `+${fmtUsd(estCuration)}`}
@@ -860,7 +860,7 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
         borderTop:`4px solid ${C.warn}`,
         background:"linear-gradient(160deg,#fffbeb 0%,#ffffff 55%)",
       }}>
-        <p style={{ ...lbl, margin:"0 0 0.85rem", color:C.warn }}>Erwartete Curation · 7 Tage</p>
+        <p style={{ ...lbl, margin:"0 0 0.85rem", color:C.warn }}>{t("cardExpCurationTitle")}</p>
         {pendingLoading ? (
           <div style={{ color:C.dim, fontSize:"0.88rem" }}>Lädt…</div>
         ) : !pendingCuration || pendingCuration.pendingUsd <= 0 ? (
@@ -873,13 +873,13 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
               col={C.ok}
               sub={`${pendingCuration.pendingSp.toFixed(3)} STEEM`}
             />
-            <Row size="0.9rem" label="Offene Posts"   value={String(pendingCuration.postCount)}/>
-            <Row size="0.9rem" label="Votes (7d)"     value={String(pendingCuration.voteCount)}/>
+            <Row size="0.9rem" label={t("cardOpenPosts")} value={String(pendingCuration.postCount)}/>
+            <Row size="0.9rem" label={t("cardVotes7d")}  value={String(pendingCuration.voteCount)}/>
             {nextPayout && nextPayoutLabel && (
               <>
                 <Divider/>
                 <div style={{ background:C.warn+"10", borderRadius:"8px", padding:"0.45rem 0.65rem", border:`1px solid ${C.warn}25` }}>
-                  <div style={{ color:C.muted, fontSize:"0.72rem", fontWeight:600, marginBottom:"0.15rem" }}>Nächster Payout</div>
+                  <div style={{ color:C.muted, fontSize:"0.72rem", fontWeight:600, marginBottom:"0.15rem" }}>{t("cardNextPayout")}</div>
                   <div style={{ color:C.warn, fontWeight:900, fontSize:"1rem" }}>{nextPayoutLabel}</div>
                   <div style={{ color:C.dim, fontSize:"0.78rem" }}>≈ {nextPayout.estimatedSp.toFixed(3)} STEEM · {fmtUsd(nextPayout.estimatedUsd)}</div>
                 </div>
@@ -887,7 +887,7 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
             )}
             {pendingCuration.computedAt && (
               <div style={{ color:C.faint, fontSize:"0.73rem", marginTop:"0.6rem" }}>
-                Stand: {new Date(pendingCuration.computedAt).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})} Uhr
+                {t("cardDataAt")}: {new Date(pendingCuration.computedAt).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})} {t("cardUhr")}
                 {pendingCuration.sbdPerSteemUsed && (
                   <span> · {pendingCuration.sbdPerSteemUsed.toFixed(4)} SBD/STEEM</span>
                 )}
@@ -915,7 +915,7 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
             borderTop:`4px solid ${C.ok}`,
             background:"linear-gradient(160deg,#f0fdf4 0%,#ffffff 55%)",
           }}>
-            <p style={{ ...lbl, margin:"0 0 0.85rem", color:C.ok }}>VoteBroker Lifetime</p>
+            <p style={{ ...lbl, margin:"0 0 0.85rem", color:C.ok }}>{t("cardLifetimeTitle")}</p>
             {loading ? (
               <div style={{ color:C.dim, fontSize:"0.88rem" }}>Lädt…</div>
             ) : (
@@ -925,25 +925,25 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
                   val={totalSp > 0 ? fmtUsd(totalSp * sbdPrStm) : "—"}
                   unit=""
                   col={C.ok}
-                  sub={totalSp > 0 ? undefined : "Attribution läuft"}
+                  sub={totalSp > 0 ? undefined : t("cardAttributionRunning")}
                 />
 
                 {/* Curation Rewards — fachlich getrennt nach Status */}
-                {votes > 0 && <Row size="0.9rem" label="Votes gesamt" value={String(votes)}/>}
+                {votes > 0 && <Row size="0.9rem" label={t("cardVotesTotal")} value={String(votes)}/>}
                 <Divider/>
                 {realSp > 0
-                  ? <Row size="0.9rem" label="Realisierte Curation" value={`${realSp.toFixed(3)} SP`} col={C.ok}/>
-                  : <Row size="0.9rem" label="Realisierte Curation" value="noch keine Payouts" col={C.faint}/>
+                  ? <Row size="0.9rem" label={t("cardRealizedCuration")} value={`${realSp.toFixed(3)} SP`} col={C.ok}/>
+                  : <Row size="0.9rem" label={t("cardRealizedCuration")} value={t("cardNoPayoutsYet")} col={C.faint}/>
                 }
                 {pendSp > 0 && (
-                  <Row size="0.9rem" label="Erwartete Curation" value={`≈ ${pendSp.toFixed(3)} STEEM`} col={C.warn}/>
+                  <Row size="0.9rem" label={t("cardExpectedCuration")} value={`≈ ${pendSp.toFixed(3)} STEEM`} col={C.warn}/>
                 )}
                 {spPV > 0 && (
-                  <><Divider/><Row size="0.9rem" label="Ø Curation pro Vote" value={`≈ ${spPV.toFixed(4)} STEEM`} col={C.purple} bold/></>
+                  <><Divider/><Row size="0.9rem" label={t("cardAvgCurationPerVote")} value={`≈ ${spPV.toFixed(4)} STEEM`} col={C.purple} bold/></>
                 )}
                 {since && (
                   <div style={{ color:C.faint, fontSize:"0.73rem", marginTop:"0.5rem" }}>
-                    Attribution seit {since}
+                    {t("cardAttributionSince")} {since}
                   </div>
                 )}
               </>
@@ -957,10 +957,11 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
 
 // ── Alle Durchläufe heute ─────────────────────────────────────────────────────
 
-function AllRunsPanel({ todayStats, snapshot, timezone, locale }: {
+function AllRunsPanel({ todayStats, snapshot, timezone, locale, t }: {
   todayStats: TodayStats|null;
   snapshot: SteemAccountSnapshot|null;
   timezone?: string; locale?: string;
+  t: ReturnType<typeof createTranslator>;
 }) {
   const fmt = makeFmt(timezone??"", locale??"de");
   const [expandedRun, setExpandedRun] = useState<number|null>(null);
@@ -985,7 +986,7 @@ function AllRunsPanel({ todayStats, snapshot, timezone, locale }: {
 
   return (
     <div style={{ ...card, borderLeft:`3px solid ${C.ok}` }}>
-      <p style={{ ...lbl, margin:"0 0 0.75rem" }}>Durchläufe heute</p>
+      <p style={{ ...lbl, margin:"0 0 0.75rem" }}>{t("cardRunsToday")}</p>
 
       <div style={{ display:"flex", flexDirection:"column" as const, gap:"0.5rem" }}>
         {runsWithVp.map(({ run, vpBeforeRun, vpAfterRun, consumed }, i) => {
@@ -1008,8 +1009,8 @@ function AllRunsPanel({ todayStats, snapshot, timezone, locale }: {
               >
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                   <span style={{ color:C.text, fontWeight:800, fontSize:"0.9rem" }}>
-                    Durchlauf {i + 1}
-                    <span style={{ color:C.dim, fontWeight:500, marginLeft:"0.5rem", fontSize:"0.82rem" }}>{time} Uhr</span>
+                    {t("cardRunLabel")} {i + 1}
+                    <span style={{ color:C.dim, fontWeight:500, marginLeft:"0.5rem", fontSize:"0.82rem" }}>{time}{t("cardUhr") ? ` ${t("cardUhr")}` : ""}</span>
                   </span>
                   <div style={{ display:"flex", alignItems:"center", gap:"0.6rem" }}>
                     <span style={{ color:C.ok, fontWeight:800, fontSize:"0.9rem" }}>{fmtUsd(val)}</span>
@@ -1047,9 +1048,9 @@ function AllRunsPanel({ todayStats, snapshot, timezone, locale }: {
                     </div>
                   ))}
                   <div style={{ padding:"0.4rem 1rem", background:C.inner, fontSize:"0.75rem", display:"flex", gap:"1.5rem", color:C.dim }}>
-                    <span style={{ fontWeight:700, color:C.text }}>Gesamt</span>
-                    <span style={{ color:C.ok, fontWeight:700 }}>+{fmtUsd(val * 0.25)} Curation</span>
-                    <span>{fmtUsd(val)} verteilt</span>
+                    <span style={{ fontWeight:700, color:C.text }}>{t("cardTotalRun")}</span>
+                    <span style={{ color:C.ok, fontWeight:700 }}>+{fmtUsd(val * 0.25)} {t("cardCuration")}</span>
+                    <span>{fmtUsd(val)} {t("cardDistributed")}</span>
                   </div>
                 </div>
               )}
@@ -1059,7 +1060,7 @@ function AllRunsPanel({ todayStats, snapshot, timezone, locale }: {
 
         {/* Gesamt-Zeile */}
         <div style={{ borderTop:`2px solid ${C.border}`, paddingTop:"0.65rem", display:"flex", gap:"1.5rem", fontSize:"0.82rem", flexWrap:"wrap" as const, alignItems:"center" }}>
-          <span style={{ color:C.text, fontWeight:800 }}>Gesamt heute</span>
+          <span style={{ color:C.text, fontWeight:800 }}>{t("cardTotalToday")}</span>
           <span style={{ color:C.ok, fontWeight:700 }}>{todayStats.totalVotes} Votes</span>
           <span style={{ color:C.info, fontWeight:600 }}>{todayStats.uniqueAuthors} Autoren</span>
           <span style={{ color:C.warn, fontWeight:700 }}>−{totalConsumed.toFixed(1)}% VP</span>
@@ -1441,10 +1442,10 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, recent
 
   const sbdPrStm = snapshot?.sbdPerSteem ?? 0.051;
   const periods: { id: VBEarningsPeriod; label: string }[] = [
-    { id:"7d",  label:"7 Tage"  },
-    { id:"30d", label:"30 Tage" },
-    { id:"90d", label:"90 Tage" },
-    { id:"all", label:"All-time"},
+    { id:"7d",  label: t("earnings7d")     },
+    { id:"30d", label: t("earnings30d")    },
+    { id:"90d", label: t("earnings90d")    },
+    { id:"all", label: t("earningsAllTime")},
   ];
 
   const PURPLE     = "#7c3aed";
@@ -1553,12 +1554,12 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, recent
               <div style={{ fontSize:"0.73rem", marginTop:"0.2rem", display:"flex", gap:"0.6rem", flexWrap:"wrap" }}>
                 {realizedSp > 0 && (
                   <span style={{ color:C.ok, fontWeight:600 }}>
-                    {realizedSp.toFixed(3)} SP Curation realisiert
+                    {realizedSp.toFixed(3)} {t("earningsRealizedSP")}
                   </span>
                 )}
                 {pendingSp > 0 && (
                   <span style={{ color:ORANGE, fontWeight:600 }}>
-                    ≈{pendingSp.toFixed(3)} STEEM Curation erwartet
+                    ≈{pendingSp.toFixed(3)} {t("earningsExpectedSTEEM")}
                   </span>
                 )}
               </div>
@@ -1856,7 +1857,7 @@ export function UserDashboard(props: {
       {/* 2b. Letzter Durchlauf + VP-Graph */}
       {(todayStats?.lastRun || (todayStats && todayStats.votes.length > 0)) && (
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"1rem" }}>
-          <AllRunsPanel todayStats={todayStats} snapshot={snapshot} timezone={props.timezone} locale={props.locale}/>
+          <AllRunsPanel todayStats={todayStats} snapshot={snapshot} timezone={props.timezone} locale={props.locale} t={t}/>
           <VpGraphToday todayStats={todayStats} snapshot={snapshot} timezone={props.timezone} locale={props.locale}/>
         </div>
       )}
