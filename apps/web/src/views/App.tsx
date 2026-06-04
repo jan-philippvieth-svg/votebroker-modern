@@ -1720,7 +1720,18 @@ function CurationDnaPanel(props: {
         <span style={{ fontSize: "2rem", lineHeight: 1, flexShrink: 0 }}>{emoji}</span>
         <div style={{ flex: 1, minWidth: "200px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.15rem" }}>
-            <span style={{ color: "#7c3aed", fontWeight: 800, fontSize: "1rem" }}>{p.dnaLabel}</span>
+            <span style={{ color: "#7c3aed", fontWeight: 800, fontSize: "1rem" }}>
+                {(() => {
+                  const labelKeyMap: Record<string, TranslationKey> = {
+                    "Regular Curator": "dnaRegularCurator", "Broad Explorer": "dnaBroadExplorer",
+                    "Loyal Community Curator": "dnaLoyalCommunity", "Loyal Inner Circle": "dnaLoyalInner",
+                    "High-Frequency Curator": "dnaHighFreq", "Niche Specialist": "dnaNiche",
+                    "Self-Focused Voter": "dnaLabelSelfVoter", "Strategic Weight Voter": "dnaStrategicWeight",
+                  };
+                  const key = labelKeyMap[p.dnaLabel];
+                  return key ? t(key) : p.dnaLabel;
+                })()}
+              </span>
             <span style={{ color: "#8fa4b0", fontSize: "0.72rem" }}>· {t("dnaCuratorType")}</span>
           </div>
           <p style={{ color: "#607078", fontSize: "0.78rem", margin: 0, lineHeight: 1.45, maxWidth: "520px" }}>{translatedDesc}</p>
@@ -1838,7 +1849,7 @@ function CurationDnaPanel(props: {
                         padding: "0.85rem 1.75rem",
                       }}
                     >
-                      {props.opportunitiesLoading ? "Scannt…" : hasOpps ? "↻ Neu scannen" : "Offene Posts suchen →"}
+                      {props.opportunitiesLoading ? t("btnScanning") : hasOpps ? t("btnRescanNow") : t("btnScanPosts")}
                     </button>
                   )}
 
@@ -2022,7 +2033,7 @@ function CurationDnaPanel(props: {
                 <span style={{ color: "#8fa4b0", fontSize: "0.73rem", marginLeft: "0.6rem" }}>
                   {strategyRules.filter(r => r.enabled).length} aktiv
                   {strategyRules.filter(r => r.manuallyModified).length > 0
-                    ? ` · ${strategyRules.filter(r => r.manuallyModified).length} manuell`
+                    ? ` · ${strategyRules.filter(r => r.manuallyModified).length} ${t("stratManual")}`
                     : ""}
                 </span>
               )}
@@ -2078,7 +2089,7 @@ function CurationDnaPanel(props: {
             </div>
 
             {strategyRules && (
-              <StrategyEditor rules={strategyRules} votesPerDay={p.votesPerDay} currentVoteUsd={props.accountSnapshot?.currentVoteUsd ?? 0} onUpdate={updateRule} onRemove={removeRule} />
+              <StrategyEditor rules={strategyRules} votesPerDay={p.votesPerDay} currentVoteUsd={props.accountSnapshot?.currentVoteUsd ?? 0} onUpdate={updateRule} onRemove={removeRule} locale={props.locale} />
             )}
           </div>
         )}
@@ -2094,6 +2105,7 @@ function StrategyEditor(props: {
   currentVoteUsd: number;
   onUpdate: (username: string, patch: Partial<StrategyRule>) => void;
   onRemove: (username: string) => void;
+  locale?: import("../i18n").Locale;
 }) {
   return (
     <div>
@@ -2113,7 +2125,7 @@ function StrategyEditor(props: {
           </thead>
           <tbody>
             {props.rules.map(rule => (
-              <StrategyRuleRow key={rule.username} rule={rule} currentVoteUsd={props.currentVoteUsd} onUpdate={props.onUpdate} onRemove={props.onRemove} />
+              <StrategyRuleRow key={rule.username} rule={rule} currentVoteUsd={props.currentVoteUsd} onUpdate={props.onUpdate} onRemove={props.onRemove} locale={props.locale} />
             ))}
           </tbody>
         </table>
@@ -2129,7 +2141,9 @@ function StrategyRuleRow(props: {
   currentVoteUsd: number;
   onUpdate: (username: string, patch: Partial<StrategyRule>) => void;
   onRemove: (username: string) => void;
+  locale?: import("../i18n").Locale;
 }) {
+  const t = createTranslator(props.locale ?? "de");
   const [expanded, setExpanded] = useState(false);
   const { rule, onUpdate } = props;
   const color = categoryColor[rule.category];
@@ -2240,7 +2254,7 @@ function StrategyRuleRow(props: {
                   <span>Letzter Vote: <b style={{ color: "#2d3a42" }}>{lastVoteLabel}</b></span>
                 </>
               )}
-              {rule.voteCount === 0 && <span style={{ fontStyle: "italic" }}>Kein Vote-DNA-Datensatz — manuell hinzugefügt</span>}
+              {rule.voteCount === 0 && <span style={{ fontStyle: "italic" }}>{t("stratNoDnaRecord")}</span>}
             </div>
             {rule.selectionReasons.length > 0 && (
               <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
