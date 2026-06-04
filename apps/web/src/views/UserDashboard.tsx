@@ -869,7 +869,7 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
             <Hero
               val={fmtUsd(pendingCuration.pendingUsd)}
               unit=""
-              col={C.warn}
+              col={C.ok}
               sub={`${pendingCuration.pendingSp.toFixed(3)} STEEM`}
             />
             <Row size="0.9rem" label="Offene Posts"   value={String(pendingCuration.postCount)}/>
@@ -922,7 +922,7 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
                 <Hero
                   val={totalSp > 0 ? fmtUsd(totalSp * sbdPrStm) : "—"}
                   unit=""
-                  col={C.purple}
+                  col={C.ok}
                   sub={totalSp > 0 ? `${totalSp.toFixed(3)} STEEM` : "Attribution läuft"}
                 />
                 {votes > 0 && <Row size="0.9rem" label="Votes gesamt"  value={String(votes)}/>}
@@ -1518,7 +1518,7 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, t }: {
               }}>→</div>
 
               {/* Total — USD primär */}
-              <div style={{ fontSize:"2.4rem", fontWeight:900, color:PURPLE, letterSpacing:"-2px", lineHeight:1 }}>
+              <div style={{ fontSize:"2.4rem", fontWeight:900, color:C.ok, letterSpacing:"-2px", lineHeight:1 }}>
                 {totalSp > 0 ? fmtUsd(usdApprox) : "—"}
               </div>
 
