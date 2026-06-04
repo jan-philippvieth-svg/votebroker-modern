@@ -1402,11 +1402,12 @@ function VBEarningsChart({ data, pendingSp, sbdPerSteem }: {
   );
 }
 
-function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, t }: {
+function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, recentVotesCount, t }: {
   session: AuthSession;
   pendingCuration: PendingCuration|null;
   todayStats: TodayStats|null;
   snapshot: SteemAccountSnapshot|null;
+  recentVotesCount: number;
   t: ReturnType<typeof createTranslator>;
 }) {
   const [period, setPeriod] = useState<VBEarningsPeriod>("7d");
@@ -1418,7 +1419,7 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, t }: {
     fetchVBEarnings(session.token, period)
       .then(setData).catch(()=>setData(null))
       .finally(()=>setLoading(false));
-  }, [session.token, period]);
+  }, [session.token, period, recentVotesCount]);
 
   const sbdPrStm = snapshot?.sbdPerSteem ?? 0.051;
   const periods: { id: VBEarningsPeriod; label: string }[] = [
@@ -1774,10 +1775,16 @@ export function UserDashboard(props: {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[props.session.token]);
 
-  // Refresh today stats whenever recentVotes changes (= after a vote run)
+  // Refresh today stats + lifetime earnings whenever recentVotes changes (= after a vote run)
   const recentVotesLen = props.recentVotes.length;
   useEffect(()=>{
-    if (recentVotesLen > 0) { loadTodayStats(); loadPendingCuration(); }
+    if (recentVotesLen > 0) {
+      loadTodayStats();
+      loadPendingCuration();
+      // Refresh lifetime so chart vote count matches Heute-Kachel
+      fetchVBEarnings(props.session.token, "all")
+        .then(setLifetimeEarnings).catch(()=>{});
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[recentVotesLen]);
 
@@ -1802,6 +1809,7 @@ export function UserDashboard(props: {
         pendingCuration={pendingCuration}
         todayStats={todayStats}
         snapshot={snapshot}
+        recentVotesCount={props.recentVotes.length}
         t={t}
       />
 
