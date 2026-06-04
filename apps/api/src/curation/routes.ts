@@ -6,6 +6,7 @@ import { fetchRecentPostsWithVotes, fetchRecentPostsDebug, type PostOpportunity 
 import { getSession } from "../auth/sessionStore.js";
 import { getGrowthData } from "./growthService.js";
 import { getDb } from "../db/index.js";
+import { operatorConfig } from "../config.js";
 
 // ── Shared schemas ────────────────────────────────────────────────────────────
 
@@ -555,21 +556,41 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
   });
 
   // ── POST /api/me/vote-outcomes/rebuild — populate vb_global_vote_outcomes ────
-  // Reads from audit_events + vb_vote_outcomes, fetches post timing from chain.
-  // Safe to run multiple times — upsert logic skips already-resolved fields.
+  // Accepts either user session OR operator token (for cron jobs).
+  // With operator token: rebuilds for all users that have audit_events.
   app.post("/api/me/vote-outcomes/rebuild", async (request, reply) => {
-    const token   = (request.headers as Record<string, string>)["session"];
-    const session = token ? getSession(token) : null;
-    if (!session) return reply.code(401).send({ error: "unauthorized" });
+    const opToken = (request.headers as Record<string, string>)["x-operator-token"];
+    const isOperator = opToken && opToken === operatorConfig.token && !!operatorConfig.token;
+
+    const sessionToken = (request.headers as Record<string, string>)["session"];
+    const session = sessionToken ? getSession(sessionToken) : null;
+
+    if (!isOperator && !session) return reply.code(401).send({ error: "unauthorized" });
 
     try {
       const { populateGlobalVoteOutcomes, getVoteOutcomeSummary } =
         await import("../chain/globalVoteOutcomes.js");
+
+      if (isOperator) {
+        // Rebuild for all users with audit_events
+        const users = getDb().prepare(
+          "SELECT DISTINCT username FROM audit_events WHERE type='vote_broadcast_success'"
+        ).all() as Array<{ username: string }>;
+
+        const results = [];
+        for (const { username } of users) {
+          const result = await populateGlobalVoteOutcomes(username, request.log as unknown as typeof console);
+          const summary = getVoteOutcomeSummary(username);
+          results.push({ username, ...result, summary });
+        }
+        return { users: results.length, results };
+      }
+
       const result  = await populateGlobalVoteOutcomes(
-        session.user.username,
+        session!.user.username,
         request.log as unknown as typeof console,
       );
-      const summary = getVoteOutcomeSummary(session.user.username);
+      const summary = getVoteOutcomeSummary(session!.user.username);
       return { ...result, summary };
     } catch (err) {
       return reply.code(502).send({
