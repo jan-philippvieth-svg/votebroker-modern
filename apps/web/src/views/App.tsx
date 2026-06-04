@@ -17,7 +17,7 @@ import {
   Users,
   WalletCards
 } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   checkPostingAuthority,
   completeSteemConnectCallback,
@@ -915,16 +915,18 @@ export function App() {
         />
       )}
 
-      {/* Tab: Community */}
+      {/* Tab: Community — Zwei-Spalten-Layout */}
       {activeTab === "community" && (
         <div style={{ padding: "1.25rem 1.5rem" }}>
-          <WhaleSignalSection
-            data={whaleSignals}
-            loading={whaleSignalsLoading}
-            onAddToStrategy={addAuthorToStrategy}
-            t={t}
-          />
-          <div style={{ marginTop: "2rem" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: "2rem", alignItems: "start" }}>
+            {/* Linke Spalte: Whale Discovery */}
+            <WhaleSignalSection
+              data={whaleSignals}
+              loading={whaleSignalsLoading}
+              onAddToStrategy={addAuthorToStrategy}
+              t={t}
+            />
+            {/* Rechte Spalte: Community Discovery */}
             <CommunityDiscoverySection
               discovery={communityDiscovery}
               loading={communityDiscoveryLoading}
@@ -3737,10 +3739,12 @@ function WhaleSignalSection({ data, loading, onAddToStrategy, t }: {
 }) {
   const [addedAuthors, setAddedAuthors] = useState<Set<string>>(new Set());
   const [adding, setAdding]             = useState<string | null>(null);
+  const [expandedAuthor, setExpandedAuthor] = useState<string | null>(null);
+  const [explainOpen, setExplainOpen]   = useState(false);
 
   if (loading) return (
     <div style={{ padding: "2rem", textAlign: "center", color: CD.dim, fontSize: "0.85rem" }}>
-      Signal-Voter werden geladen…
+      {t("whaleActiveVoters")}…
     </div>
   );
 
@@ -3755,38 +3759,71 @@ function WhaleSignalSection({ data, loading, onAddToStrategy, t }: {
     setAdding(author);
     try {
       onAddToStrategy(author, "normal");
-      // addAuthorToStrategy is synchronous (updates state + triggers auto-save via useEffect).
-      // Mark as added immediately — the auto-save runs in the background.
       setAddedAuthors(prev => new Set([...prev, author]));
     } finally {
       setAdding(null);
     }
   }
 
+  function trustScore(whaleCount: number): { label: string; color: string; bg: string } {
+    if (whaleCount >= 5) return { label: t("whaleScoreHigh"),   color: "#15803d", bg: "#dcfce7" };
+    if (whaleCount >= 3) return { label: t("whaleScoreMedium"), color: "#854d0e", bg: "#fef9c3" };
+    return                      { label: t("whaleScoreLow"),    color: CD.dim,    bg: CD.tag   };
+  }
+
   return (
-    <div style={{ maxWidth: "960px", margin: "0 auto", marginBottom: "0.5rem" }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", marginBottom: "0.75rem" }}>
+    <div>
+      {/* ── Header + Meta ── */}
+      <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", marginBottom: "0.5rem", flexWrap: "wrap" as const }}>
         <h2 style={{ fontSize: "1.15rem", fontWeight: 800, color: CD.text, margin: 0 }}>
           {t("whaleTitle")}
         </h2>
-        <span style={{ fontSize: "0.75rem", color: CD.dim }}>
+        <span style={{ fontSize: "0.72rem", color: CD.dim }}>
           {data.trackedWhales.length} {t("whaleActiveVoters")} · {data.authorsFound} {t("whaleAuthorsFound")} · {data.periodDays} {t("whalePeriodDays")}
-          {age !== null && ` · ${t("whaleDataAge")} ${age}${t("whaleDataAgeH")}`}
+          {age !== null && age < 48 && ` · ${t("whaleDataAge")} ${age}${t("whaleDataAgeH")}`}
         </span>
+        <button
+          type="button"
+          onClick={() => setExplainOpen(o => !o)}
+          style={{ marginLeft: "auto", background: "none", border: `1px solid ${CD.border}`,
+            borderRadius: "6px", color: CD.dim, cursor: "pointer", fontSize: "0.7rem",
+            padding: "0.15rem 0.5rem" }}
+        >{explainOpen ? "▲" : "▼"} {t("whaleExplainTitle")}</button>
       </div>
-      <p style={{ fontSize: "0.78rem", color: CD.faint, marginBottom: "1rem", marginTop: 0 }}>
-        {t("whaleSubtitle")}
-      </p>
 
+      {/* ── Erklärungskarte (ausklappbar) ── */}
+      {explainOpen && (
+        <div style={{
+          background: "#f0f9ff", border: `1px solid #bae6fd`, borderRadius: "12px",
+          padding: "1rem 1.25rem", marginBottom: "1rem",
+        }}>
+          <p style={{ margin: "0 0 0.65rem", fontSize: "0.82rem", color: "#0c4a6e", lineHeight: 1.55 }}>
+            {t("whaleExplainBody")}
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap" as const, gap: "0.4rem" }}>
+            {([
+              "whaleBenefitEarly","whaleBenefitTrends","whaleBenefitExpand",
+              "whaleBenefitCuration","whaleBenefitLess",
+            ] as const).map(k => (
+              <span key={k} style={{
+                background: "#fff", border: "1px solid #bae6fd", borderRadius: "999px",
+                padding: "0.15rem 0.65rem", fontSize: "0.72rem", color: "#0369a1", fontWeight: 600,
+              }}>✓ {t(k)}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Tabelle ── */}
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
           <thead>
             <tr style={{ borderBottom: `2px solid ${CD.border}` }}>
               <th style={{ textAlign: "left", padding: "0.4rem 0.6rem", color: CD.dim, fontWeight: 600, fontSize: "0.72rem" }}>{t("whaleColAuthor")}</th>
-              <th style={{ textAlign: "center", padding: "0.4rem 0.6rem", color: CD.dim, fontWeight: 600, fontSize: "0.72rem" }}>{t("whaleColSignalVoters")}</th>
+              <th style={{ textAlign: "center", padding: "0.4rem 0.6rem", color: CD.dim, fontWeight: 600, fontSize: "0.72rem" }}
+                  title={t("whaleSignalTooltip")}>{t("whaleColSignalVoters")} ⓘ</th>
               <th style={{ textAlign: "center", padding: "0.4rem 0.6rem", color: CD.dim, fontWeight: 600, fontSize: "0.72rem" }}>{t("whaleColVotes")}</th>
-              <th style={{ textAlign: "left", padding: "0.4rem 0.6rem", color: CD.dim, fontWeight: 600, fontSize: "0.72rem" }}>{t("whaleColVoters")}</th>
-              <th style={{ textAlign: "center", padding: "0.4rem 0.6rem", color: CD.dim, fontWeight: 600, fontSize: "0.72rem" }}>{t("whaleColInStrategy")}</th>
+              <th style={{ textAlign: "left", padding: "0.4rem 0.6rem", color: CD.dim, fontWeight: 600, fontSize: "0.72rem" }}>{t("whaleColInStrategy")}</th>
               <th style={{ padding: "0.4rem 0.6rem" }}></th>
             </tr>
           </thead>
@@ -3794,52 +3831,90 @@ function WhaleSignalSection({ data, loading, onAddToStrategy, t }: {
             {data.signals.slice(0, 30).map((s: WhaleSignalEntry, i: number) => {
               const inStrategy = s.inMyStrategy || addedAuthors.has(s.author);
               const isAdding   = adding === s.author;
+              const trust      = trustScore(s.whaleCount);
+              const expanded   = expandedAuthor === s.author;
               return (
-                <tr key={s.author} style={{
-                  borderBottom: `1px solid ${CD.border}`,
-                  background: i % 2 === 0 ? "transparent" : CD.tag,
-                }}>
-                  <td style={{ padding: "0.45rem 0.6rem", fontWeight: 700 }}>
-                    <a href={`https://steemit.com/@${s.author}`} target="_blank" rel="noreferrer"
-                      style={{ color: CD.info, textDecoration: "none" }}>
-                      @{s.author}
-                    </a>
-                  </td>
-                  <td style={{ textAlign: "center", padding: "0.45rem 0.6rem" }}>
-                    <span style={{
-                      background: s.whaleCount >= 3 ? "#dcfce7" : s.whaleCount >= 2 ? "#fef9c3" : CD.tag,
-                      color: s.whaleCount >= 3 ? "#15803d" : s.whaleCount >= 2 ? "#854d0e" : CD.dim,
-                      fontWeight: 700, borderRadius: "999px",
-                      padding: "0.1rem 0.55rem", fontSize: "0.78rem",
-                    }}>{s.whaleCount}</span>
-                  </td>
-                  <td style={{ textAlign: "center", padding: "0.45rem 0.6rem", color: CD.text }}>
-                    {s.totalWhaleVotes}
-                  </td>
-                  <td style={{ padding: "0.45rem 0.6rem", color: CD.dim, fontSize: "0.75rem", maxWidth: "220px" }}>
-                    {s.whales.slice(0, 4).join(", ")}{s.whales.length > 4 ? ` +${s.whales.length - 4}` : ""}
-                  </td>
-                  <td style={{ textAlign: "center", padding: "0.45rem 0.6rem" }}>
-                    {inStrategy
-                      ? <span style={{ color: CD.ok, fontWeight: 700, fontSize: "0.75rem" }}>{t("whaleInStrategy")}</span>
-                      : <span style={{ color: CD.faint, fontSize: "0.75rem" }}>{t("whaleNotInStrategy")}</span>}
-                  </td>
-                  <td style={{ padding: "0.45rem 0.6rem" }}>
-                    {!inStrategy && (
-                      <button
-                        disabled={isAdding}
-                        onClick={() => handleAdd(s.author)}
-                        style={{
-                          fontSize: "0.7rem", padding: "0.2rem 0.55rem",
-                          background: isAdding ? CD.dim : CD.info, color: "#fff",
-                          border: "none", borderRadius: "6px",
-                          cursor: isAdding ? "default" : "pointer",
-                          opacity: isAdding ? 0.7 : 1,
-                        }}
-                      >{isAdding ? t("whaleAdding") : t("whaleAdd")}</button>
-                    )}
-                  </td>
-                </tr>
+                <React.Fragment key={s.author}>
+                  <tr style={{
+                    borderBottom: expanded ? "none" : `1px solid ${CD.border}`,
+                    background: i % 2 === 0 ? "transparent" : CD.tag,
+                    cursor: "pointer",
+                  }} onClick={() => setExpandedAuthor(expanded ? null : s.author)}>
+                    <td style={{ padding: "0.45rem 0.6rem" }}>
+                      <div style={{ fontWeight: 700 }}>
+                        <a href={`https://steemit.com/@${s.author}`} target="_blank" rel="noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          style={{ color: CD.info, textDecoration: "none" }}>
+                          @{s.author}
+                        </a>
+                      </div>
+                      <div style={{ fontSize: "0.68rem", color: CD.faint, marginTop: "0.1rem" }}>
+                        {s.whales.slice(0, 3).join(", ")}{s.whales.length > 3 ? ` +${s.whales.length - 3}` : ""}
+                      </div>
+                    </td>
+                    <td style={{ textAlign: "center", padding: "0.45rem 0.6rem" }}>
+                      <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "center", gap: "0.15rem" }}>
+                        <span style={{
+                          background: trust.bg, color: trust.color,
+                          fontWeight: 800, borderRadius: "999px",
+                          padding: "0.1rem 0.6rem", fontSize: "0.85rem",
+                        }}>{s.whaleCount}</span>
+                        <span style={{ fontSize: "0.62rem", color: trust.color, fontWeight: 600 }}>{trust.label}</span>
+                      </div>
+                    </td>
+                    <td style={{ textAlign: "center", padding: "0.45rem 0.6rem", color: CD.text, fontWeight: 600 }}>
+                      {s.totalWhaleVotes}
+                    </td>
+                    <td style={{ padding: "0.45rem 0.6rem" }}>
+                      {inStrategy
+                        ? <span style={{ color: CD.ok, fontWeight: 700, fontSize: "0.75rem" }}>{t("whaleInStrategy")}</span>
+                        : <span style={{ color: CD.faint, fontSize: "0.72rem" }}>{t("whaleNotInStrategy")}</span>}
+                    </td>
+                    <td style={{ padding: "0.45rem 0.6rem", textAlign: "right" as const }}>
+                      {!inStrategy && (
+                        <button
+                          disabled={isAdding}
+                          onClick={e => { e.stopPropagation(); handleAdd(s.author); }}
+                          style={{
+                            fontSize: "0.72rem", padding: "0.25rem 0.65rem",
+                            background: isAdding ? CD.dim : CD.info, color: "#fff",
+                            border: "none", borderRadius: "6px",
+                            cursor: isAdding ? "default" : "pointer",
+                            opacity: isAdding ? 0.7 : 1, fontWeight: 700,
+                          }}
+                        >{isAdding ? t("whaleAdding") : t("whaleAdd")}</button>
+                      )}
+                    </td>
+                  </tr>
+                  {/* ── Expandierter "Warum empfohlen?" Block ── */}
+                  {expanded && (
+                    <tr style={{ borderBottom: `1px solid ${CD.border}` }}>
+                      <td colSpan={5} style={{ padding: "0.5rem 0.8rem 0.75rem 2.5rem", background: "#f8fafc" }}>
+                        <div style={{ fontSize: "0.72rem", fontWeight: 700, color: CD.dim, marginBottom: "0.35rem" }}>
+                          {t("whaleWhyTitle")} @{s.author}
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column" as const, gap: "0.2rem" }}>
+                          <span style={{ fontSize: "0.75rem", color: CD.text }}>
+                            ✓ {t("whaleWhyVotedBy").replace("{{n}}", String(s.whaleCount))}
+                          </span>
+                          <span style={{ fontSize: "0.75rem", color: CD.text }}>
+                            ✓ {t("whaleWhyTotalVotes").replace("{{n}}", String(s.totalWhaleVotes))}
+                          </span>
+                          {!inStrategy && (
+                            <span style={{ fontSize: "0.75rem", color: CD.warn }}>
+                              ✓ {t("whaleWhyNotInStrategy")}
+                            </span>
+                          )}
+                          {s.whales.length > 0 && (
+                            <span style={{ fontSize: "0.72rem", color: CD.faint, marginTop: "0.1rem" }}>
+                              {t("whaleColVoters")}: {s.whales.join(", ")}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               );
             })}
           </tbody>

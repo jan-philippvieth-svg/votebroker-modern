@@ -1062,7 +1062,7 @@ function AllRunsPanel({ todayStats, snapshot, timezone, locale, t }: {
                 </div>
                 <div style={{ display:"flex", gap:"1.25rem", fontSize:"0.8rem", flexWrap:"wrap" as const }}>
                   <span style={{ color:C.info, fontWeight:700 }}>{run.voteCount} {run.voteCount===1?t("unitVote"):t("unitVotes")}</span>
-                  <span style={{ color:C.text, fontWeight:600 }}>{run.authors.length} Autoren</span>
+                  <span style={{ color:C.text, fontWeight:600 }}>{run.authors.length} {t("unitAuthors")}</span>
                   {vpBeforeRun !== null && vpAfterRun !== null
                     ? <span style={{ color:C.warn, fontWeight:700 }}>{vpBeforeRun.toFixed(1)}% → {vpAfterRun.toFixed(1)}% (−{consumed.toFixed(1)}%)</span>
                     : <span style={{ color:C.warn, fontWeight:700 }}>−{consumed.toFixed(1)}% VP</span>
