@@ -1184,7 +1184,7 @@ function ConsentPanel(props: {
           </span>
         </div>
         <p style={{ color: "#607078", fontSize: "0.82rem", margin: 0 }}>
-          Du behältst die vollständige Kontrolle. Jede Berechtigung kann jederzeit widerrufen werden.
+          {props.t("consentControlNote")}
         </p>
       </div>
 

@@ -230,6 +230,7 @@ const translations = {
     communityFooterAt:      "Stand:",
     communityFooterUhr:     "Uhr",
 
+    consentControlNote:   "Du behältst die vollständige Kontrolle. Jede Berechtigung kann jederzeit widerrufen werden.",
     // ── Tages-VP KPI-Leiste ───────────────────────────────────────────────────
     kpiVpStartToday:    "VP Start heute",
     kpiVotesToday:      "Votes heute",
@@ -744,6 +745,7 @@ const translations = {
     communityFooterAt:      "As of",
     communityFooterUhr:     "",
 
+    consentControlNote:   "You retain full control. Each permission can be revoked at any time.",
     // ── Daily VP KPI bar ──────────────────────────────────────────────────────
     kpiVpStartToday:    "VP at day start",
     kpiVotesToday:      "Votes today",
@@ -1323,6 +1325,7 @@ const translations = {
     consentNoteTargetVote:  "Requerido para la función de cotización.",
     consentStatusGranted:  "✓ Activado",
     consentStatusRevoked:  "✗ Desactivado",
+    consentControlNote:  "Conservas el control total. Cada permiso puede revocarse en cualquier momento.",
     // ── Full coverage — keys from DE/EN ─────────────────────────────────────────
     actNewPost:                  "nuevo post",
     actNoActivity:               "Sin actividad aún",
@@ -1745,6 +1748,7 @@ const translations = {
     consentNoteTargetVote:  "견적 기능에 필요합니다.",
     consentStatusGranted:  "✓ 활성화됨",
     consentStatusRevoked:  "✗ 비활성화됨",
+    consentControlNote:  "완전한 제어권을 유지합니다. 각 권한은 언제든지 취소할 수 있습니다.",
     // ── Full coverage — keys from DE/EN ─────────────────────────────────────────
     actNewPost:                  "새 게시물",
     actNoActivity:               "아직 활동 없음",
@@ -2167,6 +2171,7 @@ const translations = {
     consentNoteTargetVote:  "报价功能需要此项。",
     consentStatusGranted:  "✓ 已激活",
     consentStatusRevoked:  "✗ 已停用",
+    consentControlNote:  "你保留完全控制权。每个权限可随时撤销。",
     // ── Full coverage — keys from DE/EN ─────────────────────────────────────────
     actNewPost:                  "新帖子",
     actNoActivity:               "尚无活动",
@@ -2720,7 +2725,8 @@ const translations = {
     consentNoteLogin:            "Требуется для всех остальных функций.",
     consentNoteTargetVote:       "Требуется для функции котировки.",
     consentStatusGranted:        "✓ Активировано",
-    consentStatusRevoked:        "✗ Деактивировано",
+    consentStatusRevoked:        "✗ Деактивировано",    consentControlNote:  "Вы сохраняете полный контроль. Каждое разрешение можно отозвать в любое время.",
+
   },
 
 } satisfies Record<Locale, Record<string, string>>;
