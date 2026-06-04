@@ -154,6 +154,8 @@ function CommunityHero({ profile, growth, todayStats, snapshot, t }: {
   t: ReturnType<typeof createTranslator>;
 }) {
   const totalAuthors = growth?.summary.totalUniqueAuthors ?? profile.uniqueAuthors;
+  const totalVotes   = growth?.summary.totalVotes         ?? profile.votesAnalyzed;
+  const activeDays   = growth?.summary.activeDays         ?? profile.periodDays;
   const streak       = growth?.summary.longestStreak ?? 0;
   const currStreak   = growth?.summary.currentStreak ?? 0;
 
@@ -162,25 +164,27 @@ function CommunityHero({ profile, growth, todayStats, snapshot, t }: {
   const dnaConv  = profile.avgWeightPct>=70 ? t("dnaHighConviction") : profile.avgWeightPct>=45 ? t("dnaBalanced") : t("dnaExploratory");
   const selfNote = profile.selfVotePct<5 ? t("dnaCommunityFirst") : profile.selfVotePct>20 ? t("dnaSelfFocused") : "";
 
-  // Daily VP KPIs
-  const currentVp     = snapshot ? snapshot.votingPowerBps / 100 : null;
-  const vpConsumed    = todayStats ? todayStats.totalWeightBps / 5000 : 0;
-  const vpStart       = currentVp !== null ? Math.min(100, Math.round((currentVp + vpConsumed) * 10) / 10) : null;
-  const votesToday    = todayStats?.totalVotes ?? 0;
-
-  // Top 3: daily operational KPIs
-  const kpis = [
-    { value: vpStart !== null ? `${vpStart.toFixed(1)}%` : "—", label: t("kpiVpStartToday"), color: C.purple, big: true  },
-    { value: String(votesToday),                                  label: t("kpiVotesToday"),   color: C.info,   big: true  },
-    { value: currentVp !== null ? `${currentVp.toFixed(1)}%` : "—", label: t("kpiVpNow"),   color: currentVp !== null && currentVp >= 80 ? C.ok : currentVp !== null && currentVp >= 60 ? C.warn : C.err, big: true  },
+  // Profile / journey KPIs (primary — left, large)
+  const profileKpis = [
+    { value: totalAuthors.toLocaleString(), label: t("impactAuthors"),   color: C.purple },
+    { value: totalVotes.toLocaleString(),   label: t("impactVotes"),     color: C.info   },
+    { value: String(activeDays),            label: t("impactActiveDays"), color: C.teal  },
   ];
 
-  // Secondary: cumulative stats (smaller, below)
-  const secondary = [
-    { value: totalAuthors.toLocaleString(),  label: t("impactAuthors")  },
-    { value: streak>0 ? `${streak}d` : "—", label: t("impactStreak")   },
-    ...(currStreak>1 ? [{ value:`${currStreak}d`, label:t("impactCurrentStreak") }] : []),
-  ];
+  // Serie komprimiert: "42d / 7d laufend" als ein Wert
+  const serieVal = streak > 0
+    ? (currStreak > 1 ? `${streak}d · ${currStreak}d` : `${streak}d`)
+    : "—";
+  const serieLabel = currStreak > 1
+    ? `${t("impactStreak")} · ${t("impactCurrentStreak")}`
+    : t("impactStreak");
+
+  // Daily VP — right side compact
+  const currentVp  = snapshot ? snapshot.votingPowerBps / 100 : null;
+  const vpConsumed = todayStats ? todayStats.totalWeightBps / 5000 : 0;
+  const vpStart    = currentVp !== null ? Math.min(100, Math.round((currentVp + vpConsumed) * 10) / 10) : null;
+  const votesToday = todayStats?.totalVotes ?? 0;
+  const vpNowColor = currentVp !== null && currentVp >= 80 ? C.ok : currentVp !== null && currentVp >= 60 ? C.warn : C.err;
 
   return (
     <div style={{
@@ -203,36 +207,51 @@ function CommunityHero({ profile, growth, todayStats, snapshot, t }: {
         </div>
       </div>
 
-      {/* Primary: Tages-VP KPIs */}
+      {/* KPI-Zeile: Profil-Metriken (links, groß) + Tages-VP (rechts, kompakt) */}
       <div style={{ display:"flex", gap:0, alignItems:"stretch" }}>
-        {kpis.map((k, i) => (
+
+        {/* Profil-KPIs — Autoren, Votes, Aktive Tage */}
+        {profileKpis.map((k, i) => (
           <div key={i} style={{
             flex:1,
             textAlign:"center" as const,
             padding:"0.5rem 0.75rem",
-            borderRight: i<kpis.length-1 ? `1px solid ${C.border}` : "none",
+            borderRight:`1px solid ${C.border}`,
           }}>
-            <div style={{ color:k.color, fontSize:"3rem", fontWeight:900, lineHeight:1, letterSpacing:"-2px" }}>
+            <div style={{ color:k.color, fontSize:"2.6rem", fontWeight:900, lineHeight:1, letterSpacing:"-1.5px" }}>
               {k.value}
             </div>
-            <div style={{ color:C.muted, fontSize:"0.68rem", fontWeight:700, letterSpacing:"0.8px", textTransform:"uppercase" as const, marginTop:"0.35rem" }}>
+            <div style={{ color:C.muted, fontSize:"0.68rem", fontWeight:700, letterSpacing:"0.8px", textTransform:"uppercase" as const, marginTop:"0.3rem" }}>
               {k.label}
             </div>
           </div>
         ))}
-      </div>
 
-      {/* Secondary: Streak / Lifetime compact */}
-      {secondary.length > 0 && (
-        <div style={{ display:"flex", gap:"1.5rem", paddingTop:"0.75rem", borderTop:`1px solid ${C.border}` }}>
-          {secondary.map((s, i) => (
-            <div key={i} style={{ textAlign:"left" as const }}>
-              <span style={{ color:C.text, fontWeight:700, fontSize:"0.88rem" }}>{s.value}</span>
-              <span style={{ color:C.muted, fontSize:"0.72rem", marginLeft:"0.35rem" }}>{s.label}</span>
+        {/* Serie komprimiert */}
+        {streak > 0 && (
+          <div style={{ flex:1, textAlign:"center" as const, padding:"0.5rem 0.75rem", borderRight:`1px solid ${C.border}` }}>
+            <div style={{ color:C.warn, fontSize:"2.6rem", fontWeight:900, lineHeight:1, letterSpacing:"-1.5px" }}>{serieVal}</div>
+            <div style={{ color:C.muted, fontSize:"0.68rem", fontWeight:700, letterSpacing:"0.8px", textTransform:"uppercase" as const, marginTop:"0.3rem" }}>{serieLabel}</div>
+          </div>
+        )}
+
+        {/* Tages-VP — rechts, 3 Zeilen kompakt */}
+        <div style={{
+          display:"flex", flexDirection:"column" as const, justifyContent:"center",
+          padding:"0.5rem 0.75rem 0.5rem 1rem", gap:"0.3rem", minWidth:"120px",
+        }}>
+          {[
+            { val: vpStart !== null ? `${vpStart.toFixed(1)}%` : "—", lbl: t("kpiVpStartToday"), col: C.muted },
+            { val: String(votesToday),                                  lbl: t("kpiVotesToday"),   col: C.info  },
+            { val: currentVp !== null ? `${currentVp.toFixed(1)}%` : "—", lbl: t("kpiVpNow"),  col: vpNowColor },
+          ].map((row, i) => (
+            <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", gap:"0.5rem" }}>
+              <span style={{ color:C.faint, fontSize:"0.65rem", fontWeight:600, textTransform:"uppercase" as const, whiteSpace:"nowrap" as const }}>{row.lbl}</span>
+              <span style={{ color:row.col, fontWeight:800, fontSize:"0.85rem" }}>{row.val}</span>
             </div>
           ))}
         </div>
-      )}
+      </div>
     </div>
   );
 }
