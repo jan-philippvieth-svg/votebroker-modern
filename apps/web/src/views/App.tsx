@@ -61,7 +61,7 @@ import {
   type VoteExecutionResponse,
   type VoteQuoteResponse
 } from "../api";
-import { createTranslator, locales, type Locale } from "../i18n";
+import { createTranslator, locales, type Locale, type TranslationKey } from "../i18n";
 
 const statusLabel = {
   active: "Aktiv",
@@ -1690,11 +1690,26 @@ function CurationDnaPanel(props: {
 
   const vpPct = props.accountSnapshot ? props.accountSnapshot.votingPowerBps / 100 : null;
 
+  // Map DNA descriptions from English (domain package) → current locale
+  const dnaDescMap: Record<string, TranslationKey> = {
+    "A significant portion of votes go to own posts":         "dnaDescSelfVoter",
+    "Strong loyalty to a small group":                        "dnaDescLoyalInner",
+    "Regular support for a core set":                         "dnaDescRegular",
+    "Wide discovery across many authors":                     "dnaDescBroad",
+    "Varied vote weights suggest deliberate":                  "dnaDescStrategic",
+    "Active curator with high daily vote frequency":           "dnaDescHighFreq",
+    "Focused on a small niche":                               "dnaDescNiche",
+    "Balanced curation pattern":                              "dnaDescBalanced",
+    "No votes found in the analyzed period":                  "dnaDescNone",
+  };
+  const dnaDescKey = Object.keys(dnaDescMap).find(k => p.dnaDescription?.startsWith(k));
+  const translatedDesc = dnaDescKey ? t(dnaDescMap[dnaDescKey]) : p.dnaDescription;
+
   const heroStats = [
-    { val: p.votesAnalyzed.toLocaleString(), lbl: "Votes"   },
-    { val: p.uniqueAuthors,                  lbl: "Autoren" },
+    { val: p.votesAnalyzed.toLocaleString(), lbl: t("kpiVotesCast")  },
+    { val: p.uniqueAuthors,                  lbl: t("kpiAuthors")    },
     ...(vpPct !== null ? [{ val: `${vpPct.toFixed(1)}%`, lbl: "VP" }] : []),
-    { val: p.periodDays,                     lbl: "Akt. Tage" },
+    { val: p.periodDays,                     lbl: t("growthActiveDays") },
   ];
 
   return (
@@ -1708,7 +1723,7 @@ function CurationDnaPanel(props: {
             <span style={{ color: "#7c3aed", fontWeight: 800, fontSize: "1rem" }}>{p.dnaLabel}</span>
             <span style={{ color: "#8fa4b0", fontSize: "0.72rem" }}>· {t("dnaCuratorType")}</span>
           </div>
-          <p style={{ color: "#607078", fontSize: "0.78rem", margin: 0, lineHeight: 1.45, maxWidth: "520px" }}>{p.dnaDescription}</p>
+          <p style={{ color: "#607078", fontSize: "0.78rem", margin: 0, lineHeight: 1.45, maxWidth: "520px" }}>{translatedDesc}</p>
         </div>
         <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" as const }}>
           {heroStats.map(s => (
@@ -1754,43 +1769,43 @@ function CurationDnaPanel(props: {
 
             // ── Assistenten-Botschaft ──────────────────────────────────────────
             let msgIcon = "🧬";
-            let msgTitle = "Was empfiehlt VoteBroker?";
-            let msgBody = "Klicke auf «Votes scannen», um zu sehen was heute zu voten ist.";
+            let msgTitle = t("planMsgDefaultTitle");
+            let msgBody  = t("planMsgDefault");
 
             if (props.opportunitiesLoading || props.planLoading) {
-              msgIcon = "⏳"; msgTitle = "Analysiere…"; msgBody = "VoteBroker prüft deine Autoren auf neue Posts.";
+              msgIcon = "⏳"; msgTitle = t("planMsgAnalyzingTitle"); msgBody = t("planMsgAnalyzing");
             } else if (openCount > 0 && vpMorgen !== null) {
-              const sustainTxt = vpMorgen >= 80 ? `bist morgen wieder bei ${vpMorgen.toFixed(1)} % VP` : `VP morgen ca. ${vpMorgen.toFixed(1)} %`;
+              const sustainTxt = vpMorgen >= 80
+                ? t("planVpTomorrow").replace("{{vp}}", vpMorgen.toFixed(1))
+                : t("planVpTomorrowLow").replace("{{vp}}", vpMorgen.toFixed(1));
               const planLine = planVotes > 0 && planVotes < openCount
-                ? ` · ${planVotes} davon im Plan` : "";
+                ? ` · ${t("planInPlan").replace("{{count}}", String(planVotes))}` : "";
               if (recovery && reduction > 0) {
-                msgIcon = "⚡"; msgTitle = `${openCount} offene Votes gefunden${planLine}`;
-                msgBody = `Recovery-Modus: VoteBroker hat die Gewichte um ${reduction} % reduziert. Du ${sustainTxt}. Gewichte anpassen um mehr Votes aufzunehmen.`;
+                msgIcon = "⚡"; msgTitle = t("planMsgPlanReadyTitle").replace("{{count}}", String(openCount)) + planLine;
+                msgBody = t("planMsgRecovery").replace("{{reduction}}", String(reduction)).replace("{{vp}}", sustainTxt);
               } else {
-                msgIcon = "✅"; msgTitle = `${openCount} offene Votes gefunden${planLine}`;
-                msgBody = `Plan ausführen: ${planVotes} Votes · ${sustainTxt}.`;
+                msgIcon = "✅"; msgTitle = t("planMsgPlanReadyTitle").replace("{{count}}", String(openCount)) + planLine;
+                msgBody = t("planMsgPlanReady").replace("{{votes}}", String(planVotes)).replace("{{vp}}", sustainTxt);
               }
             } else if (hasOpps && openCount === 0) {
-              msgIcon = "✓"; msgTitle = "Alles gevoted";
-              msgBody = "Alle Posts deiner Autoren sind aktuell gevoted. Schau später nochmal vorbei.";
+              msgIcon = "✓"; msgTitle = t("planMsgAllVotedTitle"); msgBody = t("planMsgAllVoted");
             } else if (planVotes > 0 && !hasOpps) {
-              msgIcon = "🗳"; msgTitle = `${planVotes} Votes im Plan`;
-              msgBody = "Scanne offene Votes, um zu sehen welche Posts jetzt verfügbar sind.";
+              msgIcon = "🗳"; msgTitle = t("planMsgNoPlanTitle").replace("{{votes}}", String(planVotes)); msgBody = t("planMsgNoPlan");
             }
 
             // ── KPI-Werte ──────────────────────────────────────────────────────
             const hasEdits = liveMetrics?.hasEdits ?? false;
             const kpis = [
-              { value: vpNow    !== null ? `${vpNow.toFixed(1)}%`    : "—", label: "VP jetzt",   sub: snap ? `${snap.steemPowerSp.toFixed(0)} SP` : "…",                                            color: vpColor(vpNow)    },
-              { value: vpPlan   !== null ? `${vpPlan.toFixed(1)}%`   : "—", label: "nach Plan",  sub: planVotes > 0 ? `${planVotes} Vote${planVotes !== 1 ? "s" : ""}${hasEdits ? " (angepasst)" : ""}` : "kein Plan", color: vpColor(vpPlan)   },
-              { value: vpMorgen !== null ? `${vpMorgen.toFixed(1)}%` : "—", label: "VP morgen",  sub: freeBudget !== null && freeBudget > 0 ? `${freeBudget.toFixed(2)}% VP frei` : vpMorgen !== null && vpMorgen >= 80 ? "Ziel ✓" : "+20% Regen", color: vpColor(vpMorgen) },
+              { value: vpNow    !== null ? `${vpNow.toFixed(1)}%`    : "—", label: "VP",          sub: snap ? `${snap.steemPowerSp.toFixed(0)} SP` : "…",                                            color: vpColor(vpNow)    },
+              { value: vpPlan   !== null ? `${vpPlan.toFixed(1)}%`   : "—", label: t("planAfterPlan"),  sub: planVotes > 0 ? `${planVotes} Vote${planVotes !== 1 ? "s" : ""}${hasEdits ? ` ${t("planAdjusted")}` : ""}` : t("planNoPlan"), color: vpColor(vpPlan)   },
+              { value: vpMorgen !== null ? `${vpMorgen.toFixed(1)}%` : "—", label: t("planVpMorgen"),  sub: freeBudget !== null && freeBudget > 0 ? `${freeBudget.toFixed(2)}% ${t("planVpFree").replace("{{budget}}", "")}` : vpMorgen !== null && vpMorgen >= 80 ? t("planVpTargetOk") : t("planVpRegen"), color: vpColor(vpMorgen) },
             ];
 
             return (
               <>
                 {/* ── Botschaft ── */}
                 <div style={{ marginBottom: "1.5rem" }}>
-                  <p style={{ color: "#0369a1", fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "1.2px", margin: "0 0 0.3rem" }}>Curator-Assistent</p>
+                  <p style={{ color: "#0369a1", fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "1.2px", margin: "0 0 0.3rem" }}>{t("dnaCuratorType")}</p>
                   <h3 style={{ color: "#0c4a6e", fontSize: "1.4rem", fontWeight: 900, margin: "0 0 0.5rem", letterSpacing: "-0.5px", display: "flex", alignItems: "center", gap: "0.5rem" }}>
                     <span>{msgIcon}</span> {msgTitle}
                   </h3>
@@ -1804,8 +1819,8 @@ function CurationDnaPanel(props: {
                   {openCount > 0 ? (
                     // Bereits gescannt und Votes gefunden → Status-Chip + Scroll-Hinweis
                     <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.85rem 1.5rem", background: "#fffbeb", border: "1.5px solid #f59e0b", borderRadius: "14px" }}>
-                      <span style={{ color: "#92400e", fontSize: "1.15rem", fontWeight: 900 }}>⚡ {openCount} offene Votes gefunden</span>
-                      <span style={{ color: "#78350f", fontSize: "0.8rem" }}>→ Details unten</span>
+                      <span style={{ color: "#92400e", fontSize: "1.15rem", fontWeight: 900 }}>{t("planOpenFound").replace("{{count}}", String(openCount))}</span>
+                      <span style={{ color: "#78350f", fontSize: "0.8rem" }}>{t("planDetailsBelow")}</span>
                       <button type="button" onClick={props.onLoadOpportunities} disabled={props.opportunitiesLoading} style={{ marginLeft: "auto", background: "none", border: "1px solid #d97706", borderRadius: "8px", color: "#d97706", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600, padding: "0.25rem 0.6rem" }}>
                         {props.opportunitiesLoading ? "…" : "↻"}
                       </button>
@@ -1839,7 +1854,7 @@ function CurationDnaPanel(props: {
                       fontWeight: 700, padding: "0.65rem 1.25rem",
                     }}
                   >
-                    {props.planLoading ? "Generiere…" : plan ? "↻ Plan aktualisieren" : "Vote-Plan generieren"}
+                    {props.planLoading ? t("planGenerating") : plan ? t("planUpdate") : t("planCreate")}
                   </button>
                 </div>
 
@@ -1917,6 +1932,7 @@ function CurationDnaPanel(props: {
                 onExecuteSingle={props.onExecuteSingle}
                 onMetricsChange={setLiveMetrics}
                 additionalCandidates={additionalCandidates}
+                locale={props.locale}
               />
             )}
             <div style={{ marginTop: "1.25rem" }}>
@@ -1975,11 +1991,11 @@ function CurationDnaPanel(props: {
           <div style={{ background: "#f8fbfc", border: "1px solid #dde8ed", borderRadius: "10px", padding: "0.9rem 1rem", flex: 1 }}>
             <p style={{ ...sectionLabel, marginBottom: "0.4rem" }}>{t("dnaSustainability")}</p>
             <p style={{ color: "#17202a", fontSize: "0.83rem", fontWeight: 700, margin: "0 0 0.2rem" }}>
-              {p.powerStable.relevantAuthors} Autoren regelmäßig
+              {p.powerStable.relevantAuthors} {t("sustainAuthors")}
             </p>
             <p style={{ color: "#607078", fontSize: "0.73rem", margin: 0, lineHeight: 1.5 }}>
-              Empfohlen: ⌀ <b style={{ color: "#17202a" }}>{p.powerStable.maxAvgWeightPct}%</b>/Vote<br/>
-              VP-Ziel: <b style={{ color: "#17202a" }}>80–95%</b>
+              {t("sustainRecommended")} <b style={{ color: "#17202a" }}>{p.powerStable.maxAvgWeightPct}%</b>{t("sustainPerVote")}<br/>
+              {t("sustainVpTarget")} <b style={{ color: "#17202a" }}>80–95%</b>
             </p>
           </div>
         </div>
@@ -2379,7 +2395,7 @@ function formatAge(minutes: number): string {
 
 // ── VotePlanSection — Plan → Preview → Confirm → Execute (sequential) ─────────
 
-function RecoveryBanner({ report }: { report: ConstraintReport }) {
+function RecoveryBanner({ report, t }: { report: ConstraintReport; t: ReturnType<typeof createTranslator> }) {
   if (!report.recoveryMode && report.weightReductionPct === 0) return null;
 
   const isRecovery = report.recoveryMode;
@@ -2392,14 +2408,14 @@ function RecoveryBanner({ report }: { report: ConstraintReport }) {
   let body  = "";
 
   if (isRecovery && reduced > 0) {
-    title = "⚡ Recovery-Modus aktiv";
-    body  = `VoteBroker reduziert die Gewichte automatisch um ${reduced} %, damit deine Voting Power morgen wieder auf ca. ${tomorrow} % steigt.`;
+    title = t("recoveryTitle");
+    body  = t("recoveryBody").replace("{{reduction}}", String(reduced)).replace("{{tomorrow}}", String(tomorrow));
   } else if (isRecovery) {
-    title = "⚡ Recovery-Modus aktiv";
-    body  = `Die Voting Power ist unter dem Zielbereich. VoteBroker wählt nur Votes aus, die morgen eine VP von ca. ${tomorrow} % ermöglichen.`;
+    title = t("recoveryTitle");
+    body  = t("recoveryBodyNoReduction");
   } else {
-    title = "ℹ Gewichte angepasst";
-    body  = `Vote-Gewichte wurden um ${reduced} % reduziert, damit dein VP-Ziel morgen (${tomorrow} %) erhalten bleibt.`;
+    title = t("adjustedTitle");
+    body  = t("adjustedBody").replace("{{reduction}}", String(reduced)).replace("{{tomorrow}}", String(tomorrow));
   }
 
   return (
@@ -2481,7 +2497,9 @@ function VotePlanSection(props: {
   onExecuteSingle: (target: { author: string; permlink: string; weightBps: number }) => Promise<{ transactionId: string }>;
   onMetricsChange?: (m: LivePlanMetrics) => void;
   additionalCandidates?: VotePlanEntry[];
+  locale?: import("../i18n").Locale;
 }) {
+  const t = createTranslator(props.locale ?? "de");
   const [phase, setPhase]           = useState<PlanPhase>("idle");
   const [confirmed, setConfirmed]   = useState(false);
   const [execLog, setExecLog]       = useState<VoteLogEntry[]>([]);
@@ -2696,7 +2714,7 @@ function VotePlanSection(props: {
               </div>
 
               {/* Recovery banner */}
-              {plan?.report && <RecoveryBanner report={plan.report} />}
+              {plan?.report && <RecoveryBanner report={plan.report} t={t} />}
 
               {/* Transparenz: gefunden vs. im Plan */}
               {plan?.report && plan.report.excludedVotes > 0 && (
