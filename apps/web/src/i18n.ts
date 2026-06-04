@@ -210,6 +210,11 @@ const translations = {
     dnaLabelSelfVoter:       "Ich-fokussierter Voter",
     dnaStrategicWeight:      "Strategischer Gewichts-Voter",
 
+    // ── Tages-VP KPI-Leiste ───────────────────────────────────────────────────
+    kpiVpStartToday:    "VP Start heute",
+    kpiVotesToday:      "Votes heute",
+    kpiVpNow:           "VP jetzt",
+
     // ── Time helpers ──────────────────────────────────────────────────────────
     timeJustNow:        "gerade eben",
     timeMinAgo:         "Min. her",
@@ -606,6 +611,11 @@ const translations = {
     dnaLabelSelfVoter:       "Self-Focused Voter",
     dnaStrategicWeight:      "Strategic Weight Voter",
 
+    // ── Daily VP KPI bar ──────────────────────────────────────────────────────
+    kpiVpStartToday:    "VP at day start",
+    kpiVotesToday:      "Votes today",
+    kpiVpNow:           "VP now",
+
     // ── Time helpers ──────────────────────────────────────────────────────────
     timeJustNow:        "just now",
     timeMinAgo:         "m ago",
@@ -991,6 +1001,9 @@ const translations = {
     unitAuthors:                 "autores",
     unitVote:                    "voto",
     unitVotes:                   "votos",
+    kpiVpStartToday:   "VP inicio hoy",
+    kpiVotesToday:   "Votos hoy",
+    kpiVpNow:   "VP ahora",
     // ── Full coverage — keys from DE/EN ─────────────────────────────────────────
     actNewPost:                  "new post",
     actNoActivity:               "No activity yet",
@@ -1318,6 +1331,9 @@ const translations = {
     unitAuthors:                 "작성자",
     unitVote:                    "투표",
     unitVotes:                   "투표",
+    kpiVpStartToday:   "오늘 VP 시작",
+    kpiVotesToday:   "오늘 투표",
+    kpiVpNow:   "VP 현재",
     // ── Full coverage — keys from DE/EN ─────────────────────────────────────────
     actNewPost:                  "new post",
     actNoActivity:               "No activity yet",
@@ -1645,6 +1661,9 @@ const translations = {
     unitAuthors:                 "作者",
     unitVote:                    "票",
     unitVotes:                   "票",
+    kpiVpStartToday:   "今日 VP 起始",
+    kpiVotesToday:   "今日投票",
+    kpiVpNow:   "VP 当前",
     // ── Full coverage — keys from DE/EN ─────────────────────────────────────────
     actNewPost:                  "new post",
     actNoActivity:               "No activity yet",

@@ -147,13 +147,13 @@ function votesPerDay7(votes: RecentVote[]): Array<{ short: string; count: number
 
 // ── Community Hero ─────────────────────────────────────────────────────────────
 
-function CommunityHero({ profile, growth, t }: {
+function CommunityHero({ profile, growth, todayStats, snapshot, t }: {
   profile: CurationProfile; growth: GrowthData | null;
+  todayStats: TodayStats | null;
+  snapshot: SteemAccountSnapshot | null;
   t: ReturnType<typeof createTranslator>;
 }) {
   const totalAuthors = growth?.summary.totalUniqueAuthors ?? profile.uniqueAuthors;
-  const totalVotes   = growth?.summary.totalVotes   ?? profile.votesAnalyzed;
-  const activeDays   = growth?.summary.activeDays   ?? profile.periodDays;
   const streak       = growth?.summary.longestStreak ?? 0;
   const currStreak   = growth?.summary.currentStreak ?? 0;
 
@@ -162,12 +162,24 @@ function CommunityHero({ profile, growth, t }: {
   const dnaConv  = profile.avgWeightPct>=70 ? t("dnaHighConviction") : profile.avgWeightPct>=45 ? t("dnaBalanced") : t("dnaExploratory");
   const selfNote = profile.selfVotePct<5 ? t("dnaCommunityFirst") : profile.selfVotePct>20 ? t("dnaSelfFocused") : "";
 
-  const stats = [
-    { value: totalAuthors.toLocaleString(), label: t("impactAuthors"),      color: C.purple, big: true  },
-    { value: totalVotes.toLocaleString(),   label: t("impactVotes"),         color: C.info,   big: false },
-    { value: String(activeDays),            label: t("impactActiveDays"),    color: C.teal,   big: false },
-    { value: streak>0 ? `${streak}d` : "—",label: t("impactStreak"),        color: C.warn,   big: false },
-    ...(currStreak>1 ? [{ value:`${currStreak}d`, label:t("impactCurrentStreak"), color:C.ok, big:false }] : []),
+  // Daily VP KPIs
+  const currentVp     = snapshot ? snapshot.votingPowerBps / 100 : null;
+  const vpConsumed    = todayStats ? todayStats.totalWeightBps / 5000 : 0;
+  const vpStart       = currentVp !== null ? Math.min(100, Math.round((currentVp + vpConsumed) * 10) / 10) : null;
+  const votesToday    = todayStats?.totalVotes ?? 0;
+
+  // Top 3: daily operational KPIs
+  const kpis = [
+    { value: vpStart !== null ? `${vpStart.toFixed(1)}%` : "—", label: t("kpiVpStartToday"), color: C.purple, big: true  },
+    { value: String(votesToday),                                  label: t("kpiVotesToday"),   color: C.info,   big: true  },
+    { value: currentVp !== null ? `${currentVp.toFixed(1)}%` : "—", label: t("kpiVpNow"),   color: currentVp !== null && currentVp >= 80 ? C.ok : currentVp !== null && currentVp >= 60 ? C.warn : C.err, big: true  },
+  ];
+
+  // Secondary: cumulative stats (smaller, below)
+  const secondary = [
+    { value: totalAuthors.toLocaleString(),  label: t("impactAuthors")  },
+    { value: streak>0 ? `${streak}d` : "—", label: t("impactStreak")   },
+    ...(currStreak>1 ? [{ value:`${currStreak}d`, label:t("impactCurrentStreak") }] : []),
   ];
 
   return (
@@ -191,24 +203,36 @@ function CommunityHero({ profile, growth, t }: {
         </div>
       </div>
 
-      {/* Giant impact numbers */}
+      {/* Primary: Tages-VP KPIs */}
       <div style={{ display:"flex", gap:0, alignItems:"stretch" }}>
-        {stats.map((s, i) => (
+        {kpis.map((k, i) => (
           <div key={i} style={{
-            flex: s.big ? "1.8" : "1",
-            textAlign: "center" as const,
-            padding: "0.5rem 0.75rem",
-            borderRight: i<stats.length-1 ? `1px solid ${C.border}` : "none",
+            flex:1,
+            textAlign:"center" as const,
+            padding:"0.5rem 0.75rem",
+            borderRight: i<kpis.length-1 ? `1px solid ${C.border}` : "none",
           }}>
-            <div style={{ color:s.color, fontSize:s.big?"3.8rem":"2.4rem", fontWeight:900, lineHeight:1, letterSpacing:s.big?"-2px":"-1px" }}>
-              {s.value}
+            <div style={{ color:k.color, fontSize:"3rem", fontWeight:900, lineHeight:1, letterSpacing:"-2px" }}>
+              {k.value}
             </div>
             <div style={{ color:C.muted, fontSize:"0.68rem", fontWeight:700, letterSpacing:"0.8px", textTransform:"uppercase" as const, marginTop:"0.35rem" }}>
-              {s.label}
+              {k.label}
             </div>
           </div>
         ))}
       </div>
+
+      {/* Secondary: Streak / Lifetime compact */}
+      {secondary.length > 0 && (
+        <div style={{ display:"flex", gap:"1.5rem", paddingTop:"0.75rem", borderTop:`1px solid ${C.border}` }}>
+          {secondary.map((s, i) => (
+            <div key={i} style={{ textAlign:"left" as const }}>
+              <span style={{ color:C.text, fontWeight:700, fontSize:"0.88rem" }}>{s.value}</span>
+              <span style={{ color:C.muted, fontSize:"0.72rem", marginLeft:"0.35rem" }}>{s.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1818,7 +1842,7 @@ export function UserDashboard(props: {
 
       {/* 1. Community Hero */}
       {curationProfile
-        ? <CommunityHero profile={curationProfile} growth={growthData} t={t}/>
+        ? <CommunityHero profile={curationProfile} growth={growthData} todayStats={todayStats} snapshot={snapshot} t={t}/>
         : (
           <div style={{ ...card, display:"flex", alignItems:"center", gap:"0.85rem", padding:"1.1rem 1.5rem" }}>
             <span style={{ fontSize:"1.6rem" }}>🧬</span>
