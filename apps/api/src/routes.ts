@@ -510,12 +510,8 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     const totalCurators = allRows.length;
     const dataQuality: "rich" | "sparse" | "empty" =
       totalCurators >= 5 ? "rich" : totalCurators >= 2 ? "sparse" : "empty";
-    const notice =
-      dataQuality === "empty"
-        ? "Noch keine anderen Kuratoren in der Community."
-        : dataQuality === "sparse"
-        ? `${totalCurators} aktive Kuratoren — Empfehlungen werden aussagekräftiger, je mehr Nutzer VoteBroker einsetzen.`
-        : null;
+    // notice is now generated client-side via t() for proper i18n
+    const notice = null;
 
     return {
       communityAuthors,

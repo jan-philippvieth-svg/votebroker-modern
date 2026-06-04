@@ -523,7 +523,9 @@ const translations = {
     sustainAuthors:         "Autoren regelmäßig",
     sustainRecommended:     "Empfohlen: ⌀",
     sustainPerVote:         "/Vote",
-    sustainVpTarget:        "VP-Ziel:",
+    sustainVpTarget:        "VP-Ziel:",    communityNoticeEmpty:  "Noch keine anderen Kuratoren in der Community.",
+    communityNoticeSparse:  "{{n}} aktive Kuratoren — Empfehlungen werden aussagekräftiger, je mehr Nutzer VoteBroker einsetzen.",
+
   },
 
   en: {
@@ -1038,7 +1040,9 @@ const translations = {
     sustainAuthors:         "authors regularly",
     sustainRecommended:     "Recommended: ⌀",
     sustainPerVote:         "/vote",
-    sustainVpTarget:        "VP target:",
+    sustainVpTarget:        "VP target:",    communityNoticeEmpty:  "No other curators in the community yet.",
+    communityNoticeSparse:  "{{n}} active curators — recommendations improve as more users adopt VoteBroker.",
+
   },
 
   // ES / KO / ZH: legacy keys only — dashboard keys fall back to EN
@@ -1327,6 +1331,8 @@ const translations = {
     consentStatusGranted:  "✓ Activado",
     consentStatusRevoked:  "✗ Desactivado",
     consentControlNote:  "Conservas el control total. Cada permiso puede revocarse en cualquier momento.",
+    communityNoticeEmpty:  "Aún no hay otros curadores en la comunidad.",
+    communityNoticeSparse:  "{{n}} curadores activos — las recomendaciones mejoran a medida que más usuarios usan VoteBroker.",
     // ── Full coverage — keys from DE/EN ─────────────────────────────────────────
     actNewPost:                  "nuevo post",
     actNoActivity:               "Sin actividad aún",
@@ -1750,6 +1756,8 @@ const translations = {
     consentStatusGranted:  "✓ 활성화됨",
     consentStatusRevoked:  "✗ 비활성화됨",
     consentControlNote:  "완전한 제어권을 유지합니다. 각 권한은 언제든지 취소할 수 있습니다.",
+    communityNoticeEmpty:  "아직 다른 큐레이터가 없습니다.",
+    communityNoticeSparse:  "{{n}}명의 활성 큐레이터 — 더 많은 사용자가 VoteBroker를 사용할수록 추천이 향상됩니다.",
     // ── Full coverage — keys from DE/EN ─────────────────────────────────────────
     actNewPost:                  "새 게시물",
     actNoActivity:               "아직 활동 없음",
@@ -2173,6 +2181,8 @@ const translations = {
     consentStatusGranted:  "✓ 已激活",
     consentStatusRevoked:  "✗ 已停用",
     consentControlNote:  "你保留完全控制权。每个权限可随时撤销。",
+    communityNoticeEmpty:  "社区中还没有其他策展人。",
+    communityNoticeSparse:  "{{n}} 位活跃策展人 — 随着更多用户使用 VoteBroker，推荐将会改善。",
     // ── Full coverage — keys from DE/EN ─────────────────────────────────────────
     actNewPost:                  "新帖子",
     actNoActivity:               "尚无活动",
@@ -2727,6 +2737,8 @@ const translations = {
     consentNoteTargetVote:       "Требуется для функции котировки.",
     consentStatusGranted:        "✓ Активировано",
     consentStatusRevoked:        "✗ Деактивировано",    consentControlNote:  "Вы сохраняете полный контроль. Каждое разрешение можно отозвать в любое время.",
+    communityNoticeEmpty:  "Других кураторов в сообществе пока нет.",
+    communityNoticeSparse:  "{{n}} активных куратора — рекомендации улучшаются по мере роста числа пользователей VoteBroker.",
 
   },
 
@@ -3147,7 +3159,9 @@ const translations = {
     whaleWhyNotInStrategy:       "ainda não na sua estratégia",
     whaleWhyTitle:               "Por que recomendado?",
     whaleWhyTotalVotes:          "{{n}} votos de curador recebidos",
-    whaleWhyVotedBy:             "votado por {{n}} curadores sinal",
+    whaleWhyVotedBy:             "votado por {{n}} curadores sinal",    communityNoticeEmpty:  "Ainda não há outros curadores na comunidade.",
+    communityNoticeSparse:  "{{n}} curadores ativos — as recomendações melhoram conforme mais usuários adotam o VoteBroker.",
+
   },
 
 } satisfies Record<Locale, Record<string, string>>;

@@ -4010,13 +4010,15 @@ function CommunityDiscoverySection({ discovery, loading, onAddToStrategy, locale
             {meta.totalCurators} {meta.totalCurators === 1 ? t("communityKuratorSing") : t("communityKuratorPlur")} · {meta.myAuthorCount} {t("communityInStrategy")}
           </span>
         </div>
-        {meta.notice && (
+        {meta.dataQuality !== "rich" && (
           <div style={{
             marginTop: "0.6rem", padding: "0.5rem 0.75rem",
             background: "#fef9c3", border: "1px solid #fde047",
             borderRadius: "8px", fontSize: "0.78rem", color: "#713f12",
           }}>
-            {meta.notice}
+            {meta.dataQuality === "empty"
+              ? t("communityNoticeEmpty")
+              : t("communityNoticeSparse").replace("{{n}}", String(meta.totalCurators))}
           </div>
         )}
       </div>
