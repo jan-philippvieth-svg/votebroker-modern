@@ -931,6 +931,7 @@ export function App() {
               discovery={communityDiscovery}
               loading={communityDiscoveryLoading}
               onAddToStrategy={addAuthorToStrategy}
+              locale={locale}
             />
           </div>
         </div>
@@ -3934,11 +3935,13 @@ function WhaleSignalSection({ data, loading, onAddToStrategy, t }: {
   );
 }
 
-function CommunityDiscoverySection({ discovery, loading, onAddToStrategy }: {
+function CommunityDiscoverySection({ discovery, loading, onAddToStrategy, locale }: {
   discovery: CommunityDiscovery | null;
   loading: boolean;
   onAddToStrategy: (username: string, category: StrategyCategory) => void;
+  locale?: import("../i18n").Locale;
 }) {
+  const t = createTranslator(locale ?? "de");
   const hdr: React.CSSProperties = {
     fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase",
     letterSpacing: "0.06em", color: CD.dim, marginBottom: "0.6rem",
@@ -3947,7 +3950,7 @@ function CommunityDiscoverySection({ discovery, loading, onAddToStrategy }: {
   if (loading) {
     return (
       <div style={{ padding: "3rem", textAlign: "center", color: CD.dim, fontSize: "0.88rem" }}>
-        Autor-Radar wird geladen…
+        {t("communityLoading")}
       </div>
     );
   }
@@ -3955,7 +3958,7 @@ function CommunityDiscoverySection({ discovery, loading, onAddToStrategy }: {
   if (!discovery) {
     return (
       <div style={{ padding: "3rem", textAlign: "center", color: CD.dim, fontSize: "0.88rem" }}>
-        Community-Daten konnten nicht geladen werden.
+        {t("communityError")}
       </div>
     );
   }
@@ -3970,10 +3973,10 @@ function CommunityDiscoverySection({ discovery, loading, onAddToStrategy }: {
       <div style={{ marginBottom: "1.25rem" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem" }}>
           <h2 style={{ fontSize: "1.15rem", fontWeight: 800, color: CD.text, margin: 0 }}>
-            Entdecken · Autor-Radar
+            {t("communityTitle")}
           </h2>
           <span style={{ fontSize: "0.75rem", color: CD.dim }}>
-            {meta.totalCurators} {meta.totalCurators === 1 ? "Kurator" : "Kuratoren"} aktiv · {meta.myAuthorCount} in deiner Strategie
+            {meta.totalCurators} {meta.totalCurators === 1 ? t("communityKuratorSing") : t("communityKuratorPlur")} · {meta.myAuthorCount} {t("communityInStrategy")}
           </span>
         </div>
         {meta.notice && (
@@ -3994,9 +3997,9 @@ function CommunityDiscoverySection({ discovery, loading, onAddToStrategy }: {
           color: CD.dim, fontSize: "0.88rem",
         }}>
           <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>🔍</div>
-          Noch nicht genug Community-Daten vorhanden.<br />
+          {t("communityEmptyTitle")}<br />
           <span style={{ fontSize: "0.78rem" }}>
-            Sobald weitere Nutzer ihre Strategie in VoteBroker pflegen, erscheinen hier gemeinsam unterstützte Autoren.
+            {t("communityEmptySub")}
           </span>
         </div>
       ) : (
@@ -4005,17 +4008,17 @@ function CommunityDiscoverySection({ discovery, loading, onAddToStrategy }: {
           {/* Left: Community Authors (≥2 strategies) */}
           <div>
             <div style={hdr}>
-              VoteBroker-Gemeinschaft
+              {t("communityGemeinschaft")}
               {communityAuthors.length > 0 && (
                 <span style={{ color: CD.ok, marginLeft: "0.4rem" }}>· {communityAuthors.length}</span>
               )}
             </div>
             <p style={{ fontSize: "0.75rem", color: CD.faint, marginBottom: "0.75rem", marginTop: 0 }}>
-              Autoren, die mehrere Kuratoren gemeinsam unterstützen.
+              {t("communityGemSub")}
             </p>
             {communityAuthors.length === 0 ? (
               <div style={{ padding: "1.5rem", background: CD.tag, borderRadius: "10px", textAlign: "center", color: CD.dim, fontSize: "0.8rem" }}>
-                Noch keine Autoren von mehreren Kuratoren gleichzeitig unterstützt.
+                {t("communityGemEmpty")}
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
@@ -4029,17 +4032,17 @@ function CommunityDiscoverySection({ discovery, loading, onAddToStrategy }: {
           {/* Right: Discoveries (in other strategies, not mine) */}
           <div>
             <div style={hdr}>
-              Entdeckungen für dich
+              {t("communityDiscoveries")}
               {discoveries.length > 0 && (
                 <span style={{ color: CD.info, marginLeft: "0.4rem" }}>· {discoveries.length}</span>
               )}
             </div>
             <p style={{ fontSize: "0.75rem", color: CD.faint, marginBottom: "0.75rem", marginTop: 0 }}>
-              Autoren aus anderen Strategien, die noch nicht in deiner Strategie sind.
+              {t("communityDiscSub")}
             </p>
             {discoveries.length === 0 ? (
               <div style={{ padding: "1.5rem", background: CD.tag, borderRadius: "10px", textAlign: "center", color: CD.dim, fontSize: "0.8rem" }}>
-                Alle bekannten Autoren sind bereits in deiner Strategie.
+                {t("communityDiscEmpty")}
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
@@ -4054,8 +4057,8 @@ function CommunityDiscoverySection({ discovery, loading, onAddToStrategy }: {
 
       {/* Footer */}
       <div style={{ marginTop: "1.25rem", fontSize: "0.68rem", color: CD.faint, textAlign: "right" }}>
-        Stand: {new Date(discovery.computedAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })} Uhr
-        {" · "}Ähnliche Autoren (basierend auf Tags/Communities) — in Entwicklung
+        {t("communityFooterAt")} {new Date(discovery.computedAt).toLocaleTimeString(locale ?? "de", { hour: "2-digit", minute: "2-digit" })}{t("communityFooterUhr") ? ` ${t("communityFooterUhr")}` : ""}
+        {" · "}{t("communityFooterDev")}
       </div>
     </div>
   );
