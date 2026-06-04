@@ -129,14 +129,15 @@ function parseSteemPost(input: string): { author: string; permlink: string } | n
   return null;
 }
 
-function voteErrorMessage(err: unknown): { message: string; code: string; hint?: string } {
+function voteErrorMessage(err: unknown, locale?: import("../i18n").Locale): { message: string; code: string; hint?: string } {
+  const t = createTranslator(locale ?? "de");
   if (err instanceof VoteBroadcastError) {
     const hints: Record<string, string> = {
       session_expired:              "Bitte oben rechts abmelden und erneut mit SteemConnect einloggen.",
-      target_vote_consent_required: "Einstellungen → Vote-Consent aktivieren.",
-      missing_posting_authority:    "Einstellungen → Posting Authority erteilen → @votebroker.",
+      target_vote_consent_required: t("hintOpenSettings"),
+      missing_posting_authority:    t("hintGrantAuthority"),
       missing_posting_wif:          "Serverseitiges Voting nicht verfügbar. Bitte Betreiber kontaktieren.",
-      account_paused:               "Einstellungen → offene Rechnung begleichen.",
+      account_paused:               t("hintAccountPaused"),
     };
     return { message: err.message, code: err.code, hint: hints[err.code] };
   }
@@ -669,7 +670,7 @@ export function App() {
       });
       setExecution(nextExecution);
     } catch (err) {
-      const parsed = voteErrorMessage(err);
+      const parsed = voteErrorMessage(err, locale);
       setExecutionError(parsed);
       if (parsed.code === "session_expired") {
         setSession(null);
@@ -823,10 +824,10 @@ export function App() {
       <nav style={{ display: "flex", borderBottom: "1px solid #21262d", background: "#ffffff", padding: "0 1.5rem" }}>
         {(["dna", "dashboard", "community", "billing"] as const).map((tab) => {
           const labels: Record<string, string> = {
-            dna: "🧬 Vote-DNA",
-            dashboard: "📊 Dashboard",
-            community: "👥 Community",
-            billing: "⚙ Einstellungen"
+            dna: t("tabDna"),
+            dashboard: t("tabDashboard"),
+            community: t("tabCommunity"),
+            billing: t("tabSettings"),
           };
           return (
             <button
@@ -941,7 +942,7 @@ export function App() {
             onLocaleChange={changeLocale} onTimezoneChange={setTimezone}
             t={t}
           />
-          <AuthorityPanel grantUrl={authorityGrantUrl} hasAuthority={hasAuthority} session={session} />
+          <AuthorityPanel grantUrl={authorityGrantUrl} hasAuthority={hasAuthority} session={session} locale={locale} />
           <ConsentPanel
             catalog={consentCatalog}
             consentError={consentError}
@@ -1026,7 +1027,7 @@ function VoteExecutionPanel(props: {
           )}
           {errorActionLink[props.error.code] && (
             <p style={{ color: "#2563eb", fontSize: "0.78rem", margin: "0.2rem 0 0" }}>
-              Gehe zu: Einstellungen-Tab
+              {t("hintGoToSettings")}
             </p>
           )}
         </div>
@@ -1171,10 +1172,10 @@ function ConsentPanel(props: {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.25rem" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <ShieldCheck size={18} style={{ color: "#2563eb" }} />
-            <span style={{ color: "#17202a", fontWeight: 700, fontSize: "1rem" }}>Berechtigungen</span>
+            <span style={{ color: "#17202a", fontWeight: 700, fontSize: "1rem" }}>{props.t("settingsPermissions")}</span>
           </div>
           <span style={{ color: "#607078", fontSize: "0.78rem" }}>
-            {activeTypes.size} von {CONSENT_ORDER.length} aktiv
+            {props.t("settingsActiveOf").replace("{{n}}", String(activeTypes.size)).replace("{{total}}", String(CONSENT_ORDER.length))}
           </span>
         </div>
         <p style={{ color: "#607078", fontSize: "0.82rem", margin: 0 }}>
@@ -3373,12 +3374,12 @@ function TimezoneSettings({ locale, timezone, onLocaleChange, onTimezoneChange, 
   return (
     <div style={{ maxWidth: "520px", padding: "1.25rem 1.5rem" }}>
       <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#111827", margin: "0 0 1.25rem" }}>
-        ⚙ Einstellungen
+        {t("settingsTitle")}
       </h2>
 
       {/* Sprache */}
       <div style={panelStyle}>
-        <p style={lbl}>Sprache</p>
+        <p style={lbl}>{t("settingsLanguage")}</p>
         <select style={sel} value={locale}
           onChange={e => onLocaleChange(e.target.value as Locale)}>
           {locales.map(l => (
@@ -3389,7 +3390,7 @@ function TimezoneSettings({ locale, timezone, onLocaleChange, onTimezoneChange, 
 
       {/* Zeitzone */}
       <div style={panelStyle}>
-        <p style={lbl}>Zeitzone</p>
+        <p style={lbl}>{t("settingsTimezone")}</p>
         <select style={sel} value={timezone}
           onChange={e => onTimezoneChange(e.target.value)}>
           {options.map(z => (
@@ -3416,7 +3417,7 @@ function TimezoneSettings({ locale, timezone, onLocaleChange, onTimezoneChange, 
         </div>
 
         <p style={{ fontSize: "0.72rem", color: "#9ca3af", margin: "0.6rem 0 0" }}>
-          Alle Daten werden intern in UTC gespeichert. Die Zeitzone beeinflusst nur die Darstellung.
+          {t("settingsTimezoneNote")}
         </p>
       </div>
     </div>
@@ -3427,21 +3428,23 @@ function AuthorityPanel(props: {
   grantUrl: string;
   hasAuthority: boolean | null;
   session: AuthSession | null;
+  locale?: import("../i18n").Locale;
 }) {
+  const t = createTranslator(props.locale ?? "de");
   if (!props.session) return null;
 
   return (
     <section className="auth-bar">
       <div>
-        <span>Posting Authority</span>
+        <span>{t("authorityTitle")}</span>
         <strong>
-          {props.hasAuthority === null && "Wird geprüft..."}
-          {props.hasAuthority === true && "@votebroker kann serverseitig voten ✓"}
-          {props.hasAuthority === false && "@votebroker hat noch keine Posting-Berechtigung"}
+          {props.hasAuthority === null && t("authorityChecking")}
+          {props.hasAuthority === true && t("authorityGranted")}
+          {props.hasAuthority === false && t("authorityMissing")}
         </strong>
         {props.hasAuthority === false && (
           <small style={{ display: "block", marginTop: "0.25rem", color: "#888", fontSize: "0.78rem" }}>
-            Einmalig nötig — bitte den <strong>Active Key</strong> (nicht Posting Key) bereithalten.
+            {t("authorityNote")}
           </small>
         )}
       </div>

@@ -368,6 +368,36 @@ const translations = {
     featureControlTitle:    "Du entscheidest immer selbst",
     featureDesc:            "VoteBroker analysiert deine Vote-Historie und erkennt, welche Autoren dir wirklich wichtig sind — und schlägt dir nachhaltige Vote-Gewichte vor.",
 
+    // ── Navigation / Tabs ─────────────────────────────────────────────────────
+    tabDna:                 "🧬 Vote-DNA",
+    tabDashboard:           "📊 Dashboard",
+    tabCommunity:           "👥 Community",
+    tabSettings:            "⚙ Einstellungen",
+
+    // ── Settings Panel ────────────────────────────────────────────────────────
+    settingsTitle:          "⚙ Einstellungen",
+    settingsLanguage:       "Sprache",
+    settingsTimezone:       "Zeitzone",
+    settingsTimezoneNote:   "Alle Daten werden intern in UTC gespeichert. Die Zeitzone beeinflusst nur die Darstellung.",
+    settingsPermissions:    "Berechtigungen",
+    settingsActiveOf:       "{{n}} von {{total}} aktiv",
+
+    // ── Posting Authority ─────────────────────────────────────────────────────
+    authorityTitle:         "Posting Authority",
+    authorityChecking:      "Wird geprüft...",
+    authorityGranted:       "@votebroker kann serverseitig voten ✓",
+    authorityMissing:       "@votebroker hat noch keine Posting-Berechtigung",
+    authorityNote:          "Einmalig nötig — bitte den Active Key (nicht Posting Key) bereithalten.",
+
+    // ── VP-Chart ──────────────────────────────────────────────────────────────
+    chartVpToday:           "VP heute",
+
+    // ── Error hints ───────────────────────────────────────────────────────────
+    hintOpenSettings:       "Einstellungen → Vote-Consent aktivieren.",
+    hintGrantAuthority:     "Einstellungen → Posting Authority erteilen → @votebroker.",
+    hintAccountPaused:      "Einstellungen → offene Rechnung begleichen.",
+    hintGoToSettings:       "Gehe zu: Einstellungen-Tab",
+
     // ── Strategie / Autor-Tabelle ─────────────────────────────────────────────
     btnScanPosts:           "Offene Posts suchen →",
     btnScanning:            "Scannt…",
@@ -814,6 +844,36 @@ const translations = {
     dnaRecommended:         "Recommended",
     dnaAddAuthor:           "+ Author:",
 
+    // ── Navigation / Tabs ─────────────────────────────────────────────────────
+    tabDna:                 "🧬 Vote-DNA",
+    tabDashboard:           "📊 Dashboard",
+    tabCommunity:           "👥 Community",
+    tabSettings:            "⚙ Settings",
+
+    // ── Settings Panel ────────────────────────────────────────────────────────
+    settingsTitle:          "⚙ Settings",
+    settingsLanguage:       "Language",
+    settingsTimezone:       "Timezone",
+    settingsTimezoneNote:   "All data is stored internally in UTC. The timezone only affects the display.",
+    settingsPermissions:    "Permissions",
+    settingsActiveOf:       "{{n}} of {{total}} active",
+
+    // ── Posting Authority ─────────────────────────────────────────────────────
+    authorityTitle:         "Posting Authority",
+    authorityChecking:      "Checking...",
+    authorityGranted:       "@votebroker can vote server-side ✓",
+    authorityMissing:       "@votebroker does not have posting authority yet",
+    authorityNote:          "Required once — please have your Active Key (not Posting Key) ready.",
+
+    // ── VP-Chart ──────────────────────────────────────────────────────────────
+    chartVpToday:           "VP today",
+
+    // ── Error hints ───────────────────────────────────────────────────────────
+    hintOpenSettings:       "Settings → activate Vote-Consent.",
+    hintGrantAuthority:     "Settings → grant Posting Authority → @votebroker.",
+    hintAccountPaused:      "Settings → settle outstanding invoice.",
+    hintGoToSettings:       "Go to: Settings tab",
+
     // ── DNA Descriptions ─────────────────────────────────────────────────────
     dnaDescSelfVoter:       "A significant portion of votes go to own posts. Consider broadening to support more community members.",
     dnaDescLoyalInner:      "Strong loyalty to a small group of authors with consistent full-weight votes. Deep community ties.",
@@ -1084,6 +1144,26 @@ const translations = {
     debugSumPending:  "Suma pending_payout:",
     debugTitle:  "Vista de depuración",
     debugTopPosts:  "Top {{n}} posts · Método: Curation-Weight",
+    authorityChecking:  "Comprobando...",
+    authorityGranted:  "@votebroker puede votar desde el servidor ✓",
+    authorityMissing:  "@votebroker aún no tiene autoridad de publicación",
+    authorityNote:  "Necesario una vez — ten tu Active Key (no Posting Key) lista.",
+    authorityTitle:  "Autoridad de publicación",
+    chartVpToday:  "VP hoy",
+    hintAccountPaused:  "Ajustes → liquidar factura pendiente.",
+    hintGoToSettings:  "Ir a: pestaña Ajustes",
+    hintGrantAuthority:  "Ajustes → otorgar Posting Authority → @votebroker.",
+    hintOpenSettings:  "Ajustes → activar Vote-Consent.",
+    settingsActiveOf:  "{{n}} de {{total}} activo",
+    settingsLanguage:  "Idioma",
+    settingsPermissions:  "Permisos",
+    settingsTimezone:  "Zona horaria",
+    settingsTimezoneNote:  "Todos los datos se almacenan internamente en UTC. La zona horaria solo afecta la visualización.",
+    settingsTitle:  "⚙ Ajustes",
+    tabCommunity:  "👥 Comunidad",
+    tabDashboard:  "📊 Dashboard",
+    tabDna:  "🧬 Vote-DNA",
+    tabSettings:  "⚙ Ajustes",
     // ── Full coverage — keys from DE/EN ─────────────────────────────────────────
     actNewPost:                  "nuevo post",
     actNoActivity:               "Sin actividad aún",
@@ -1438,6 +1518,26 @@ const translations = {
     debugSumPending:  "pending_payout 합계:",
     debugTitle:  "디버그 보기",
     debugTopPosts:  "상위 {{n}} 게시물 · 방법: Curation-Weight",
+    authorityChecking:  "확인 중...",
+    authorityGranted:  "@votebroker가 서버에서 투표할 수 있음 ✓",
+    authorityMissing:  "@votebroker에 아직 게시 권한이 없습니다",
+    authorityNote:  "한 번만 필요 — Active Key(Posting Key 아님)를 준비하세요.",
+    authorityTitle:  "게시 권한",
+    chartVpToday:  "오늘 VP",
+    hintAccountPaused:  "설정 → 미결 청구서 정산.",
+    hintGoToSettings:  "이동: 설정 탭",
+    hintGrantAuthority:  "설정 → 게시 권한 부여 → @votebroker.",
+    hintOpenSettings:  "설정 → Vote-Consent 활성화.",
+    settingsActiveOf:  "{{total}} 중 {{n}} 활성",
+    settingsLanguage:  "언어",
+    settingsPermissions:  "권한",
+    settingsTimezone:  "시간대",
+    settingsTimezoneNote:  "모든 데이터는 내부적으로 UTC로 저장됩니다. 시간대는 표시에만 영향을 미칩니다.",
+    settingsTitle:  "⚙ 설정",
+    tabCommunity:  "👥 커뮤니티",
+    tabDashboard:  "📊 대시보드",
+    tabDna:  "🧬 Vote-DNA",
+    tabSettings:  "⚙ 설정",
     // ── Full coverage — keys from DE/EN ─────────────────────────────────────────
     actNewPost:                  "새 게시물",
     actNoActivity:               "아직 활동 없음",
@@ -1792,6 +1892,26 @@ const translations = {
     debugSumPending:  "待定支付总和:",
     debugTitle:  "调试视图",
     debugTopPosts:  "前 {{n}} 篇帖子 · 方法：Curation-Weight",
+    authorityChecking:  "检查中...",
+    authorityGranted:  "@votebroker 可以服务器端投票 ✓",
+    authorityMissing:  "@votebroker 尚无发帖权限",
+    authorityNote:  "仅需一次 — 请准备好 Active Key（非 Posting Key）。",
+    authorityTitle:  "发帖权限",
+    chartVpToday:  "今日 VP",
+    hintAccountPaused:  "设置 → 结清未付账单.",
+    hintGoToSettings:  "前往：设置标签",
+    hintGrantAuthority:  "设置 → 授予 Posting Authority → @votebroker.",
+    hintOpenSettings:  "设置 → 激活 Vote-Consent.",
+    settingsActiveOf:  "{{total}} 中 {{n}} 个活跃",
+    settingsLanguage:  "语言",
+    settingsPermissions:  "权限",
+    settingsTimezone:  "时区",
+    settingsTimezoneNote:  "所有数据内部以 UTC 存储。时区仅影响显示。",
+    settingsTitle:  "⚙ 设置",
+    tabCommunity:  "👥 社区",
+    tabDashboard:  "📊 仪表板",
+    tabDna:  "🧬 Vote-DNA",
+    tabSettings:  "⚙ 设置",
     // ── Full coverage — keys from DE/EN ─────────────────────────────────────────
     actNewPost:                  "新帖子",
     actNoActivity:               "尚无活动",

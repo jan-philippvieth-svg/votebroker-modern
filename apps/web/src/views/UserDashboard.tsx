@@ -1195,7 +1195,7 @@ function VpGraphToday({ todayStats, snapshot, timezone, locale }: {
   return (
     <div style={{ ...card, paddingBottom:"0.5rem" }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"0.4rem" }}>
-        <p style={{ ...lbl, margin:0 }}>VP heute</p>
+        <p style={{ ...lbl, margin:0 }}>{t("chartVpToday")}</p>
         <span style={{ color:C.dim, fontSize:"0.75rem", fontWeight:600 }}>{votes.length} Votes · {vpAtStart.toFixed(1)}% → {currentVp.toFixed(1)}%</span>
       </div>
       <div style={{ position:"relative" }}>
