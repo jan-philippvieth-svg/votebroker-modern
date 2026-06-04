@@ -187,11 +187,14 @@ export async function fetchVBEarnings(
   // Write matched outcomes (INSERT OR IGNORE = idempotent, safe to re-run)
   if (newOutcomes.length > 0) writeOutcomes(newOutcomes);
 
-  // Add vote counts per day (from vbVoteSet)
-  for (const [, vote] of vbVoteSet) {
-    if (vote.date < cutoffIso.slice(0, 10)) continue;
-    const existing = perDay.get(vote.date) ?? { sp: 0, votes: 0 };
-    perDay.set(vote.date, { sp: existing.sp, votes: existing.votes + 1 });
+  // Add vote counts per day — count ALL broadcasts (not deduplicated by post).
+  // Uses raw vbVoteRows so duplicate votes on the same post are counted separately,
+  // consistent with how Heute-Kachel counts (audit_events rows, not unique posts).
+  for (const row of vbVoteRows) {
+    const date = row.created_at.slice(0, 10);
+    if (date < cutoffIso.slice(0, 10)) continue;
+    const existing = perDay.get(date) ?? { sp: 0, votes: 0 };
+    perDay.set(date, { sp: existing.sp, votes: existing.votes + 1 });
   }
 
   // ── 5. Build ordered daily array with cumulative SP ───────────────────────
