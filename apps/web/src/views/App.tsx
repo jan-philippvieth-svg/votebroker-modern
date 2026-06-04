@@ -706,16 +706,28 @@ export function App() {
           <label className="language-select">
             <span>{t("language")}</span>
             <select value={locale} onChange={(event) => changeLocale(event.target.value as Locale)}>
-              <optgroup label="🌍 Europa / América">
-                {locales.filter(l => !l.separator && locales.indexOf(l) < locales.findIndex(x => x.separator)).map(item => (
-                  <option key={item.code} value={item.code}>{item.label}</option>
-                ))}
-              </optgroup>
-              <optgroup label="🌏 Asia / СНГ">
-                {locales.filter((_l, i) => i >= locales.findIndex(x => x.separator)).map(item => (
-                  <option key={item.code} value={item.code}>{item.label}</option>
-                ))}
-              </optgroup>
+              {(() => {
+                const groups: Array<{ label: string; items: typeof locales }> = [];
+                let current: typeof locales = [];
+                let gLabel = "🌍 Europa / América / Africa";
+                for (const l of locales) {
+                  if (l.separator && current.length > 0) {
+                    groups.push({ label: gLabel, items: current });
+                    current = [l];
+                    gLabel = groups.length === 1 ? "🌏 Asia" : "🌐 Europa Wschodnia / СНГ";
+                  } else {
+                    current.push(l);
+                  }
+                }
+                if (current.length > 0) groups.push({ label: gLabel, items: current });
+                return groups.map(g => (
+                  <optgroup key={g.label} label={g.label}>
+                    {g.items.map(item => (
+                      <option key={item.code} value={item.code}>{item.label}</option>
+                    ))}
+                  </optgroup>
+                ));
+              })()}
             </select>
           </label>
         </header>
@@ -816,16 +828,28 @@ export function App() {
           <label className="language-select">
             <span>{t("language")}</span>
             <select value={locale} onChange={(event) => changeLocale(event.target.value as Locale)}>
-              <optgroup label="🌍 Europa / América">
-                {locales.filter(l => !l.separator && locales.indexOf(l) < locales.findIndex(x => x.separator)).map(item => (
-                  <option key={item.code} value={item.code}>{item.label}</option>
-                ))}
-              </optgroup>
-              <optgroup label="🌏 Asia / СНГ">
-                {locales.filter((_l, i) => i >= locales.findIndex(x => x.separator)).map(item => (
-                  <option key={item.code} value={item.code}>{item.label}</option>
-                ))}
-              </optgroup>
+              {(() => {
+                const groups: Array<{ label: string; items: typeof locales }> = [];
+                let current: typeof locales = [];
+                let gLabel = "🌍 Europa / América / Africa";
+                for (const l of locales) {
+                  if (l.separator && current.length > 0) {
+                    groups.push({ label: gLabel, items: current });
+                    current = [l];
+                    gLabel = groups.length === 1 ? "🌏 Asia" : "🌐 Europa Wschodnia / СНГ";
+                  } else {
+                    current.push(l);
+                  }
+                }
+                if (current.length > 0) groups.push({ label: gLabel, items: current });
+                return groups.map(g => (
+                  <optgroup key={g.label} label={g.label}>
+                    {g.items.map(item => (
+                      <option key={item.code} value={item.code}>{item.label}</option>
+                    ))}
+                  </optgroup>
+                ));
+              })()}
             </select>
           </label>
           <button className="secondary-button" type="button" onClick={disconnect} style={{ padding: "0.3rem 0.75rem", fontSize: "0.8rem" }}>
@@ -3327,29 +3351,29 @@ function AccountSnapshotPanel(props: {
 // Timezone labels per locale — value (IANA ID) stays unchanged, only the display label changes.
 // Abbreviations (MEZ, JST, KST, …) are internationally recognized and stay in all languages.
 const TIMEZONE_LABELS: Record<string, Record<string, string>> = {
-  "Europe/Berlin":      { de: "Berlin (MEZ/MESZ)",      en: "Berlin (CET/CEST)",    es: "Berlín (CET/CEST)",     ko: "베를린 (CET/CEST)",    zh: "柏林 (CET/CEST)",      ru: "Берлин (CET/CEST)"      , pcm: "Berlin (CET/CEST)", pt: "Berlim (CET/CEST)"      },
-  "Europe/London":      { de: "London (GMT/BST)",        en: "London (GMT/BST)",     es: "Londres (GMT/BST)",     ko: "런던 (GMT/BST)",       zh: "伦敦 (GMT/BST)",        ru: "Лондон (GMT/BST)"       , pcm: "London (GMT/BST)", pt: "Londres (GMT/BST)"      },
-  "Europe/Paris":       { de: "Paris (MEZ/MESZ)",        en: "Paris (CET/CEST)",     es: "París (CET/CEST)",      ko: "파리 (CET/CEST)",      zh: "巴黎 (CET/CEST)",       ru: "Париж (CET/CEST)"       , pcm: "Paris (CET/CEST)", pt: "Paris (CET/CEST)"      },
-  "Europe/Vienna":      { de: "Wien (MEZ/MESZ)",         en: "Vienna (CET/CEST)",    es: "Viena (CET/CEST)",      ko: "빈 (CET/CEST)",        zh: "维也纳 (CET/CEST)",     ru: "Вена (CET/CEST)"        , pcm: "Vienna (CET/CEST)", pt: "Viena (CET/CEST)"      },
-  "Europe/Zurich":      { de: "Zürich (MEZ/MESZ)",       en: "Zurich (CET/CEST)",    es: "Zúrich (CET/CEST)",     ko: "취리히 (CET/CEST)",    zh: "苏黎世 (CET/CEST)",     ru: "Цюрих (CET/CEST)"       , pcm: "Zurich (CET/CEST)", pt: "Zurique (CET/CEST)"      },
-  "Europe/Amsterdam":   { de: "Amsterdam (MEZ/MESZ)",    en: "Amsterdam (CET/CEST)", es: "Ámsterdam (CET/CEST)",  ko: "암스테르담 (CET/CEST)", zh: "阿姆斯特丹 (CET/CEST)", ru: "Амстердам (CET/CEST)"   , pcm: "Amsterdam (CET/CEST)", pt: "Amsterdã (CET/CEST)"      },
-  "Europe/Warsaw":      { de: "Warschau (MEZ/MESZ)",     en: "Warsaw (CET/CEST)",    es: "Varsovia (CET/CEST)",   ko: "바르샤바 (CET/CEST)",  zh: "华沙 (CET/CEST)",       ru: "Варшава (CET/CEST)"      , pcm: "Warsaw (CET/CEST)", pt: "Varsóvia (CET/CEST)"      },
-  "Europe/Stockholm":   { de: "Stockholm (MEZ/MESZ)",    en: "Stockholm (CET/CEST)", es: "Estocolmo (CET/CEST)",  ko: "스톡홀름 (CET/CEST)",  zh: "斯德哥尔摩 (CET/CEST)", ru: "Стокгольм (CET/CEST)"   , pcm: "Stockholm (CET/CEST)", pt: "Estocolmo (CET/CEST)"      },
-  "Europe/Moscow":      { de: "Moskau (MSK)",            en: "Moscow (MSK)",         es: "Moscú (MSK)",           ko: "모스크바 (MSK)",       zh: "莫斯科 (MSK)",          ru: "Москва (MSK)"            , pcm: "Moscow (MSK)", pt: "Moscou (MSK)"      },
-  "Asia/Dubai":         { de: "Dubai (GST)",             en: "Dubai (GST)",          es: "Dubái (GST)",           ko: "두바이 (GST)",         zh: "迪拜 (GST)",             ru: "Дубай (GST)"             , pcm: "Dubai (GST)", pt: "Dubai (GST)"      },
-  "Asia/Kolkata":       { de: "Kolkata (IST)",           en: "Kolkata (IST)",        es: "Calcuta (IST)",         ko: "콜카타 (IST)",         zh: "加尔各答 (IST)",         ru: "Калькутта (IST)"         , pcm: "Kolkata (IST)", pt: "Calcutá (IST)"      },
-  "Asia/Singapore":     { de: "Singapur (SGT)",          en: "Singapore (SGT)",      es: "Singapur (SGT)",        ko: "싱가포르 (SGT)",       zh: "新加坡 (SGT)",           ru: "Сингапур (SGT)"          , pcm: "Singapore (SGT)", pt: "Singapura (SGT)"      },
-  "Asia/Tokyo":         { de: "Tokio (JST)",             en: "Tokyo (JST)",          es: "Tokio (JST)",           ko: "도쿄 (JST)",           zh: "东京 (JST)",             ru: "Токио (JST)"             , pcm: "Tokyo (JST)", pt: "Tóquio (JST)"      },
-  "Asia/Seoul":         { de: "Seoul (KST)",             en: "Seoul (KST)",          es: "Seúl (KST)",            ko: "서울 (KST)",           zh: "首尔 (KST)",             ru: "Сеул (KST)"              , pcm: "Seoul (KST)", pt: "Seul (KST)"      },
-  "Asia/Shanghai":      { de: "Shanghai (CST)",          en: "Shanghai (CST)",       es: "Shanghái (CST)",        ko: "상하이 (CST)",         zh: "上海 (CST)",             ru: "Шанхай (CST)"            , pcm: "Shanghai (CST)", pt: "Xangai (CST)"      },
-  "Australia/Sydney":   { de: "Sydney (AEST/AEDT)",      en: "Sydney (AEST/AEDT)",   es: "Sídney (AEST/AEDT)",    ko: "시드니 (AEST/AEDT)",   zh: "悉尼 (AEST/AEDT)",      ru: "Сидней (AEST/AEDT)"      , pcm: "Sydney (AEST/AEDT)", pt: "Sydney (AEST/AEDT)"      },
-  "Pacific/Auckland":   { de: "Auckland (NZST/NZDT)",    en: "Auckland (NZST/NZDT)", es: "Auckland (NZST/NZDT)",  ko: "오클랜드 (NZST/NZDT)", zh: "奥克兰 (NZST/NZDT)",   ru: "Окленд (NZST/NZDT)"     , pcm: "Auckland (NZST/NZDT)", pt: "Auckland (NZST/NZDT)"      },
-  "UTC":                { de: "UTC / Greenwich",         en: "UTC / Greenwich",      es: "UTC / Greenwich",       ko: "UTC / 그리니치",       zh: "UTC / 格林尼治",         ru: "UTC / Гринвич"           , pcm: "UTC / Greenwich", pt: "UTC / Greenwich"      },
-  "America/Sao_Paulo":  { de: "São Paulo (BRT)",         en: "São Paulo (BRT)",      es: "São Paulo (BRT)",       ko: "상파울루 (BRT)",       zh: "圣保罗 (BRT)",           ru: "Сан-Паулу (BRT)"         , pcm: "São Paulo (BRT)", pt: "São Paulo (BRT)"      },
-  "America/New_York":   { de: "New York (ET)",           en: "New York (ET)",        es: "Nueva York (ET)",       ko: "뉴욕 (ET)",            zh: "纽约 (ET)",              ru: "Нью-Йорк (ET)"           , pcm: "New York (ET)", pt: "Nova York (ET)"      },
-  "America/Chicago":    { de: "Chicago (CT)",            en: "Chicago (CT)",         es: "Chicago (CT)",          ko: "시카고 (CT)",          zh: "芝加哥 (CT)",            ru: "Чикаго (CT)"             , pcm: "Chicago (CT)", pt: "Chicago (CT)"      },
-  "America/Denver":     { de: "Denver (MT)",             en: "Denver (MT)",          es: "Denver (MT)",           ko: "덴버 (MT)",            zh: "丹佛 (MT)",              ru: "Денвер (MT)"             , pcm: "Denver (MT)", pt: "Denver (MT)"      },
-  "America/Los_Angeles":{ de: "Los Angeles (PT)",        en: "Los Angeles (PT)",     es: "Los Ángeles (PT)",      ko: "로스앤젤레스 (PT)",    zh: "洛杉矶 (PT)",            ru: "Лос-Анджелес (PT)"       , pcm: "Los Angeles (PT)", pt: "Los Angeles (PT)"      },
+  "Europe/Berlin":      { de: "Berlin (MEZ/MESZ)",      en: "Berlin (CET/CEST)",    es: "Berlín (CET/CEST)",     ko: "베를린 (CET/CEST)",    zh: "柏林 (CET/CEST)",      ru: "Берлин (CET/CEST)"      , pcm: "Berlin (CET/CEST)", pl: "Berlin (CET/CEST)", tr: "Berlin (CET/CEST)", ja: "ベルリン (CET/CEST)", bn: "বার্লিন (CET/CEST)", hi: "बर्लिन (CET/CEST)", id: "Berlin (CET/CEST)", pt: "Berlim (CET/CEST)"      },
+  "Europe/London":      { de: "London (GMT/BST)",        en: "London (GMT/BST)",     es: "Londres (GMT/BST)",     ko: "런던 (GMT/BST)",       zh: "伦敦 (GMT/BST)",        ru: "Лондон (GMT/BST)"       , pcm: "London (GMT/BST)", pl: "Londyn (GMT/BST)", tr: "Londra (GMT/BST)", ja: "ロンドン (GMT/BST)", bn: "লন্ডন (GMT/BST)", hi: "लंदन (GMT/BST)", id: "London (GMT/BST)", pt: "Londres (GMT/BST)"      },
+  "Europe/Paris":       { de: "Paris (MEZ/MESZ)",        en: "Paris (CET/CEST)",     es: "París (CET/CEST)",      ko: "파리 (CET/CEST)",      zh: "巴黎 (CET/CEST)",       ru: "Париж (CET/CEST)"       , pcm: "Paris (CET/CEST)", pl: "Paryż (CET/CEST)", tr: "Paris (CET/CEST)", ja: "パリ (CET/CEST)", bn: "প্যারিস (CET/CEST)", hi: "पेरिस (CET/CEST)", id: "Paris (CET/CEST)", pt: "Paris (CET/CEST)"      },
+  "Europe/Vienna":      { de: "Wien (MEZ/MESZ)",         en: "Vienna (CET/CEST)",    es: "Viena (CET/CEST)",      ko: "빈 (CET/CEST)",        zh: "维也纳 (CET/CEST)",     ru: "Вена (CET/CEST)"        , pcm: "Vienna (CET/CEST)", pl: "Wiedeń (CET/CEST)", tr: "Viyana (CET/CEST)", ja: "ウィーン (CET/CEST)", bn: "ভিয়েনা (CET/CEST)", hi: "वियना (CET/CEST)", id: "Wina (CET/CEST)", pt: "Viena (CET/CEST)"      },
+  "Europe/Zurich":      { de: "Zürich (MEZ/MESZ)",       en: "Zurich (CET/CEST)",    es: "Zúrich (CET/CEST)",     ko: "취리히 (CET/CEST)",    zh: "苏黎世 (CET/CEST)",     ru: "Цюрих (CET/CEST)"       , pcm: "Zurich (CET/CEST)", pl: "Zurych (CET/CEST)", tr: "Zürih (CET/CEST)", ja: "チューリッヒ (CET/CEST)", bn: "জুরিখ (CET/CEST)", hi: "ज़्यूरिख़ (CET/CEST)", id: "Zurich (CET/CEST)", pt: "Zurique (CET/CEST)"      },
+  "Europe/Amsterdam":   { de: "Amsterdam (MEZ/MESZ)",    en: "Amsterdam (CET/CEST)", es: "Ámsterdam (CET/CEST)",  ko: "암스테르담 (CET/CEST)", zh: "阿姆斯特丹 (CET/CEST)", ru: "Амстердам (CET/CEST)"   , pcm: "Amsterdam (CET/CEST)", pl: "Amsterdam (CET/CEST)", tr: "Amsterdam (CET/CEST)", ja: "アムステルダム (CET/CEST)", bn: "আমস্টারডাম (CET/CEST)", hi: "एम्स्टर्डम (CET/CEST)", id: "Amsterdam (CET/CEST)", pt: "Amsterdã (CET/CEST)"      },
+  "Europe/Warsaw":      { de: "Warschau (MEZ/MESZ)",     en: "Warsaw (CET/CEST)",    es: "Varsovia (CET/CEST)",   ko: "바르샤바 (CET/CEST)",  zh: "华沙 (CET/CEST)",       ru: "Варшава (CET/CEST)"      , pcm: "Warsaw (CET/CEST)", pl: "Warszawa (CET/CEST)", tr: "Varşova (CET/CEST)", ja: "ワルシャワ (CET/CEST)", bn: "ওয়ারশ (CET/CEST)", hi: "वारसॉ (CET/CEST)", id: "Warsawa (CET/CEST)", pt: "Varsóvia (CET/CEST)"      },
+  "Europe/Stockholm":   { de: "Stockholm (MEZ/MESZ)",    en: "Stockholm (CET/CEST)", es: "Estocolmo (CET/CEST)",  ko: "스톡홀름 (CET/CEST)",  zh: "斯德哥尔摩 (CET/CEST)", ru: "Стокгольм (CET/CEST)"   , pcm: "Stockholm (CET/CEST)", pl: "Sztokholm (CET/CEST)", tr: "Stockholm (CET/CEST)", ja: "ストックホルム (CET/CEST)", bn: "স্টকহোম (CET/CEST)", hi: "स्टॉकहोम (CET/CEST)", id: "Stockholm (CET/CEST)", pt: "Estocolmo (CET/CEST)"      },
+  "Europe/Moscow":      { de: "Moskau (MSK)",            en: "Moscow (MSK)",         es: "Moscú (MSK)",           ko: "모스크바 (MSK)",       zh: "莫斯科 (MSK)",          ru: "Москва (MSK)"            , pcm: "Moscow (MSK)", pl: "Moskwa (MSK)", tr: "Moskova (MSK)", ja: "モスクワ (MSK)", bn: "মস্কো (MSK)", hi: "मॉस्को (MSK)", id: "Moskow (MSK)", pt: "Moscou (MSK)"      },
+  "Asia/Dubai":         { de: "Dubai (GST)",             en: "Dubai (GST)",          es: "Dubái (GST)",           ko: "두바이 (GST)",         zh: "迪拜 (GST)",             ru: "Дубай (GST)"             , pcm: "Dubai (GST)", pl: "Dubaj (GST)", tr: "Dubai (GST)", ja: "ドバイ (GST)", bn: "দুবাই (GST)", hi: "दुबई (GST)", id: "Dubai (GST)", pt: "Dubai (GST)"      },
+  "Asia/Kolkata":       { de: "Kolkata (IST)",           en: "Kolkata (IST)",        es: "Calcuta (IST)",         ko: "콜카타 (IST)",         zh: "加尔各答 (IST)",         ru: "Калькутта (IST)"         , pcm: "Kolkata (IST)", pl: "Kalkuta (IST)", tr: "Kalkuta (IST)", ja: "コルカタ (IST)", bn: "কলকাতা (IST)", hi: "कोलकाता (IST)", id: "Kolkata (IST)", pt: "Calcutá (IST)"      },
+  "Asia/Singapore":     { de: "Singapur (SGT)",          en: "Singapore (SGT)",      es: "Singapur (SGT)",        ko: "싱가포르 (SGT)",       zh: "新加坡 (SGT)",           ru: "Сингапур (SGT)"          , pcm: "Singapore (SGT)", pl: "Singapur (SGT)", tr: "Singapur (SGT)", ja: "シンガポール (SGT)", bn: "সিঙ্গাপুর (SGT)", hi: "सिंगापुर (SGT)", id: "Singapura (SGT)", pt: "Singapura (SGT)"      },
+  "Asia/Tokyo":         { de: "Tokio (JST)",             en: "Tokyo (JST)",          es: "Tokio (JST)",           ko: "도쿄 (JST)",           zh: "东京 (JST)",             ru: "Токио (JST)"             , pcm: "Tokyo (JST)", pl: "Tokio (JST)", tr: "Tokyo (JST)", ja: "東京 (JST)", bn: "টোকিও (JST)", hi: "टोक्यो (JST)", id: "Tokyo (JST)", pt: "Tóquio (JST)"      },
+  "Asia/Seoul":         { de: "Seoul (KST)",             en: "Seoul (KST)",          es: "Seúl (KST)",            ko: "서울 (KST)",           zh: "首尔 (KST)",             ru: "Сеул (KST)"              , pcm: "Seoul (KST)", pl: "Seul (KST)", tr: "Seul (KST)", ja: "ソウル (KST)", bn: "সিউল (KST)", hi: "सियोल (KST)", id: "Seoul (KST)", pt: "Seul (KST)"      },
+  "Asia/Shanghai":      { de: "Shanghai (CST)",          en: "Shanghai (CST)",       es: "Shanghái (CST)",        ko: "상하이 (CST)",         zh: "上海 (CST)",             ru: "Шанхай (CST)"            , pcm: "Shanghai (CST)", pl: "Szanghaj (CST)", tr: "Shangay (CST)", ja: "上海 (CST)", bn: "সাংহাই (CST)", hi: "शंघाई (CST)", id: "Shanghai (CST)", pt: "Xangai (CST)"      },
+  "Australia/Sydney":   { de: "Sydney (AEST/AEDT)",      en: "Sydney (AEST/AEDT)",   es: "Sídney (AEST/AEDT)",    ko: "시드니 (AEST/AEDT)",   zh: "悉尼 (AEST/AEDT)",      ru: "Сидней (AEST/AEDT)"      , pcm: "Sydney (AEST/AEDT)", pl: "Sydney (AEST/AEDT)", tr: "Sidney (AEST/AEDT)", ja: "シドニー (AEST/AEDT)", bn: "সিডনি (AEST/AEDT)", hi: "सिडनी (AEST/AEDT)", id: "Sydney (AEST/AEDT)", pt: "Sydney (AEST/AEDT)"      },
+  "Pacific/Auckland":   { de: "Auckland (NZST/NZDT)",    en: "Auckland (NZST/NZDT)", es: "Auckland (NZST/NZDT)",  ko: "오클랜드 (NZST/NZDT)", zh: "奥克兰 (NZST/NZDT)",   ru: "Окленд (NZST/NZDT)"     , pcm: "Auckland (NZST/NZDT)", pl: "Auckland (NZST/NZDT)", tr: "Auckland (NZST/NZDT)", ja: "オークランド (NZST/NZDT)", bn: "অকল্যান্ড (NZST/NZDT)", hi: "ऑकलैंड (NZST/NZDT)", id: "Auckland (NZST/NZDT)", pt: "Auckland (NZST/NZDT)"      },
+  "UTC":                { de: "UTC / Greenwich",         en: "UTC / Greenwich",      es: "UTC / Greenwich",       ko: "UTC / 그리니치",       zh: "UTC / 格林尼治",         ru: "UTC / Гринвич"           , pcm: "UTC / Greenwich", pl: "UTC / Greenwich", tr: "UTC / Greenwich", ja: "UTC / グリニッジ", bn: "UTC / Greenwich", hi: "UTC / Greenwich", id: "UTC / Greenwich", pt: "UTC / Greenwich"      },
+  "America/Sao_Paulo":  { de: "São Paulo (BRT)",         en: "São Paulo (BRT)",      es: "São Paulo (BRT)",       ko: "상파울루 (BRT)",       zh: "圣保罗 (BRT)",           ru: "Сан-Паулу (BRT)"         , pcm: "São Paulo (BRT)", pl: "Sao Paulo (BRT)", tr: "Sao Paulo (BRT)", ja: "サンパウロ (BRT)", bn: "সাও পাওলো (BRT)", hi: "साओ पाउलो (BRT)", id: "Sao Paulo (BRT)", pt: "São Paulo (BRT)"      },
+  "America/New_York":   { de: "New York (ET)",           en: "New York (ET)",        es: "Nueva York (ET)",       ko: "뉴욕 (ET)",            zh: "纽约 (ET)",              ru: "Нью-Йорк (ET)"           , pcm: "New York (ET)", pl: "Nowy Jork (ET)", tr: "New York (ET)", ja: "ニューヨーク (ET)", bn: "নিউ ইয়র্ক (ET)", hi: "न्यूयॉर्क (ET)", id: "New York (ET)", pt: "Nova York (ET)"      },
+  "America/Chicago":    { de: "Chicago (CT)",            en: "Chicago (CT)",         es: "Chicago (CT)",          ko: "시카고 (CT)",          zh: "芝加哥 (CT)",            ru: "Чикаго (CT)"             , pcm: "Chicago (CT)", pl: "Chicago (CT)", tr: "Chicago (CT)", ja: "シカゴ (CT)", bn: "শিকাগো (CT)", hi: "शिकागो (CT)", id: "Chicago (CT)", pt: "Chicago (CT)"      },
+  "America/Denver":     { de: "Denver (MT)",             en: "Denver (MT)",          es: "Denver (MT)",           ko: "덴버 (MT)",            zh: "丹佛 (MT)",              ru: "Денвер (MT)"             , pcm: "Denver (MT)", pl: "Denver (MT)", tr: "Denver (MT)", ja: "デンバー (MT)", bn: "ডেনভার (MT)", hi: "डेनवर (MT)", id: "Denver (MT)", pt: "Denver (MT)"      },
+  "America/Los_Angeles":{ de: "Los Angeles (PT)",        en: "Los Angeles (PT)",     es: "Los Ángeles (PT)",      ko: "로스앤젤레스 (PT)",    zh: "洛杉矶 (PT)",            ru: "Лос-Анджелес (PT)"       , pcm: "Los Angeles (PT)", pl: "Los Angeles (PT)", tr: "Los Angeles (PT)", ja: "ロサンゼルス (PT)", bn: "লস অ্যাঞ্জেলেস (PT)", hi: "लॉस एंजिल्स (PT)", id: "Los Angeles (PT)", pt: "Los Angeles (PT)"      },
 };
 
 function getTimezones(locale: string): Array<{ value: string; label: string }> {
