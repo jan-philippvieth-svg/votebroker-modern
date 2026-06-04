@@ -196,6 +196,43 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     return result;
   });
 
+  // ── POST /api/promo/generate — International Promo Post Pipeline ─────────────
+  app.post("/api/promo/generate", async (request, reply) => {
+    // Accept operator token OR admin session
+    const opToken = (request.headers["x-operator-token"] as string | undefined) ?? "";
+    const sessionToken = getSessionHeader(request.headers["session"]);
+    const session = sessionToken ? getSession(sessionToken) : null;
+    const isOperator = opToken && opToken === operatorConfig.token && !!operatorConfig.token;
+    const isAdminSession = session?.user.username === "jan-philippvieth"; // admin only
+    if (!isOperator && !isAdminSession) {
+      return reply.code(403).send({ error: "operator_or_admin_required" });
+    }
+
+    const body = z.object({
+      locale: z.enum(["en","de","es","pt","id","ru","ko","zh","ja","hi","bn","tr","pl","pcm"]),
+    }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: "invalid_request", detail: body.error.flatten() });
+
+    const { locale } = body.data;
+    const contentDir = process.env.VOTEBROKER_CONTENT_DIR ?? "/app/data/content";
+
+    try {
+      const { generatePromoPost } = await import("./jobs/promoPost.js");
+      const result = await generatePromoPost(
+        locale as import("./jobs/promoPost.js").PromoLocale,
+        contentDir,
+        request.log as unknown as typeof console,
+      );
+      return result;
+    } catch (err) {
+      request.log.error({ err }, "promo post generation failed");
+      return reply.code(500).send({
+        error:  "promo_generation_failed",
+        detail: err instanceof Error ? err.message : "unknown",
+      });
+    }
+  });
+
   app.get("/api/account/snapshot", async (request, reply) => {
     const query = z.object({ username: z.string().min(1) }).safeParse(request.query);
     if (!query.success) {

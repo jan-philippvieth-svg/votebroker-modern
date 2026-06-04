@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import {
   captureScreenshots, ContentValidationError, editDraftContent, fixScreenshotUrls,
-  generateDevlogContent, getAdminCockpit, getContentDrafts, getContentPreview,
+  generateDevlogContent, generatePromoPost, getAdminCockpit, getContentDrafts, getContentPreview,
   injectScreenshots, listScreenshots, publishDraft, triggerFeePost, updateDraftStatus,
   type AdminCockpit, type AuthSession, type BroadcastEntry,
   type ContentDraft, type ContentListResponse, type ContentQueueItem,
-  type DraftStatus, type FeePostLogEntry, type PublishResult, type ScreenshotFile,
+  type DraftStatus, type FeePostLogEntry, type PromoLocale, type PublishResult, type ScreenshotFile,
+  PROMO_LOCALES,
 } from "../api";
 
 export const ADMIN_USERNAME = "jan-philippvieth";
@@ -500,6 +501,8 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
   const [publishResult, setPublishResult] = useState<PublishResult | null>(null);
   const [screenshots, setScreenshots] = useState<ScreenshotFile[]>([]);
   const [showScreenshots, setShowScreenshots] = useState(false);
+  const [promoLocale, setPromoLocale] = useState<PromoLocale>("en");
+  const [promoStatus, setPromoStatus] = useState<string | null>(null);
 
   const { getContentDrafts: gcd, getContentPreview: gcp, updateDraftStatus: uds, editDraftContent: edc, publishDraft: pd } = { getContentDrafts, getContentPreview, updateDraftStatus: updateDraftStatus, editDraftContent, publishDraft };
 
@@ -539,6 +542,22 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
       }
     } catch (e) {
       setActionMsg(`✗ ${e instanceof Error ? e.message : "Fehler"}`);
+    } finally { setSaving(false); }
+  }
+
+  async function doPromoGenerate() {
+    setSaving(true);
+    setPromoStatus(`⏳ Scanne Blockchain für ${PROMO_LOCALES.find(l => l.code === promoLocale)?.nativeName ?? promoLocale}…`);
+    setActionMsg(null);
+    try {
+      // Use session token — API accepts admin session as alternative to operator token
+      const result = await generatePromoPost(session.token, promoLocale);
+      setPromoStatus(`✓ Draft erstellt: ${result.filename}`);
+      await load();
+      setSelected(result.filename);
+      await openPreview(result.filename);
+    } catch (e) {
+      setPromoStatus(`✗ ${e instanceof Error ? e.message : "Fehler"}`);
     } finally { setSaving(false); }
   }
 
@@ -629,13 +648,58 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
       <div style={card}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
           <p style={{ ...lbl, margin: 0 }}>Content Queue</p>
-          <button
-            style={{ ...btnStyle(C.info), fontSize: "0.68rem", padding: "0.2rem 0.55rem" }}
-            type="button" disabled={saving}
-            onClick={() => void doGenerate(false, false)}
-            title="Generiert heutigen Devlog-Draft (Änderungen seit letztem Devlog)"
-          >+ Devlog</button>
+          <div style={{ display: "flex", gap: "0.3rem" }}>
+            <button
+              style={{ ...btnStyle(C.info), fontSize: "0.68rem", padding: "0.2rem 0.55rem" }}
+              type="button" disabled={saving}
+              onClick={() => void doGenerate(false, false)}
+              title="Generiert heutigen Devlog-Draft"
+            >+ Devlog</button>
+            <button
+              style={{ ...btnStyle(C.purple), fontSize: "0.68rem", padding: "0.2rem 0.55rem" }}
+              type="button" disabled={saving}
+              onClick={() => {
+                const el = document.getElementById("promo-section");
+                el?.scrollIntoView({ behavior: "smooth" });
+              }}
+              title="Neuen Promo-Post generieren"
+            >🌍 Promo</button>
+          </div>
         </div>
+
+        {/* Promo Post Generator */}
+        <div id="promo-section" style={{
+          background: C.purple + "08", border: `1px solid ${C.purple}30`,
+          borderRadius: "8px", padding: "0.6rem 0.75rem", marginBottom: "0.5rem",
+        }}>
+          <p style={{ color: C.purple, fontSize: "0.72rem", fontWeight: 700, margin: "0 0 0.4rem", textTransform: "uppercase" as const }}>
+            🌍 Internationaler Promo Post
+          </p>
+          <select
+            value={promoLocale}
+            onChange={e => setPromoLocale(e.target.value as PromoLocale)}
+            disabled={saving}
+            style={{ width: "100%", fontSize: "0.75rem", padding: "0.25rem 0.4rem", marginBottom: "0.35rem",
+              background: "#fff", border: `1px solid ${C.border}`, borderRadius: "5px", color: C.text }}
+          >
+            {PROMO_LOCALES.map(l => (
+              <option key={l.code} value={l.code}>{l.label} — {l.nativeName}</option>
+            ))}
+          </select>
+          <button
+            style={{ ...btnStyle(C.purple), fontSize: "0.72rem", width: "100%", fontWeight: 700 }}
+            type="button" disabled={saving}
+            onClick={() => void doPromoGenerate()}
+          >
+            {saving ? "⏳ Analysiere…" : "Promo Draft generieren"}
+          </button>
+          {promoStatus && (
+            <p style={{ fontSize: "0.68rem", color: promoStatus.startsWith("✓") ? C.ok : promoStatus.startsWith("✗") ? C.err : C.warn, margin: "0.3rem 0 0" }}>
+              {promoStatus}
+            </p>
+          )}
+        </div>
+
         {/* Banner: today's devlog missing */}
         {!loading && !hasTodayDraft && (
           <div style={{

@@ -1179,3 +1179,52 @@ export async function fixScreenshotUrls(token: string, filename: string): Promis
   if (!res.ok) throw new Error(`fix-urls failed (${res.status})`);
   return res.json();
 }
+
+export type PromoLocale = "en"|"de"|"es"|"pt"|"id"|"ru"|"ko"|"zh"|"ja"|"hi"|"bn"|"tr"|"pl"|"pcm";
+
+export interface PromoAnalysis {
+  locale: PromoLocale;
+  communities: Array<{ name: string; postCount: number; topTag: string }>;
+  topTags: string[];
+  topAuthors: string[];
+  trendingTopics: string[];
+  styleProfile: { avgLength: string; tone: string; usesLists: boolean; usesImages: boolean };
+  recommendation: { community: string; tags: string[]; postingHour: number; reasoning: string };
+  scannedAt: string;
+}
+
+export interface PromoResult {
+  filename: string;
+  analysis: PromoAnalysis;
+  screenshotSnap: string | null;
+}
+
+export const PROMO_LOCALES: Array<{ code: PromoLocale; label: string; nativeName: string }> = [
+  { code: "en",  label: "EN",    nativeName: "English" },
+  { code: "de",  label: "DE",    nativeName: "Deutsch" },
+  { code: "es",  label: "ES",    nativeName: "Español" },
+  { code: "pt",  label: "PT-BR", nativeName: "Português" },
+  { code: "id",  label: "ID",    nativeName: "Bahasa Indonesia" },
+  { code: "ru",  label: "RU",    nativeName: "Русский" },
+  { code: "ko",  label: "KO",    nativeName: "한국어" },
+  { code: "zh",  label: "ZH",    nativeName: "中文" },
+  { code: "ja",  label: "JA",    nativeName: "日本語" },
+  { code: "hi",  label: "HI",    nativeName: "हिन्दी" },
+  { code: "bn",  label: "BN",    nativeName: "বাংলা" },
+  { code: "tr",  label: "TR",    nativeName: "Türkçe" },
+  { code: "pl",  label: "PL",    nativeName: "Polski" },
+  { code: "pcm", label: "Naija", nativeName: "Naija (Nigerian Pidgin)" },
+];
+
+export async function generatePromoPost(operatorToken: string, locale: PromoLocale): Promise<PromoResult> {
+  const res = await fetch(`${API_BASE}/api/promo/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-operator-token": operatorToken },
+    body: JSON.stringify({ locale }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: string; detail?: string };
+    throw new Error(err.detail ?? err.error ?? `Promo generation failed (${res.status})`);
+  }
+  return res.json();
+}
