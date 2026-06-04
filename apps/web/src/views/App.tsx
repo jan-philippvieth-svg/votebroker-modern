@@ -2873,7 +2873,7 @@ function VotePlanSection(props: {
               onChange={e => setConfirmed(e.target.checked)}
               style={{ accentColor: "#d97706" }}
             />
-            Ich habe den Plan überprüft und bestätige, dass diese {entries.length} Votes gesendet werden sollen.
+            Ich habe den Plan überprüft und bestätige, dass diese {allPlanEntries.length} Votes gesendet werden sollen.
           </label>
 
           <div style={{ display: "flex", gap: "0.5rem" }}>
@@ -2894,7 +2894,7 @@ function VotePlanSection(props: {
       {phase === "executing" && (
         <div style={{ background: "#ffffff", border: "1px solid #30363d", borderRadius: "6px", padding: "0.75rem 1rem" }}>
           <p style={{ color: "#2d3a42", fontWeight: 600, margin: "0 0 0.5rem" }}>
-            Sende Votes... {execLog.length}/{entries.length}
+            Sende Votes... {execLog.length}/{allPlanEntries.length}
           </p>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem", fontFamily: "monospace", fontSize: "0.77rem" }}>
             {execLog.map((l, i) => (
@@ -2902,8 +2902,8 @@ function VotePlanSection(props: {
                 {l.status === "sent" ? "✓" : l.status === "skipped" ? "⊘" : "✗"} @{l.author}/{l.permlink.slice(0, 30)} — {l.message}
               </div>
             ))}
-            {execLog.length < entries.length && !aborted && (
-              <div style={{ color: "#607078" }}>⏳ @{entries[execIndex]?.author ?? "..."}...</div>
+            {execLog.length < allPlanEntries.length && !aborted && (
+              <div style={{ color: "#607078" }}>⏳ @{allPlanEntries[execIndex]?.author ?? "..."}...</div>
             )}
             {aborted && <div style={{ color: "#dc2626" }}>⛔ Gestoppt wegen Fehler</div>}
           </div>
