@@ -862,8 +862,7 @@ export function App() {
 
       {/* Tab: Vote-DNA */}
       {activeTab === "dna" && (
-        <div style={{ padding: "1.25rem 1.5rem" }}>
-          <CurationDnaPanel
+        <CurationDnaPanel
             error={curationError}
             loading={curationLoading}
             profile={curationProfile}
@@ -885,7 +884,6 @@ export function App() {
             onGenerateWithTarget={generateVotes}
             targetVotingPowerPct={targetVotingPowerPct}
           />
-        </div>
       )}
 
       {/* Tab: Dashboard */}
@@ -1692,7 +1690,7 @@ function CurationDnaPanel(props: {
   ];
 
   return (
-    <section style={{ background: "#ffffff", border: "1px solid #dde8ed", borderRadius: "14px", padding: "1.5rem 1.75rem", boxShadow: "0 2px 8px rgba(17,37,45,0.06)" }}>
+    <section style={{ padding: "1.5rem 2rem", display: "flex", flexDirection: "column" as const, gap: "1.25rem" }}>
 
       {/* ── 1. Hero ── */}
       <div style={{ display: "flex", alignItems: "center", gap: "1rem", padding: "1rem 1.25rem", background: "linear-gradient(135deg, #f5f0ff 0%, #ffffff 60%, #edfbf9 100%)", borderRadius: "12px", border: "1px solid #e0d4fc", marginBottom: "1.25rem", flexWrap: "wrap" as const }}>
