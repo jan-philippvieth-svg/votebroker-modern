@@ -839,7 +839,7 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
           <div style={{ color:C.dim, fontSize:"0.88rem" }}>{t("emptyNoVotesToday")}</div>
         ) : (
           <>
-            <Hero val={String(todayStats.totalVotes)} unit="Votes" col={C.info}/>
+            <Hero val={String(todayStats.totalVotes)} unit={t("unitVotes")} col={C.info}/>
             <Row size="0.9rem" label={t("cardRuns")}    value={String(todayStats.runsCount)}/>
             <Row size="0.9rem" label={t("cardAuthors")} value={String(todayStats.uniqueAuthors)}/>
             <Divider/>
@@ -1018,7 +1018,7 @@ function AllRunsPanel({ todayStats, snapshot, timezone, locale, t }: {
                   </div>
                 </div>
                 <div style={{ display:"flex", gap:"1.25rem", fontSize:"0.8rem", flexWrap:"wrap" as const }}>
-                  <span style={{ color:C.info, fontWeight:700 }}>{run.voteCount} {run.voteCount===1?"Vote":"Votes"}</span>
+                  <span style={{ color:C.info, fontWeight:700 }}>{run.voteCount} {run.voteCount===1?t("unitVote"):t("unitVotes")}</span>
                   <span style={{ color:C.text, fontWeight:600 }}>{run.authors.length} Autoren</span>
                   {vpBeforeRun !== null && vpAfterRun !== null
                     ? <span style={{ color:C.warn, fontWeight:700 }}>{vpBeforeRun.toFixed(1)}% → {vpAfterRun.toFixed(1)}% (−{consumed.toFixed(1)}%)</span>
@@ -1079,6 +1079,7 @@ function VpGraphToday({ todayStats, snapshot, timezone, locale }: {
   snapshot: SteemAccountSnapshot|null;
   timezone?: string; locale?: string;
 }) {
+  const t = createTranslator((locale ?? "de") as import("../i18n").Locale);
   const fmt = makeFmt(timezone??"", locale??"de");
   const [hoverIdx, setHoverIdx] = useState<number|null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -1211,7 +1212,7 @@ function VpGraphToday({ todayStats, snapshot, timezone, locale }: {
               <>
                 {/* Run summary */}
                 <div style={{ color:"#cbd5e1", marginBottom:"0.25rem" }}>
-                  {hovered.runVotes} {hovered.runVotes===1?"Vote":"Votes"} · {hovered.runAuthors} Autoren
+                  {hovered.runVotes} {hovered.runVotes===1?t("unitVote"):t("unitVotes")} · {hovered.runAuthors} {t("unitAuthors")}
                 </div>
                 {/* VP before → after for whole run */}
                 <div style={{ color:"#fcd34d", fontWeight:700 }}>

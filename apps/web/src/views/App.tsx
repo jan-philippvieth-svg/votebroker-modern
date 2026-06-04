@@ -684,18 +684,18 @@ export function App() {
     const landingFeatures = [
       {
         icon: "🎯",
-        title: "Deine Lieblingsautoren immer im Blick",
-        desc: "VoteBroker analysiert deine Vote-Historie und erkennt, welche Autoren dir wirklich wichtig sind — und schlägt dir nachhaltige Vote-Gewichte vor.",
+        title: t("featureAuthorsTitle"),
+        desc: t("featureDesc"),
       },
       {
         icon: "⚡",
-        title: "Voting Power gesund halten",
-        desc: "Wer zu viel auf einmal votet, kann morgen kaum noch unterstützen. VoteBroker verteilt deine VP so, dass du jeden Tag für viele Autoren da sein kannst.",
+        title: t("featureVpTitle"),
+        desc: t("featureDesc"),
       },
       {
         icon: "🔒",
-        title: "Du entscheidest immer selbst",
-        desc: "VoteBroker schlägt vor und bereitet vor. Der Klick liegt bei dir. Kein autonomes Voten, keine Überraschungen.",
+        title: t("featureControlTitle"),
+        desc: t("featureDesc"),
       },
     ];
     return (
@@ -992,17 +992,19 @@ function VoteExecutionPanel(props: {
   error: { message: string; code: string; hint?: string } | null;
   hasSession: boolean;
   onExecute: () => void;
+  locale?: import("../i18n").Locale;
 }) {
+  const t = createTranslator(props.locale ?? "de");
   const errorActionLink: Record<string, { label: string; tab: string }> = {
-    target_vote_consent_required: { label: "Einstellungen öffnen", tab: "billing" },
-    missing_posting_authority:    { label: "Posting Authority erteilen", tab: "billing" },
+    target_vote_consent_required: { label: t("consentOpenSettings"), tab: "billing" },
+    missing_posting_authority:    { label: t("consentGrantAuthority"), tab: "billing" },
   };
 
   return (
     <section className="execution-panel">
       <div>
         <span>Live Vote Broadcast</span>
-        <strong>{props.hasSession ? "Bereit — Vote-Consent erforderlich" : "Login erforderlich"}</strong>
+        <strong>{props.hasSession ? t("consentReadyRequired") : t("consentLoginRequired")}</strong>
         <p>VoteBroker sendet diesen Vote erst nach aktivem Vote-Consent. Der Posting-Key verlässt niemals den Server.</p>
       </div>
       <button className="primary-button" disabled={!props.hasSession || props.quote.quote.voteWeightBps <= 0} type="button" onClick={props.onExecute}>
@@ -1128,56 +1130,18 @@ function TimingResult(props: { timing: VoteQuoteResponse["quote"]["timing"] }) {
 
 // ── Consent Center metadata ───────────────────────────────────────────────────
 
-const CONSENT_META: Record<ConsentType, {
-  icon: string;
-  label: string;
-  description: string;
-  note: string;
-  required: boolean;
-}> = {
-  login: {
-    icon: "🔐",
-    label: "Login",
-    description: "Erlaubt VoteBroker deinen Account zu erkennen und eine lokale Session zu erstellen.",
-    note: "Erforderlich für alle anderen Funktionen.",
-    required: true,
-  },
-  target_vote: {
-    icon: "📊",
-    label: "Zielvote Berechnung",
-    description: "VoteBroker darf Vote-Werte und Zielgewichte für deinen Account berechnen.",
-    note: "Erforderlich für die Quote-Funktion.",
-    required: false,
-  },
-  auto_vote: {
-    icon: "🤖",
-    label: "Automatisches Voting",
-    description: "VoteBroker darf in deinem Namen Votes auf Steem senden — nur nach expliziter Freigabe und gemäß deiner Strategie.",
-    note: "Kann jederzeit deaktiviert werden. Nur mit aktiver Posting Authority.",
-    required: false,
-  },
-  fee_post_vote: {
-    icon: "💰",
-    label: "Fee Posts",
-    description: "VoteBroker darf transparente Servicegebühren durch einen Vote auf den ausgewiesenen Gebührenpost begleichen.",
-    note: "Nur ausgeführt wenn eine offene Rechnung vorliegt.",
-    required: false,
-  },
-  ai_strategy: {
-    icon: "🧬",
-    label: "AI Strategie Optimierung",
-    description: "VoteBroker darf deine Voting-Historie analysieren um personalisierte Strategie-Empfehlungen zu erstellen.",
-    note: "Voting-Daten werden nicht gespeichert oder an Dritte weitergegeben.",
-    required: false,
-  },
-  community_intelligence: {
-    icon: "👥",
-    label: "Community Intelligence",
-    description: "Anonymisiert an Community-Empfehlungen teilnehmen — deine Autoren-Präferenzen fließen in den Author Radar ein.",
-    note: "Kein Benutzername und keine Strategie wird veröffentlicht. Opt-out jederzeit möglich.",
-    required: false,
-  },
-};
+function getConsentMeta(t: ReturnType<typeof createTranslator>): Record<ConsentType, {
+  icon: string; label: string; description: string; note: string; required: boolean;
+}> {
+  return {
+    login:                { icon: "🔐", label: t("consentLabelLogin"),      description: t("consentDescLogin"),      note: "Erforderlich für alle anderen Funktionen.", required: true  },
+    target_vote:          { icon: "📊", label: t("consentLabelTargetVote"), description: t("consentDescTargetVote"), note: "Erforderlich für die Quote-Funktion.",     required: false },
+    auto_vote:            { icon: "🤖", label: t("consentLabelAutoVote"),   description: t("consentDescAutoVote"),   note: "Kann jederzeit deaktiviert werden.",       required: false },
+    fee_post_vote:        { icon: "💰", label: t("consentLabelFeePost"),    description: t("consentDescFeePost"),    note: "Nur ausgeführt wenn eine Rechnung vorliegt.", required: false },
+    ai_strategy:          { icon: "🧬", label: t("consentLabelAiStrategy"), description: t("consentDescAiStrategy"), note: "Keine Daten an Dritte.",                  required: false },
+    community_intelligence:{ icon: "👥",label: t("consentLabelCommunity"), description: t("consentDescCommunity"),  note: "Opt-out jederzeit möglich.",               required: false },
+  };
+}
 
 // Ordered display
 const CONSENT_ORDER: ConsentType[] = ["login", "target_vote", "auto_vote", "fee_post_vote", "ai_strategy", "community_intelligence"];
@@ -1228,7 +1192,7 @@ function ConsentPanel(props: {
       {/* Consent list */}
       <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
         {CONSENT_ORDER.map(type => {
-          const meta    = CONSENT_META[type];
+          const meta    = getConsentMeta(props.t)[type];
           const active  = activeTypes.has(type);
           const loading = props.loadingType === type;
           const disabled = !props.session || loading;
@@ -1260,11 +1224,11 @@ function ConsentPanel(props: {
                   <span style={{ color: "#17202a", fontWeight: 600, fontSize: "0.9rem" }}>{meta.label}</span>
                   {meta.required && (
                     <span style={{ background: "#1b4332", color: "#16a34a", border: "1px solid #3fb95055", borderRadius: "4px", padding: "0.05rem 0.4rem", fontSize: "0.68rem", fontWeight: 600 }}>
-                      Erforderlich
+                      {props.t("confirm")}
                     </span>
                   )}
                   {!active && !meta.required && (
-                    <span style={{ color: "#8fa4b0", fontSize: "0.72rem" }}>Nicht aktiv</span>
+                    <span style={{ color: "#8fa4b0", fontSize: "0.72rem" }}>{props.t("statusInactive")}</span>
                   )}
                 </div>
                 <p style={{ color: "#607078", fontSize: "0.8rem", margin: "0 0 0.2rem", lineHeight: 1.4 }}>
@@ -1319,7 +1283,7 @@ function ConsentPanel(props: {
                     ) : (
                       <Circle size={14} />
                     )}
-                    {loading ? "…" : active ? "Aktiv" : "Inaktiv"}
+                    {loading ? props.t("statusLoading") : active ? props.t("statusActive") : props.t("statusInactive")}
                   </button>
                 )}
               </div>
@@ -1339,7 +1303,7 @@ function ConsentPanel(props: {
               <span style={{ color: record.status === "granted" ? "#16a34a" : "#dc2626" }}>
                 {record.status === "granted" ? "✓ Aktiviert" : "✗ Deaktiviert"}
               </span>
-              <span>{CONSENT_META[record.type as ConsentType]?.label ?? record.title}</span>
+              <span>{getConsentMeta(props.t)[record.type as ConsentType]?.label ?? record.title}</span>
               <span style={{ color: "#8fa4b0" }}>
                 {new Date(record.revokedAt ?? record.createdAt ?? "").toLocaleDateString("de-DE")}
               </span>
