@@ -927,7 +927,7 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
                   sub={totalSp > 0 ? `${totalSp.toFixed(3)} STEEM` : "Attribution läuft"}
                 />
                 {votes > 0 && <Row size="0.9rem" label="Votes gesamt"  value={String(votes)}/>}
-                {realSp > 0 && <Row size="0.9rem" label="Realisiert"   value={`${realSp.toFixed(3)} SP`}/>}
+                {realSp > 0 && <Row size="0.9rem" label="Realisiert (SP)" value={`${realSp.toFixed(3)} SP`}/>}
                 {pendSp > 0 && <Row size="0.9rem" label="Pending"      value={`${pendSp.toFixed(3)} STEEM`} col={C.warn}/>}
                 {spPV > 0    && <><Divider/><Row size="0.9rem" label="Ø pro Vote" value={`≈ ${spPV.toFixed(4)} STEEM`} col={C.purple} bold/></>}
                 {since && (
@@ -1380,7 +1380,7 @@ function VBEarningsChart({ data, pendingSp, sbdPerSteem }: {
             </div>
           )}
           {hovD.realizedSp > 0 && (
-            <div>Realisiert: <b style={{ color:"#4ade80" }}>{hovD.realizedSp.toFixed(4)} SP</b></div>
+            <div>Realisiert (SP): <b style={{ color:"#4ade80" }}>{hovD.realizedSp.toFixed(4)} SP</b></div>
           )}
           {hovD.pendingSp > 0 && (
             <div>Pending: <b style={{ color:ORANGE }}>{hovD.pendingSp.toFixed(4)} STEEM</b></div>
@@ -1535,7 +1535,7 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, recent
               <div style={{ fontSize:"0.73rem", marginTop:"0.2rem", display:"flex", gap:"0.6rem", flexWrap:"wrap" }}>
                 {realizedSp > 0 && (
                   <span style={{ color:C.ok, fontWeight:600 }}>
-                    {realizedSp.toFixed(3)} SP realisiert
+                    {realizedSp.toFixed(3)} SP realisiert (SP-Anteil)
                   </span>
                 )}
                 {pendingSp > 0 && (
@@ -1553,7 +1553,7 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, recent
               )}
 
               {/* Tooltip anchor */}
-              <div title={`Attribution seit: ${data.attributionStart ?? "—"}\nRealisiert (on-chain): ${realizedSp.toFixed(4)} SP aus ${data.totals.realizedCount} Payouts\nPending (offene Posts): ≈ ${pendingSp.toFixed(4)} STEEM`}
+              <div title={`Attribution seit: ${data.attributionStart ?? "—"}\nRealisiert (SP-Anteil aus curation_reward): ${realizedSp.toFixed(4)} SP aus ${data.totals.realizedCount} Payouts\nPending (offene Posts): ≈ ${pendingSp.toFixed(4)} STEEM`}
                 style={{ position:"absolute", top:"0.4rem", right:"0.5rem",
                   fontSize:"0.62rem", color:C.faint, cursor:"help" }}>ℹ</div>
             </div>
@@ -1565,7 +1565,7 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, recent
               <div style={{ fontSize:"0.62rem", color:C.faint, marginBottom:"0.2rem", display:"flex", gap:"0.9rem", alignItems:"center" }}>
                 <span style={{ display:"flex", alignItems:"center", gap:"0.22rem" }}>
                   <span style={{ display:"inline-block", width:"8px", height:"8px", background:C.ok, borderRadius:"2px" }}/>
-                  Realisiert
+                  Realisiert (SP)
                 </span>
                 <span style={{ display:"flex", alignItems:"center", gap:"0.22rem" }}>
                   <span style={{ display:"inline-block", width:"8px", height:"8px", background:ORANGE, borderRadius:"2px" }}/>
