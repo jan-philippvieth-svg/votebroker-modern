@@ -503,6 +503,7 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
   const [showScreenshots, setShowScreenshots] = useState(false);
   const [promoLocale, setPromoLocale] = useState<PromoLocale>("en");
   const [promoStatus, setPromoStatus] = useState<string | null>(null);
+  const [promoSnapSkipped, setPromoSnapSkipped] = useState<string | null>(null); // locale when snap was skipped
 
   const { getContentDrafts: gcd, getContentPreview: gcp, updateDraftStatus: uds, editDraftContent: edc, publishDraft: pd } = { getContentDrafts, getContentPreview, updateDraftStatus: updateDraftStatus, editDraftContent, publishDraft };
 
@@ -548,11 +549,17 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
   async function doPromoGenerate() {
     setSaving(true);
     setPromoStatus(`⏳ Scanne Blockchain für ${PROMO_LOCALES.find(l => l.code === promoLocale)?.nativeName ?? promoLocale}…`);
+    setPromoSnapSkipped(null);
     setActionMsg(null);
     try {
-      // Use session token — API accepts admin session as alternative to operator token
       const result = await generatePromoPost(session.token, promoLocale);
-      setPromoStatus(`✓ Draft erstellt: ${result.filename}`);
+      if (result.screenshotSnap) {
+        setPromoStatus(`✓ Draft erstellt: ${result.filename} · Screenshots: ${result.screenshotSnap}`);
+        setPromoSnapSkipped(null);
+      } else {
+        setPromoStatus(`✓ Draft erstellt: ${result.filename}`);
+        setPromoSnapSkipped(result.analysis.locale);
+      }
       await load();
       setSelected(result.filename);
       await openPreview(result.filename);
@@ -697,6 +704,19 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
             <p style={{ fontSize: "0.68rem", color: promoStatus.startsWith("✓") ? C.ok : promoStatus.startsWith("✗") ? C.err : C.warn, margin: "0.3rem 0 0" }}>
               {promoStatus}
             </p>
+          )}
+          {promoSnapSkipped && (
+            <div style={{ marginTop: "0.4rem", padding: "0.35rem 0.5rem", background: C.warn + "12", border: `1px solid ${C.warn}40`, borderRadius: "5px" }}>
+              <p style={{ fontSize: "0.67rem", color: C.warn, fontWeight: 600, margin: "0 0 0.2rem" }}>
+                Screenshots übersprungen
+              </p>
+              <p style={{ fontSize: "0.63rem", color: C.dim, margin: "0 0 0.2rem" }}>
+                Playwright läuft nicht im API-Container. Manuell vom Host:
+              </p>
+              <code style={{ display: "block", fontSize: "0.6rem", background: "#f4f4f4", padding: "0.25rem 0.4rem", borderRadius: "3px", whiteSpace: "pre-wrap", wordBreak: "break-all", color: "#333" }}>
+                {`SESSION_TOKEN=<token> PROMO_LOCALE=${promoSnapSkipped} \\\n  VOTEBROKER_SCREENSHOTS_DIR=/var/lib/docker/volumes/votebroker_data/_data/screenshots \\\n  python3 tools/showcase/capture.py`}
+              </code>
+            </div>
           )}
         </div>
 

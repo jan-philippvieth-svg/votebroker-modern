@@ -1216,10 +1216,10 @@ export const PROMO_LOCALES: Array<{ code: PromoLocale; label: string; nativeName
   { code: "pcm", label: "Naija", nativeName: "Naija (Nigerian Pidgin)" },
 ];
 
-export async function generatePromoPost(operatorToken: string, locale: PromoLocale): Promise<PromoResult> {
+export async function generatePromoPost(sessionToken: string, locale: PromoLocale): Promise<PromoResult> {
   const res = await fetch(`${API_BASE}/api/promo/generate`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "x-operator-token": operatorToken },
+    headers: { "Content-Type": "application/json", session: sessionToken },
     body: JSON.stringify({ locale }),
   });
   if (!res.ok) {

@@ -3,23 +3,24 @@ VoteBroker Showcase — Screenshot Capture
 ==========================================
 Nimmt authentifizierte Screenshots der 6 Showcase-Schritte auf.
 
-Usage:
+Usage (Showcase):
   SESSION_TOKEN=<token> python3 capture.py [output_dir]
   python3 capture.py <session_token> [output_dir]
 
+Usage (Promo — 3 Tabs in Zielsprache):
+  SESSION_TOKEN=<token> PROMO_LOCALE=ko python3 capture.py
+  → schreibt snap-promo-ko-YYYYMMDD/ in VOTEBROKER_SCREENSHOTS_DIR
+  → gibt SNAP_NAME=snap-promo-ko-YYYYMMDD auf stdout aus
+
 Kein Secret in dieser Datei gespeichert.
 
-Output (Standard):
+Output (Showcase-Standard):
   tools/showcase/output/raw/
-    01_dashboard.png
-    02_find_votes.png
-    03_vote_plan.png
-    04_edit_weights.png
-    05_confirm_votes.png
-    06_community.png
+    01_dashboard.png  …  06_community.png
 """
 
 import sys, os, json
+from datetime import datetime
 from pathlib import Path
 from playwright.sync_api import sync_playwright, Page
 from secret_guard import scan_text, GuardResult
@@ -32,19 +33,30 @@ if not TOKEN:
     print("  export SESSION_TOKEN=<token>  oder  python3 capture.py <token>")
     sys.exit(1)
 
-# SCREENSHOT_DEST: if set, raw screenshots go there (e.g. Docker volume path)
-# Default: tools/showcase/output/raw (host-local)
-_dest_env = os.environ.get("SCREENSHOT_DEST", "")
-OUTPUT_DIR = Path(
-    sys.argv[2] if len(sys.argv) > 2
-    else (_dest_env if _dest_env else str(Path(__file__).parent / "output" / "raw"))
-)
+# PROMO_LOCALE: wenn gesetzt → Promo-Modus (3 Tabs, Zielsprache, snap-Verzeichnis)
+PROMO_LOCALE = os.environ.get("PROMO_LOCALE", "").strip()
+
+# Output-Verzeichnis
+_screenshots_base = os.environ.get("VOTEBROKER_SCREENSHOTS_DIR", "")
+_dest_env         = os.environ.get("SCREENSHOT_DEST", "")
+
+if PROMO_LOCALE:
+    _snap_name = f"snap-promo-{PROMO_LOCALE}-{datetime.now().strftime('%Y%m%d')}"
+    _base = _screenshots_base or _dest_env or str(Path(__file__).parent.parent.parent / "docs" / "screenshots")
+    OUTPUT_DIR = Path(_base) / _snap_name
+else:
+    _snap_name = ""
+    OUTPUT_DIR = Path(
+        sys.argv[2] if len(sys.argv) > 2
+        else (_dest_env if _dest_env else str(Path(__file__).parent / "output" / "raw"))
+    )
+
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # nginx-Container (neueste dist, SPA-routing, kein Caddy-Cache)
 # API-Container direkt (HTTP, kein Protokoll-Mismatch bei Playwright-Routing)
-NGINX_URL = "http://172.19.0.3"
-API_URL   = "http://172.19.0.2:3000"
+NGINX_URL = os.environ.get("NGINX_URL", "http://172.19.0.3")
+API_URL   = os.environ.get("API_URL",   "http://172.19.0.2:3000")
 
 VIEWPORT = {"width": 1600, "height": 1000}
 
@@ -147,11 +159,15 @@ with sync_playwright() as pw:
     page = ctx.new_page()
     page.route(f"{NGINX_URL}/api/**", proxy_api)
 
-    # ── 1. Session injizieren & zum Dashboard navigieren ─────────────────────
+    # ── 1. Session injizieren & Locale setzen ────────────────────────────────
     print("Starte App…")
+    if PROMO_LOCALE:
+        print(f"Promo-Modus: Locale → {PROMO_LOCALE}")
     page.goto(NGINX_URL, wait_until="domcontentloaded", timeout=30000)
     wait(page, 500)
     page.evaluate(f"localStorage.setItem('votebroker.session', JSON.stringify({json.dumps(SESSION_OBJ)}))")
+    if PROMO_LOCALE:
+        page.evaluate(f"localStorage.setItem('votebroker.locale', {json.dumps(PROMO_LOCALE)})")
     page.goto(f"{NGINX_URL}/dashboard", wait_until="domcontentloaded", timeout=30000)
 
     # Warte bis Benutzerdaten geladen (Username in Header sichtbar)
@@ -205,3 +221,16 @@ with sync_playwright() as pw:
     browser.close()
 
 print(f"\nFertig: {OUTPUT_DIR}")
+
+# Promo-Modus: Manifest + SNAP_NAME für API-Parsing
+if PROMO_LOCALE and _snap_name:
+    import json as _json
+    _files = [f.name for f in OUTPUT_DIR.iterdir() if f.suffix == ".png"]
+    _manifest = {
+        "snap":         _snap_name,
+        "locale":       PROMO_LOCALE,
+        "captured_at":  datetime.now().isoformat(),
+        "files":        _files,
+    }
+    (OUTPUT_DIR / "manifest.json").write_text(_json.dumps(_manifest, indent=2))
+    print(f"SNAP_NAME={_snap_name}")

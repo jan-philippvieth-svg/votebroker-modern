@@ -14,8 +14,12 @@
 import { createSteemClient } from "../chain/steemBroadcaster.js";
 import { getDb } from "../db/index.js";
 import { writeFile, mkdir } from "node:fs/promises";
-import { resolve, join } from "node:path";
-import { randomUUID } from "node:crypto";
+import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -410,9 +414,18 @@ export async function generatePromoPost(
     scannedAt: new Date().toISOString(),
   };
 
-  // Step 4: Screenshots (fire-and-forget — screenshots system handles this)
-  // Screenshots in target locale are captured when the draft is opened with screenshots flag
-  log.info("[PromoPost] Step 4: Screenshots scheduled (on publish flow)");
+  // Step 4: Screenshots in target locale
+  log.info(`[PromoPost] Step 4: Capturing screenshots in locale '${locale}'…`);
+  let screenshotSnap: string | null = null;
+  try {
+    screenshotSnap = await capturePromoScreenshots(locale, log);
+    if (screenshotSnap) {
+      log.info(`[PromoPost] Screenshots captured: ${screenshotSnap}`);
+    }
+  } catch (err) {
+    log.warn({ err }, "[PromoPost] Screenshot capture failed — continuing without screenshots");
+
+  }
 
   // Step 5: Generate draft
   log.info("[PromoPost] Step 5: Generating draft…");
@@ -431,10 +444,49 @@ export async function generatePromoPost(
 
   db.prepare(`
     INSERT OR REPLACE INTO content_drafts
-      (filename, date_str, type, title, status, notes, created_at, updated_at)
-    VALUES (?, ?, 'promo-post', ?, 'draft', ?, datetime('now'), datetime('now'))
-  `).run(filename, date, titleLine, JSON.stringify(analysis));
+      (filename, date_str, type, title, status, notes, screenshot_snap, created_at, updated_at)
+    VALUES (?, ?, 'promo-post', ?, 'draft', ?, ?, datetime('now'), datetime('now'))
+  `).run(filename, date, titleLine, JSON.stringify(analysis), screenshotSnap ?? null);
 
-  log.info(`[PromoPost] Done — ${filename}`);
-  return { filename, analysis, screenshotSnap: null };
+  log.info(`[PromoPost] Done — ${filename}${screenshotSnap ? ` (snap: ${screenshotSnap})` : ""}`);
+  return { filename, analysis, screenshotSnap };
+}
+
+// ── Screenshot Capture ────────────────────────────────────────────────────────
+
+async function capturePromoScreenshots(locale: PromoLocale, log: typeof console): Promise<string | null> {
+  // Reuses the same screenshot pipeline as devlogs (VOTEBROKER_SCREENSHOT_SCRIPT).
+  // capture.py runs with PROMO_LOCALE set → injects locale into localStorage,
+  // writes screenshots to VOTEBROKER_SCREENSHOTS_DIR/snap-promo-{locale}-{date}/,
+  // and prints SNAP_NAME=... to stdout.
+  const captureScript = process.env.VOTEBROKER_SCREENSHOT_SCRIPT ?? "";
+  if (!captureScript || !existsSync(captureScript)) {
+    log.info(
+      `[PromoPost] VOTEBROKER_SCREENSHOT_SCRIPT not set or not found — screenshots skipped. ` +
+      `Manual: SESSION_TOKEN=<t> PROMO_LOCALE=${locale} python3 tools/showcase/capture.py`
+    );
+    return null;
+  }
+
+  const sessionToken = process.env.SESSION_TOKEN ?? process.env.VOTEBROKER_SCREENSHOT_TOKEN ?? "";
+  if (!sessionToken) {
+    log.info("[PromoPost] SESSION_TOKEN not set — screenshots skipped");
+    return null;
+  }
+
+  const screenshotsDir = process.env.VOTEBROKER_SCREENSHOTS_DIR
+    ?? (existsSync("/app/data") ? "/app/data/screenshots" : "/tmp/votebroker-screenshots");
+
+  const env = {
+    ...process.env,
+    SESSION_TOKEN:              sessionToken,
+    PROMO_LOCALE:               locale,
+    VOTEBROKER_SCREENSHOTS_DIR: screenshotsDir,
+  };
+
+  const { stdout } = await execFileAsync("python3", [captureScript], { env, timeout: 120_000 });
+  log.info("[PromoPost] capture.py output:", stdout.slice(0, 400));
+
+  const match = stdout.match(/SNAP_NAME=(\S+)/);
+  return match?.[1] ?? null;
 }
