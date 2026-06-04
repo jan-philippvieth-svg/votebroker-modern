@@ -724,7 +724,7 @@ function OperativeKPIRow({ snapshot, snapshotLoading, snapshotRefreshedAt, oppor
 
 // ── Curation Timeline (Heute | Pending 7d | 30 Tage) ─────────────────────────
 
-function PendingDebugPanel({ data }: { data: PendingCuration }) {
+function PendingDebugPanel({ data, t }: { data: PendingCuration; t: ReturnType<typeof createTranslator> }) {
   const [open, setOpen] = useState(false);
   const db = data.debug;
   const skipped = db.skipped;
@@ -740,8 +740,8 @@ function PendingDebugPanel({ data }: { data: PendingCuration }) {
         style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, fontSize: "0.72rem", padding: 0, display: "flex", alignItems: "center", gap: "0.3rem" }}
       >
         <span>{open ? "▾" : "▸"}</span>
-        <span>Debug-Ansicht</span>
-        <span style={{ color: C.faint }}>· {data.sbdPerSteemUsed.toFixed(4)} SBD/STEEM · {totalSkipped} übersprungen</span>
+        <span>{t("debugTitle")}</span>
+        <span style={{ color: C.faint }}>· {data.sbdPerSteemUsed.toFixed(4)} SBD/STEEM · {totalSkipped} {t("debugSkipped")}</span>
       </button>
 
       {open && (
@@ -750,30 +750,30 @@ function PendingDebugPanel({ data }: { data: PendingCuration }) {
           {/* ── Coverage + Preis ── */}
           <div style={{ marginBottom: "0.5rem", padding: "0.3rem 0.5rem", background: "#fffbe6", borderRadius: "6px", border: "1px solid #f5d000" }}>
             <div>
-              <strong>Coverage:</strong>&nbsp;
-              {db.uniqueTotal} unique Posts gefunden&nbsp;·&nbsp;
-              {db.fetched} abgerufen&nbsp;·&nbsp;
-              {data.postCount} offen (mit Wert)
+              <strong>{t("debugCoverage")}</strong>&nbsp;
+              {db.uniqueTotal} unique Posts&nbsp;·&nbsp;
+              {db.fetched} {t("debugFetched")}&nbsp;·&nbsp;
+              {data.postCount} {t("debugOpenWithValue")}
               {db.skipped.limitReached > 0 && (
-                <span style={{ color: "#c00", fontWeight: 700 }}>&nbsp;· ⚠ {db.skipped.limitReached} durch Limit übersprungen</span>
+                <span style={{ color: "#c00", fontWeight: 700 }}>&nbsp;· ⚠ {db.skipped.limitReached} {t("debugLimitSkipped")}</span>
               )}
             </div>
             <div style={{ marginTop: "0.2rem" }}>
-              Gerechnet mit&nbsp;<strong>{data.sbdPerSteemUsed.toFixed(4)} SBD/STEEM</strong>
-              &nbsp;·&nbsp;Summe pending_payout: <strong>{db.totalPayoutUsd.toFixed(4)} USD</strong>
+              {t("debugCalculatedWith")}&nbsp;<strong>{data.sbdPerSteemUsed.toFixed(4)} SBD/STEEM</strong>
+              &nbsp;·&nbsp;{t("debugSumPending")} <strong>{db.totalPayoutUsd.toFixed(4)} USD</strong>
             </div>
           </div>
 
           {/* ── Übersprungene Posts ── */}
           {totalSkipped > 0 && (
             <div style={{ marginBottom: "0.5rem" }}>
-              <div style={{ fontWeight: 700, marginBottom: "0.25rem", color: C.warn }}>Übersprungen ({totalSkipped})</div>
+              <div style={{ fontWeight: 700, marginBottom: "0.25rem", color: C.warn }}>{t("debugSkippedSection")} ({totalSkipped})</div>
               <table style={{ borderCollapse: "collapse", width: "100%" }}>
                 <tbody>
-                  {skipped.alreadyPaidOut > 0 && <tr><td style={tdL}>Bereits ausgezahlt</td><td style={tdR}>{skipped.alreadyPaidOut}</td></tr>}
+                  {skipped.alreadyPaidOut > 0 && <tr><td style={tdL}>{t("debugAlreadyPaid")}</td><td style={tdR}>{skipped.alreadyPaidOut}</td></tr>}
                   {skipped.payoutZero     > 0 && <tr><td style={tdL}>pending_payout = 0</td><td style={tdR}>{skipped.payoutZero}</td></tr>}
                   {skipped.noVoteFound    > 0 && <tr><td style={tdL}>Kein eigener Vote in active_votes</td><td style={tdR}>{skipped.noVoteFound}</td></tr>}
-                  {skipped.weightZero     > 0 && <tr><td style={tdL}>Curation-Weight = 0 (Early-Vote-Penalty)</td><td style={tdR}>{skipped.weightZero}</td></tr>}
+                  {skipped.weightZero     > 0 && <tr><td style={tdL}>{t("debugEarlyVote")}</td><td style={tdR}>{skipped.weightZero}</td></tr>}
                   {skipped.limitReached   > 0 && <tr><td style={tdL}>Limit überschritten</td><td style={tdR}>{skipped.limitReached}</td></tr>}
                 </tbody>
               </table>
@@ -784,17 +784,17 @@ function PendingDebugPanel({ data }: { data: PendingCuration }) {
           {db.top10.length > 0 && (
             <div>
               <div style={{ fontWeight: 700, marginBottom: "0.25rem" }}>
-                Top {db.top10.length} Posts · Methode: Curation-Weight
+                {t("debugTopPosts").replace("{{n}}", String(db.top10.length))}
               </div>
               <div style={{ overflowX: "auto" }}>
                 <table style={{ borderCollapse: "collapse", width: "100%", minWidth: "580px" }}>
                   <thead>
                     <tr style={{ background: C.border + "55" }}>
-                      <th style={{ ...tdL, fontWeight: 600 }}>Autor/Permlink</th>
-                      <th style={{ ...tdR, fontWeight: 600 }}>Pool SBD</th>
-                      <th style={{ ...tdR, fontWeight: 600 }}>Weight %</th>
-                      <th style={{ ...tdR, fontWeight: 600, color: C.ok }}>≈ STEEM (weight)</th>
-                      <th style={{ ...tdR, fontWeight: 600, color: C.dim }}>≈ STEEM (rshares)</th>
+                      <th style={{ ...tdL, fontWeight: 600 }}>{t("debugColAuthor")}</th>
+                      <th style={{ ...tdR, fontWeight: 600 }}>{t("debugColPoolSbd")}</th>
+                      <th style={{ ...tdR, fontWeight: 600 }}>{t("debugColWeight")}</th>
+                      <th style={{ ...tdR, fontWeight: 600, color: C.ok }}>{t("debugColEstSteem")}</th>
+                      <th style={{ ...tdR, fontWeight: 600, color: C.dim }}>{t("debugColEstRshares")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -936,7 +936,7 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
                 )}
               </div>
             )}
-            {pendingCuration.debug && <PendingDebugPanel data={pendingCuration} />}
+            {pendingCuration.debug && <PendingDebugPanel data={pendingCuration} t={t} />}
           </>
         )}
       </div>
@@ -1503,10 +1503,14 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, recent
   const since      = data?.attributionStart ?? "";
   const totalVotes = data?.totals.voteCount ?? 0;
   const gameTip    = totalVotes > 0 && spPerVote > 0
-    ? `${totalVotes} VoteBroker-Votes${since ? " seit " + since : ""} · davon ${todayVotes > 0 ? todayVotes + " heute" : "0 heute"} · Ø ${spPerVote.toFixed(4)} STEEM pro Vote`
+    ? t("chartVbVotesTip")
+        .replace("{{total}}", String(totalVotes))
+        .replace("{{since}}", since ? ` ${t("chartVbSince").replace("{{date}}", since)}` : "")
+        .replace("{{today}}", `${t("chartVbVotesToday").replace("{{n}}", String(todayVotes > 0 ? todayVotes : 0))}`)
+        .replace("{{avg}}", spPerVote.toFixed(4))
     : todayVotes > 0
-    ? `✅ ${todayVotes} Votes heute durch VoteBroker verteilt`
-    : `🌱 Starte heute deinen ersten VoteBroker-Run`;
+    ? `✅ ${todayVotes} ${t("chartVbVotes")}`
+    : `🌱 ${t("emptyNoVotesToday")}`;
 
   return (
     <div style={{ ...card, background:"linear-gradient(135deg,#faf5ff 0%,#f5f3ff 60%,#ede9fe 100%)" }}>
@@ -1515,7 +1519,7 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, recent
         <div style={{ display:"flex", alignItems:"center", gap:"0.5rem" }}>
           <span style={{ fontSize:"0.95rem" }}>💜</span>
           <span style={{ fontSize:"0.82rem", fontWeight:700, color:C.text, letterSpacing:"-0.2px" }}>
-            Curation-Rewards durch VoteBroker
+            {t("chartCurationTitle")}
           </span>
         </div>
         <div style={{ display:"flex", gap:"0.2rem" }}>
@@ -1564,11 +1568,11 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, recent
                 {data.totals.voteCount > 0 ? data.totals.voteCount : "—"}
               </div>
               <div style={{ fontSize:"0.75rem", color:"#7c3aed", fontWeight:700, marginTop:"0.2rem" }}>
-                VoteBroker-Votes
+                {t("chartVbVotes")}
               </div>
               {todayVotes > 0 && data.totals.voteCount > todayVotes && (
                 <div style={{ fontSize:"0.7rem", color:"#a78bfa", marginTop:"0.15rem" }}>
-                  davon <b>{todayVotes}</b> heute
+                  {t("chartVbVotesToday").replace("{{n}}", String(todayVotes))}
                 </div>
               )}
             </div>
@@ -1644,7 +1648,7 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, recent
           ) : (
             <div style={{ textAlign:"center", padding:"1.5rem 0", color:C.faint, fontSize:"0.8rem",
               border:`1px dashed ${PURPLE}33`, borderRadius:"8px" }}>
-              Noch keine VoteBroker-Votes in diesem Zeitraum.
+              {t("chartNoVotes")}
               {data.attributionStart && (
                 <div style={{ marginTop:"0.3rem", fontSize:"0.7rem" }}>Attribution aktiv seit {data.attributionStart}</div>
               )}
@@ -1659,36 +1663,6 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, recent
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-// ── Quick Actions Card (unten) ─────────────────────────────────────────────────
-
-function QuickActionsCard({ opportunities, onLoadOpps, onTabChange, onGenerateVotes, t }: {
-  opportunities: PostOpportunity[]|null;
-  onLoadOpps: ()=>void;
-  onTabChange:(tab:"dna"|"dashboard"|"community"|"billing")=>void;
-  onGenerateVotes: ()=>void;
-  t: ReturnType<typeof createTranslator>;
-}) {
-  const openOpps=opportunities?.filter(p=>p.eligible)??[];
-  return (
-    <div style={{ ...card, maxWidth:"320px" }}>
-      <p style={{ ...lbl, margin:"0 0 0.65rem" }}>{t("secQuickActions")}</p>
-      <div style={{ display:"flex", flexDirection:"column" as const, gap:"0.4rem" }}>
-        {([
-          {icon:"🧬",label:t("btnVoteDna"), col:C.info,   fn:()=>onTabChange("dna")},
-          {icon:"🗳", label:t("btnVotePlan"),col:C.purple, fn:()=>{onTabChange("dna");onGenerateVotes();}},
-          {icon:"⚡", label:openOpps.length>0?`${t("btnOpportunities")} (${openOpps.length})`:t("btnScan"),col:openOpps.length>0?C.warn:C.muted,fn:()=>{onLoadOpps();onTabChange("dna");}},
-          {icon:"⚙", label:t("btnSettings"),col:C.ok,     fn:()=>onTabChange("billing")},
-        ] as const).map((a,i)=>(
-          <button key={i} type="button" onClick={a.fn} style={{ background:`${a.col}10`, border:`1px solid ${a.col}30`, borderRadius:"7px", padding:"0.4rem 0.6rem", cursor:"pointer", textAlign:"left" as const, display:"flex", alignItems:"center", gap:"0.4rem" }}>
-            <span style={{ fontSize:"0.85rem" }}>{a.icon}</span>
-            <span style={{ color:C.text, fontSize:"0.75rem", fontWeight:700 }}>{a.label}</span>
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
@@ -1938,12 +1912,6 @@ export function UserDashboard(props: {
       {strategyRules!==null&&(
         <AuthorGrid rules={rules} openOpps={openOpps} snapshot={snapshot} dnaMap={dnaMap} onTabChange={props.onTabChange} t={t}/>
       )}
-
-      {/* 7. Aktionen */}
-      <QuickActionsCard
-        opportunities={opportunities} onLoadOpps={props.onLoadOpportunities}
-        onTabChange={props.onTabChange} onGenerateVotes={props.onGenerateVotes} t={t}
-      />
 
     </div>
   );
