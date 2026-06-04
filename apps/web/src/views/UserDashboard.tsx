@@ -860,7 +860,7 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
         borderTop:`4px solid ${C.warn}`,
         background:"linear-gradient(160deg,#fffbeb 0%,#ffffff 55%)",
       }}>
-        <p style={{ ...lbl, margin:"0 0 0.85rem", color:C.warn }}>Pending · 7 Tage</p>
+        <p style={{ ...lbl, margin:"0 0 0.85rem", color:C.warn }}>Erwartete Curation · 7 Tage</p>
         {pendingLoading ? (
           <div style={{ color:C.dim, fontSize:"0.88rem" }}>Lädt…</div>
         ) : !pendingCuration || pendingCuration.pendingUsd <= 0 ? (
@@ -920,18 +920,29 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
               <div style={{ color:C.dim, fontSize:"0.88rem" }}>Lädt…</div>
             ) : (
               <>
+                {/* USD primär */}
                 <Hero
                   val={totalSp > 0 ? fmtUsd(totalSp * sbdPrStm) : "—"}
                   unit=""
                   col={C.ok}
-                  sub={totalSp > 0 ? `${totalSp.toFixed(3)} STEEM` : "Attribution läuft"}
+                  sub={totalSp > 0 ? undefined : "Attribution läuft"}
                 />
-                {votes > 0 && <Row size="0.9rem" label="Votes gesamt"  value={String(votes)}/>}
-                {realSp > 0 && <Row size="0.9rem" label="Realisiert (SP)" value={`${realSp.toFixed(3)} SP`}/>}
-                {pendSp > 0 && <Row size="0.9rem" label="Pending"      value={`${pendSp.toFixed(3)} STEEM`} col={C.warn}/>}
-                {spPV > 0    && <><Divider/><Row size="0.9rem" label="Ø pro Vote" value={`≈ ${spPV.toFixed(4)} STEEM`} col={C.purple} bold/></>}
+
+                {/* Curation Rewards — fachlich getrennt nach Status */}
+                {votes > 0 && <Row size="0.9rem" label="Votes gesamt" value={String(votes)}/>}
+                <Divider/>
+                {realSp > 0
+                  ? <Row size="0.9rem" label="Realisierte Curation" value={`${realSp.toFixed(3)} SP`} col={C.ok}/>
+                  : <Row size="0.9rem" label="Realisierte Curation" value="noch keine Payouts" col={C.faint}/>
+                }
+                {pendSp > 0 && (
+                  <Row size="0.9rem" label="Erwartete Curation" value={`≈ ${pendSp.toFixed(3)} STEEM`} col={C.warn}/>
+                )}
+                {spPV > 0 && (
+                  <><Divider/><Row size="0.9rem" label="Ø Curation pro Vote" value={`≈ ${spPV.toFixed(4)} STEEM`} col={C.purple} bold/></>
+                )}
                 {since && (
-                  <div style={{ color:C.dim, fontSize:"0.8rem", marginTop:"0.5rem" }}>
+                  <div style={{ color:C.faint, fontSize:"0.73rem", marginTop:"0.5rem" }}>
                     Attribution seit {since}
                   </div>
                 )}
@@ -1531,16 +1542,16 @@ function VBEarningsCard({ session, pendingCuration, todayStats, snapshot, recent
                 </div>
               )}
 
-              {/* Realized · Pending */}
+              {/* Curation — getrennt nach Status */}
               <div style={{ fontSize:"0.73rem", marginTop:"0.2rem", display:"flex", gap:"0.6rem", flexWrap:"wrap" }}>
                 {realizedSp > 0 && (
                   <span style={{ color:C.ok, fontWeight:600 }}>
-                    {realizedSp.toFixed(3)} SP realisiert (SP-Anteil)
+                    {realizedSp.toFixed(3)} SP Curation realisiert
                   </span>
                 )}
                 {pendingSp > 0 && (
                   <span style={{ color:ORANGE, fontWeight:600 }}>
-                    +{pendingSp.toFixed(3)} STEEM pending
+                    ≈{pendingSp.toFixed(3)} STEEM Curation erwartet
                   </span>
                 )}
               </div>
