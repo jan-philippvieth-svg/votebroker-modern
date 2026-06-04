@@ -3307,31 +3307,40 @@ function AccountSnapshotPanel(props: {
 
 // ── Timezone list — curated IANA names with friendly labels ──────────────────
 
-const TIMEZONES: Array<{ value: string; label: string }> = [
-  { value: "Europe/Berlin",     label: "Europa/Berlin (MEZ/MESZ)" },
-  { value: "Europe/London",     label: "Europa/London (GMT/BST)" },
-  { value: "Europe/Paris",      label: "Europa/Paris" },
-  { value: "Europe/Vienna",     label: "Europa/Wien" },
-  { value: "Europe/Zurich",     label: "Europa/Zürich" },
-  { value: "Europe/Amsterdam",  label: "Europa/Amsterdam" },
-  { value: "Europe/Warsaw",     label: "Europa/Warschau" },
-  { value: "Europe/Stockholm",  label: "Europa/Stockholm" },
-  { value: "Europe/Moscow",     label: "Europa/Moskau" },
-  { value: "Asia/Dubai",        label: "Asien/Dubai (GST)" },
-  { value: "Asia/Kolkata",      label: "Asien/Kolkata (IST)" },
-  { value: "Asia/Singapore",    label: "Asien/Singapur (SGT)" },
-  { value: "Asia/Tokyo",        label: "Asien/Tokio (JST)" },
-  { value: "Asia/Seoul",        label: "Asien/Seoul (KST)" },
-  { value: "Asia/Shanghai",     label: "Asien/Shanghai (CST)" },
-  { value: "Australia/Sydney",  label: "Australien/Sydney (AEDT)" },
-  { value: "Pacific/Auckland",  label: "Pazifik/Auckland (NZST)" },
-  { value: "UTC",               label: "UTC / Greenwich" },
-  { value: "America/Sao_Paulo", label: "Amerika/São Paulo (BRT)" },
-  { value: "America/New_York",  label: "Amerika/New York (ET)" },
-  { value: "America/Chicago",   label: "Amerika/Chicago (CT)" },
-  { value: "America/Denver",    label: "Amerika/Denver (MT)" },
-  { value: "America/Los_Angeles", label: "Amerika/Los Angeles (PT)" },
-];
+// Timezone labels per locale — value (IANA ID) stays unchanged, only the display label changes.
+// Abbreviations (MEZ, JST, KST, …) are internationally recognized and stay in all languages.
+const TIMEZONE_LABELS: Record<string, Record<string, string>> = {
+  "Europe/Berlin":      { de: "Berlin (MEZ/MESZ)",      en: "Berlin (CET/CEST)",     es: "Berlín (CET/CEST)",      ko: "베를린 (CET/CEST)",   zh: "柏林 (CET/CEST)"      },
+  "Europe/London":      { de: "London (GMT/BST)",        en: "London (GMT/BST)",      es: "Londres (GMT/BST)",      ko: "런던 (GMT/BST)",      zh: "伦敦 (GMT/BST)"       },
+  "Europe/Paris":       { de: "Paris (MEZ/MESZ)",        en: "Paris (CET/CEST)",      es: "París (CET/CEST)",       ko: "파리 (CET/CEST)",     zh: "巴黎 (CET/CEST)"     },
+  "Europe/Vienna":      { de: "Wien (MEZ/MESZ)",         en: "Vienna (CET/CEST)",     es: "Viena (CET/CEST)",       ko: "빈 (CET/CEST)",       zh: "维也纳 (CET/CEST)"   },
+  "Europe/Zurich":      { de: "Zürich (MEZ/MESZ)",       en: "Zurich (CET/CEST)",     es: "Zúrich (CET/CEST)",      ko: "취리히 (CET/CEST)",   zh: "苏黎世 (CET/CEST)"   },
+  "Europe/Amsterdam":   { de: "Amsterdam (MEZ/MESZ)",    en: "Amsterdam (CET/CEST)",  es: "Ámsterdam (CET/CEST)",   ko: "암스테르담 (CET/CEST)",zh: "阿姆斯特丹 (CET/CEST)"},
+  "Europe/Warsaw":      { de: "Warschau (MEZ/MESZ)",     en: "Warsaw (CET/CEST)",     es: "Varsovia (CET/CEST)",    ko: "바르샤바 (CET/CEST)", zh: "华沙 (CET/CEST)"     },
+  "Europe/Stockholm":   { de: "Stockholm (MEZ/MESZ)",    en: "Stockholm (CET/CEST)",  es: "Estocolmo (CET/CEST)",   ko: "스톡홀름 (CET/CEST)", zh: "斯德哥尔摩 (CET/CEST)"},
+  "Europe/Moscow":      { de: "Moskau (MSK)",            en: "Moscow (MSK)",          es: "Moscú (MSK)",            ko: "모스크바 (MSK)",      zh: "莫斯科 (MSK)"        },
+  "Asia/Dubai":         { de: "Dubai (GST)",             en: "Dubai (GST)",           es: "Dubái (GST)",            ko: "두바이 (GST)",        zh: "迪拜 (GST)"           },
+  "Asia/Kolkata":       { de: "Kolkata (IST)",           en: "Kolkata (IST)",         es: "Calcuta (IST)",          ko: "콜카타 (IST)",        zh: "加尔各答 (IST)"      },
+  "Asia/Singapore":     { de: "Singapur (SGT)",          en: "Singapore (SGT)",       es: "Singapur (SGT)",         ko: "싱가포르 (SGT)",      zh: "新加坡 (SGT)"        },
+  "Asia/Tokyo":         { de: "Tokio (JST)",             en: "Tokyo (JST)",           es: "Tokio (JST)",            ko: "도쿄 (JST)",          zh: "东京 (JST)"           },
+  "Asia/Seoul":         { de: "Seoul (KST)",             en: "Seoul (KST)",           es: "Seúl (KST)",             ko: "서울 (KST)",          zh: "首尔 (KST)"           },
+  "Asia/Shanghai":      { de: "Shanghai (CST)",          en: "Shanghai (CST)",        es: "Shanghái (CST)",         ko: "상하이 (CST)",        zh: "上海 (CST)"           },
+  "Australia/Sydney":   { de: "Sydney (AEST/AEDT)",      en: "Sydney (AEST/AEDT)",    es: "Sídney (AEST/AEDT)",     ko: "시드니 (AEST/AEDT)",  zh: "悉尼 (AEST/AEDT)"    },
+  "Pacific/Auckland":   { de: "Auckland (NZST/NZDT)",    en: "Auckland (NZST/NZDT)", es: "Auckland (NZST/NZDT)",   ko: "오클랜드 (NZST/NZDT)",zh: "奥克兰 (NZST/NZDT)"  },
+  "UTC":                { de: "UTC / Greenwich",         en: "UTC / Greenwich",       es: "UTC / Greenwich",        ko: "UTC / 그리니치",      zh: "UTC / 格林尼治"       },
+  "America/Sao_Paulo":  { de: "São Paulo (BRT)",         en: "São Paulo (BRT)",       es: "São Paulo (BRT)",        ko: "상파울루 (BRT)",      zh: "圣保罗 (BRT)"        },
+  "America/New_York":   { de: "New York (ET)",           en: "New York (ET)",         es: "Nueva York (ET)",        ko: "뉴욕 (ET)",           zh: "纽约 (ET)"            },
+  "America/Chicago":    { de: "Chicago (CT)",            en: "Chicago (CT)",          es: "Chicago (CT)",           ko: "시카고 (CT)",         zh: "芝加哥 (CT)"          },
+  "America/Denver":     { de: "Denver (MT)",             en: "Denver (MT)",           es: "Denver (MT)",            ko: "덴버 (MT)",           zh: "丹佛 (MT)"            },
+  "America/Los_Angeles":{ de: "Los Angeles (PT)",        en: "Los Angeles (PT)",      es: "Los Ángeles (PT)",       ko: "로스앤젤레스 (PT)",   zh: "洛杉矶 (PT)"         },
+};
+
+function getTimezones(locale: string): Array<{ value: string; label: string }> {
+  return Object.entries(TIMEZONE_LABELS).map(([value, labels]) => ({
+    value,
+    label: labels[locale] ?? labels.en ?? value,
+  }));
+}
 
 function TimezoneSettings({ locale, timezone, onLocaleChange, onTimezoneChange, t }: {
   locale: Locale;
@@ -3353,11 +3362,12 @@ function TimezoneSettings({ locale, timezone, onLocaleChange, onTimezoneChange, 
     timeZone: timezone, weekday: "long", day: "numeric", month: "long",
   });
 
-  // Ensure selected timezone is in the list; add it if not
-  const inList = TIMEZONES.some(z => z.value === timezone);
+  // Build locale-aware timezone list; add browser TZ if not in list
+  const tzList  = getTimezones(locale);
+  const inList  = tzList.some(z => z.value === timezone);
   const options = inList
-    ? TIMEZONES
-    : [{ value: timezone, label: `${timezone} (Browser)` }, ...TIMEZONES];
+    ? tzList
+    : [{ value: timezone, label: `${timezone} (Browser)` }, ...tzList];
 
   const panelStyle: React.CSSProperties = {
     background: "#ffffff", border: "1px solid #e5e7eb", borderRadius: "12px",
