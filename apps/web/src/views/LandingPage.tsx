@@ -54,7 +54,7 @@ function LocaleSwitcher({ locale, onChange }: { locale: Locale; onChange: (l: Lo
       }}
       title="Sprache / Language"
     >
-      {locales.filter(l => l.code !== "pcm").map(l => (
+      {locales.filter(l => SCREENSHOT_LOCALES.has(l.code)).map(l => (
         <option key={l.code} value={l.code}>{l.label}</option>
       ))}
     </select>
@@ -63,7 +63,9 @@ function LocaleSwitcher({ locale, onChange }: { locale: Locale; onChange: (l: Lo
 
 // ── Screenshot Tabs ───────────────────────────────────────────────────────────
 
-// Locales with dedicated screenshot sets. All others fall back to "en".
+// Locales with dedicated screenshot sets.
+// A locale may only appear in the public dropdown if it has screenshots.
+// Extend this set after running capture_landing.py for the new locale.
 const SCREENSHOT_LOCALES = new Set(["de", "en"]);
 
 function screenshotUrl(name: string, locale: Locale): string {
@@ -261,7 +263,7 @@ export function LandingPage() {
             </ul>
           </div>
           <div style={{ background: C.bg1, border: `1px solid ${C.border}`, borderRadius: "12px", overflow: "hidden", boxShadow: "0 4px 24px rgba(0,0,0,0.3)" }}>
-            <img src="/api/public/screenshots/vote-dna.png" alt="Vote-DNA" style={{ width: "100%", display: "block" }} loading="lazy" />
+            <img src={screenshotUrl("vote-dna", locale)} alt="Vote-DNA" style={{ width: "100%", display: "block" }} loading="lazy" />
           </div>
         </div>
       </section>
@@ -271,7 +273,7 @@ export function LandingPage() {
         <section style={{ maxWidth: "1040px", margin: "0 auto", padding: "4rem 2rem" }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "3rem", alignItems: "center" }}>
             <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: "12px", overflow: "hidden", boxShadow: "0 4px 24px rgba(0,0,0,0.3)" }}>
-              <img src="/api/public/screenshots/community.png" alt="Community" style={{ width: "100%", display: "block" }} loading="lazy" />
+              <img src={screenshotUrl("community", locale)} alt="Community" style={{ width: "100%", display: "block" }} loading="lazy" />
             </div>
             <div>
               <SectionLabel>{t("landingComLabel")}</SectionLabel>

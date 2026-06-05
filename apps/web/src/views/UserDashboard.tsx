@@ -867,7 +867,7 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
   })() : null;
 
   return (
-    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"1rem" }}>
+    <div data-testid="dashboard-kpi-section" style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"1rem" }}>
 
       {/* ── Heute ── */}
       <div style={{

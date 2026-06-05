@@ -4,17 +4,24 @@ VoteBroker Landing-Page Screenshot Capture
 Erzeugt saubere, markerfreie App-Screenshots für die Landingpage.
 
 Vorgehen pro Tab:
-  1. /dashboard öffnen
-  2. Warten auf [data-testid="app-ready"]  → App ist geladen und authentifiziert
-  3. Klick auf [data-testid="tab-<id>"]    → Tab ist aktiv
-  4. Warten auf [data-testid="tab-<id>"][aria-current] oder fallback text
-  5. Screenshot
+  1. /dashboard öffnen, warten auf [data-testid="app-ready"]
+  2. Klick auf [data-testid="tab-<id>"]
+  3. Tab-spezifisch warten + scrollen
+  4. Screenshot
 
-Locales: alle via LOCALES-Variable oder PROMO_LOCALE env.
+Dashboard-Sonderfall:
+  Scrollt zu [data-testid="dashboard-kpi-section"] (Curation Timeline,
+  Voting Power, VP-Chart) statt zur oberen Header-Fläche.
 
 Usage:
-  SESSION_TOKEN=<t> PROMO_LOCALE=de python3 capture_landing.py
-  SESSION_TOKEN=<t> python3 capture_landing.py   # captures all locales
+  SESSION_TOKEN=<t> PROMO_LOCALE=de   python3 capture_landing.py
+  SESSION_TOKEN=<t>                   python3 capture_landing.py  # alle Locales
+
+Env-Variablen:
+  SESSION_TOKEN                 required
+  PROMO_LOCALE                  optional — einzelne Sprache
+  NGINX_URL                     default: http://172.19.0.4
+  VOTEBROKER_SCREENSHOTS_DIR    default: /var/lib/docker/volumes/…/public-screenshots
 """
 
 import os, json, sys
@@ -23,16 +30,16 @@ from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-NGINX   = os.environ.get("NGINX_URL", "http://172.19.0.4")
-TOKEN   = os.environ.get("SESSION_TOKEN", "")
-PUBDIR  = Path(os.environ.get("VOTEBROKER_SCREENSHOTS_DIR",
-               "/var/lib/docker/volumes/votebroker_data/_data/public-screenshots"))
+NGINX  = os.environ.get("NGINX_URL", "http://172.19.0.4")
+TOKEN  = os.environ.get("SESSION_TOKEN", "")
+PUBDIR = Path(os.environ.get(
+    "VOTEBROKER_SCREENSHOTS_DIR",
+    "/var/lib/docker/volumes/votebroker_data/_data/public-screenshots"
+))
 
 if not TOKEN:
-    print("ERROR: SESSION_TOKEN required")
-    sys.exit(1)
+    print("ERROR: SESSION_TOKEN required"); sys.exit(1)
 
-# Single locale from env, or capture all supported locales
 _env_locale = os.environ.get("PROMO_LOCALE", "")
 LOCALES = [_env_locale] if _env_locale else ["de", "en"]
 
@@ -42,23 +49,77 @@ SESSION_OBJ = {
     "user":   {"username": "jan-philippvieth", "provider": "steemconnect"},
 }
 
-# Tab definitions: (testid, wait_selector_or_text, output_stem)
+# ── Tab definitions ───────────────────────────────────────────────────────────
+# (tab_id, output_stem)
+# All navigation and waiting is handled per-tab in capture_tab().
 TABS = [
-    ("dashboard",  "tab-dashboard",  "dashboard"),
-    ("dna",        "tab-dna",        "vote-dna"),
-    ("community",  "tab-community",  "community"),
+    ("dashboard",  "dashboard"),
+    ("dna",        "vote-dna"),
+    ("community",  "community"),
 ]
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def wait_selector(page, selector, timeout=12000):
+def wait_sel(page, selector, timeout=10000) -> bool:
     try:
         page.wait_for_selector(selector, state="visible", timeout=timeout)
         return True
     except PWTimeout:
-        print(f"  ⚠ timeout waiting for: {selector}")
+        print(f"    ⚠ timeout: {selector}")
         return False
 
+
+def wait_text(page, text, timeout=10000):
+    try:
+        page.wait_for_function(
+            f"document.body.innerText.includes({json.dumps(text)})",
+            timeout=timeout
+        )
+    except PWTimeout:
+        pass
+
+
+def capture_tab(page, tab_id: str) -> None:
+    """Navigate to tab and prepare viewport for screenshot."""
+
+    tab_sel = f'[data-testid="tab-{tab_id}"]'
+    if not wait_sel(page, tab_sel, timeout=5000):
+        raise RuntimeError(f"Tab selector not found: {tab_sel}")
+
+    page.click(tab_sel)
+    page.wait_for_timeout(2500)
+
+    if tab_id == "dashboard":
+        # Scroll to the operational KPI section (Curation Timeline, VP chart).
+        # data-testid="dashboard-kpi-section" is on the CurationTriple container.
+        kpi_sel = '[data-testid="dashboard-kpi-section"]'
+        if wait_sel(page, kpi_sel, timeout=8000):
+            page.evaluate(
+                "document.querySelector('[data-testid=\"dashboard-kpi-section\"]')"
+                ".scrollIntoView({ behavior: 'instant', block: 'start' })"
+            )
+            page.wait_for_timeout(800)
+        else:
+            # Fallback: scroll past the header area
+            page.evaluate("window.scrollTo(0, 320)")
+            page.wait_for_timeout(500)
+
+    elif tab_id == "dna":
+        # Wait for Vote-DNA content
+        wait_text(page, "Vote-DNA", timeout=8000)
+        page.evaluate("window.scrollTo(0, 0)")
+        page.wait_for_timeout(500)
+
+    elif tab_id == "community":
+        # Wait for Community-specific content (Whale Discovery / Author Radar)
+        wait_text(page, "Signal", timeout=10000)
+        page.evaluate("window.scrollTo(0, 0)")
+        page.wait_for_timeout(500)
+
+    page.wait_for_timeout(400)
+
+
+# ── Main ──────────────────────────────────────────────────────────────────────
 
 def capture_locale(browser, locale: str) -> list[str]:
     print(f"\n=== Locale: {locale} ===")
@@ -67,7 +128,7 @@ def capture_locale(browser, locale: str) -> list[str]:
     captured = []
 
     try:
-        # Step 1: Load root, inject session + locale into localStorage
+        # 1. Inject session + locale
         page.goto(NGINX, wait_until="domcontentloaded", timeout=25000)
         page.wait_for_timeout(400)
         page.evaluate(
@@ -77,40 +138,22 @@ def capture_locale(browser, locale: str) -> list[str]:
             f"localStorage.setItem('votebroker.locale', {json.dumps(locale)})"
         )
 
-        # Step 2: Open the app and wait for auth-confirmed marker
+        # 2. Load app — wait for auth-confirmed marker
         page.goto(f"{NGINX}/dashboard", wait_until="domcontentloaded", timeout=25000)
-        if not wait_selector(page, '[data-testid="app-ready"]', timeout=12000):
-            print("  ✗ app-ready not found — session may be invalid")
+        if not wait_sel(page, '[data-testid="app-ready"]', timeout=12000):
+            print("  ✗ app-ready not found — session invalid or app not loaded")
             return []
         page.wait_for_timeout(1500)
+        print(f"  ✓ app-ready")
 
-        # Step 3: Capture each tab
-        for tab_id, tab_testid, fname in TABS:
+        # 3. Capture each tab
+        for tab_id, fname in TABS:
             print(f"  Tab: {tab_id}")
-
-            # Click via stable data-testid selector
-            tab_sel = f'[data-testid="tab-{tab_id}"]'
-            if not wait_selector(page, tab_sel, timeout=5000):
-                print(f"  ✗ {tab_sel} not found — skipping")
-                continue
-
-            page.click(tab_sel)
-            page.wait_for_timeout(2500)
-
-            # Wait for tab-specific content to settle
-            # Use the tab button being "active" as confirmation
             try:
-                page.wait_for_function(
-                    f"document.querySelector('[data-testid=\"tab-{tab_id}\"]') && "
-                    f"document.querySelector('[data-testid=\"tab-{tab_id}\"]').style.color !== 'rgb(96, 112, 120)'",
-                    timeout=6000
-                )
-            except PWTimeout:
-                pass  # Continue anyway — tab may already be active
-
-            page.wait_for_timeout(1000)
-            page.evaluate("window.scrollTo(0, 0)")
-            page.wait_for_timeout(300)
+                capture_tab(page, tab_id)
+            except RuntimeError as e:
+                print(f"  ✗ {e} — skipping")
+                continue
 
             out = PUBDIR / f"{fname}-{locale}.png"
             page.screenshot(path=str(out), full_page=False)
@@ -124,8 +167,6 @@ def capture_locale(browser, locale: str) -> list[str]:
     return captured
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
-
 def main():
     PUBDIR.mkdir(parents=True, exist_ok=True)
 
@@ -134,14 +175,14 @@ def main():
             headless=True,
             args=["--no-sandbox", "--disable-dev-shm-usage"]
         )
-
         all_captured = []
         for locale in LOCALES:
             all_captured.extend(capture_locale(browser, locale))
-
         browser.close()
 
     print(f"\n✓ Done — {len(all_captured)} screenshots in {PUBDIR}")
+    for f in all_captured:
+        print(f"  {Path(f).name}")
 
 
 if __name__ == "__main__":
