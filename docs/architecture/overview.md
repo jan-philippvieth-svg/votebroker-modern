@@ -79,7 +79,12 @@ npm run build  # baut alle Workspaces in Reihe
 # 2. @votebroker/api    → apps/api/dist/
 # 3. @votebroker/web    → apps/web/dist/
 
-docker cp apps/web/dist/. votebroker_web_1:/usr/share/nginx/html/
+# Web-Container (nginx, Container-Pfad: /usr/share/nginx/html/)
+docker cp apps/web/dist/. votebroker-modern-web-1:/usr/share/nginx/html/
+
+# API-Container (Node.js, Container-Pfad: /app/apps/api/dist/ — nicht /app/dist/)
+docker cp apps/api/dist/. votebroker-modern-api-1:/app/apps/api/dist/
+docker restart votebroker-modern-api-1
 ```
 
 ---
