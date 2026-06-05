@@ -639,8 +639,15 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
     } finally { setSaving(false); }
   }
 
-  const drafts = data?.drafts ?? [];
-  const selectedDraft = drafts.find(d => d.filename === selected) ?? null;
+  const [contentView, setContentView] = useState<"queue" | "scheduled" | "archive">("queue");
+
+  const allDrafts = data?.drafts ?? [];
+  const drafts = allDrafts.filter(d => !["scheduled","published"].includes(d.status));
+  const scheduledDrafts = allDrafts.filter(d => d.status === "scheduled")
+    .sort((a, b) => (a.scheduledFor ?? "").localeCompare(b.scheduledFor ?? ""));
+  const archivedDrafts = allDrafts.filter(d => d.status === "published")
+    .sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""));
+  const selectedDraft = allDrafts.find(d => d.filename === selected) ?? null;
 
   const PLACEHOLDER_MARKER = "Keine Commit-Daten";
   const hasPlaceholder = !!(preview?.content && preview.content.includes(PLACEHOLDER_MARKER));
@@ -653,6 +660,23 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
     <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: "0.75rem", minHeight: "500px" }}>
       {/* Left: list */}
       <div style={card}>
+        {/* Pipeline status mini-dashboard */}
+        {data && (
+          <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem", flexWrap: "wrap" as const }}>
+            {([
+              { label: "Drafts",     val: data.counts["draft"] ?? 0,     col: C.dim     },
+              { label: "Review",     val: (data.counts["reviewed"] ?? 0) + (data.counts["approved"] ?? 0), col: C.info },
+              { label: "Geplant",   val: data.counts["scheduled"] ?? 0,  col: C.purple  },
+              { label: "Published",  val: data.counts["published"] ?? 0,  col: C.ok      },
+            ] as const).map(({ label, val, col }) => (
+              <div key={label} style={{ flex: "1 1 0", textAlign: "center", background: col + "11", border: `1px solid ${col}33`, borderRadius: "6px", padding: "0.25rem 0.4rem" }}>
+                <div style={{ fontSize: "1rem", fontWeight: 700, color: col, lineHeight: 1 }}>{val}</div>
+                <div style={{ fontSize: "0.6rem", color: col, opacity: 0.85, marginTop: "0.1rem" }}>{label}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
           <p style={{ ...lbl, margin: 0 }}>Content Queue</p>
           <div style={{ display: "flex", gap: "0.3rem" }}>
@@ -673,6 +697,97 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
             >🌍 Promo</button>
           </div>
         </div>
+
+        {/* View switcher */}
+        <div style={{ display: "flex", gap: "0.25rem", marginBottom: "0.5rem" }}>
+          {(["queue","scheduled","archive"] as const).map(v => {
+            const labels = { queue: `Queue (${drafts.length})`, scheduled: `Geplant (${scheduledDrafts.length})`, archive: `Archiv (${archivedDrafts.length})` };
+            return (
+              <button key={v} type="button"
+                onClick={() => setContentView(v)}
+                style={{ flex: 1, fontSize: "0.67rem", fontWeight: contentView === v ? 700 : 400,
+                  padding: "0.25rem 0", borderRadius: "4px", cursor: "pointer", border: "none",
+                  background: contentView === v ? C.info + "22" : "transparent",
+                  color: contentView === v ? C.info : C.dim,
+                  borderBottom: `2px solid ${contentView === v ? C.info : "transparent"}`,
+                }}>
+                {labels[v]}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ── Scheduled view ── */}
+        {contentView === "scheduled" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+            {scheduledDrafts.length === 0 ? (
+              <p style={{ color: C.dim, fontSize: "0.8rem" }}>Keine geplanten Posts.</p>
+            ) : scheduledDrafts.map(d => {
+              const when = d.scheduledFor ? new Date(d.scheduledFor) : null;
+              const now = Date.now();
+              const diffMs = when ? when.getTime() - now : 0;
+              const diffH  = Math.round(diffMs / 3_600_000);
+              const diffD  = Math.round(diffMs / 86_400_000);
+              const countdown = diffMs <= 0 ? "Jetzt fällig" : diffH < 24 ? `in ${diffH}h` : `in ${diffD}d`;
+              const countCol  = diffMs <= 0 ? C.err : diffH < 24 ? C.warn : C.ok;
+              return (
+                <div key={d.filename} onClick={() => void openPreview(d.filename)}
+                  style={{ padding: "0.5rem 0.6rem", borderRadius: "5px", cursor: "pointer",
+                    background: selected === d.filename ? C.purple + "22" : C.bg1,
+                    border: `1px solid ${selected === d.filename ? C.purple : C.border}` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <span style={{ fontSize: "0.75rem", fontWeight: 600, color: C.text, flex: 1, marginRight: "0.5rem" }}>
+                      {d.title ?? d.filename}
+                    </span>
+                    <span style={{ fontSize: "0.7rem", fontWeight: 700, color: countCol, whiteSpace: "nowrap" }}>
+                      {countdown}
+                    </span>
+                  </div>
+                  {when && <div style={{ fontSize: "0.68rem", color: C.dim, marginTop: "0.15rem" }}>
+                    {when.toLocaleString("de", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })} UTC
+                  </div>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── Archive view ── */}
+        {contentView === "archive" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+            {archivedDrafts.length === 0 ? (
+              <p style={{ color: C.dim, fontSize: "0.8rem" }}>Noch keine veröffentlichten Posts.</p>
+            ) : archivedDrafts.map(d => (
+              <div key={d.filename} onClick={() => void openPreview(d.filename)}
+                style={{ padding: "0.5rem 0.6rem", borderRadius: "5px", cursor: "pointer",
+                  background: selected === d.filename ? C.ok + "22" : C.bg1,
+                  border: `1px solid ${selected === d.filename ? C.ok : C.border}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <span style={{ fontSize: "0.75rem", fontWeight: 600, color: C.text, flex: 1 }}>
+                    {d.title ?? d.filename}
+                  </span>
+                  <span style={{ fontSize: "0.67rem", color: C.ok, marginLeft: "0.5rem", whiteSpace: "nowrap" }}>✓</span>
+                </div>
+                <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.15rem" }}>
+                  <span style={{ fontSize: "0.68rem", color: C.dim }}>
+                    {d.publishedAt ? new Date(d.publishedAt).toLocaleDateString("de") : d.dateStr}
+                  </span>
+                  {d.publishedPermlink && (
+                    <a href={`https://steemit.com/votebroker/@votebroker/${d.publishedPermlink}`}
+                      target="_blank" rel="noreferrer"
+                      onClick={e => e.stopPropagation()}
+                      style={{ fontSize: "0.68rem", color: C.info }}>
+                      → Steemit
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── Queue view (existing content) ── */}
+        {contentView === "queue" && <>
 
         {/* Promo Post Generator */}
         <div id="promo-section" style={{
@@ -776,6 +891,8 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
             })}
           </div>
         )}
+
+        </> /* end queue view */}
       </div>
 
       {/* Right: preview/edit */}
