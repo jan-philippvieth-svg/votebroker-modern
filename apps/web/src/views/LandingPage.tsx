@@ -158,7 +158,7 @@ export function LandingPage() {
         position: "sticky", top: 0, background: "rgba(13,17,23,0.92)",
         backdropFilter: "blur(10px)", zIndex: 50,
       }}>
-        <img src="/assets/branding/logo/logo-dark.svg" alt="VoteBroker" height={32} style={{ display: "block" }} />
+        <img src="/assets/branding/logo/logo-dark.svg" alt="VoteBroker" height={40} style={{ display: "block", maxWidth: 160 }} />
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
           <LocaleSwitcher locale={locale} onChange={setLocale} />
           <a href="/dashboard" style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", background: C.blueDark, color: "#fff", padding: "0.4rem 1rem", borderRadius: "6px", textDecoration: "none", fontSize: "0.85rem", fontWeight: 600 }}>
