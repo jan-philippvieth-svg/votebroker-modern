@@ -158,7 +158,7 @@ export function LandingPage() {
         position: "sticky", top: 0, background: "rgba(13,17,23,0.92)",
         backdropFilter: "blur(10px)", zIndex: 50,
       }}>
-        <img src="/assets/branding/logo/icon.svg" alt="VoteBroker" height={32} style={{ display: "block" }} />
+        <img src="/assets/branding/logo/logo-dark.svg" alt="VoteBroker" height={40} style={{ display: "block", maxWidth: 160 }} />
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
           <LocaleSwitcher locale={locale} onChange={setLocale} />
           <a href="/dashboard" style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", background: C.blueDark, color: "#fff", padding: "0.4rem 1rem", borderRadius: "6px", textDecoration: "none", fontSize: "0.85rem", fontWeight: 600 }}>
@@ -168,28 +168,27 @@ export function LandingPage() {
       </nav>
 
       {/* ── Hero ── */}
-      <section style={{ maxWidth: "860px", margin: "0 auto", padding: "5rem 2rem 4rem", textAlign: "center" }}>
-        {/* Brand moment — logo mark + wordmark before the headline */}
-        <div style={{ marginBottom: "2.5rem" }}>
-          <img
-            src="/assets/branding/logo/icon-animated.svg"
-            alt=""
-            aria-hidden
-            width={88}
-            height={88}
-            style={{ display: "block", margin: "0 auto 1rem" }}
-          />
-          <img
-            src="/assets/branding/logo/logo-dark.svg"
-            alt="VoteBroker"
-            height={44}
-            style={{ display: "block", margin: "0 auto" }}
-          />
-        </div>
+      <section style={{ maxWidth: "860px", margin: "0 auto", padding: "6rem 2rem 4rem", textAlign: "center", position: "relative", overflow: "hidden" }}>
+        {/* Network mark as atmospheric background — not a UI element */}
+        <img
+          src="/assets/branding/logo/icon-animated.svg"
+          alt=""
+          aria-hidden
+          style={{
+            position: "absolute",
+            top: "50%", left: "50%",
+            transform: "translate(-50%, -54%)",
+            width: 520, height: 520,
+            opacity: 0.055,
+            pointerEvents: "none",
+            userSelect: "none",
+          }}
+        />
 
-        <div style={{ display: "inline-block", background: C.bg1, border: `1px solid ${C.border}`, borderRadius: "99px", padding: "0.3rem 1rem", fontSize: "0.75rem", color: C.muted, marginBottom: "1.75rem", letterSpacing: "0.5px", textTransform: "uppercase" as const }}>
-          {t("landingHeroBadge")}
-        </div>
+        <div style={{ position: "relative", zIndex: 1 }}>
+          <div style={{ display: "inline-block", background: C.bg1, border: `1px solid ${C.border}`, borderRadius: "99px", padding: "0.3rem 1rem", fontSize: "0.75rem", color: C.muted, marginBottom: "1.75rem", letterSpacing: "0.5px", textTransform: "uppercase" as const }}>
+            {t("landingHeroBadge")}
+          </div>
         <h1 style={{ fontSize: "clamp(2rem,5.5vw,3.5rem)", fontWeight: 800, lineHeight: 1.12, margin: "0 0 1.25rem", color: C.text, letterSpacing: "-1.5px" }}>
           {t("landingHeroTitle").split(". ").map((part, i, arr) => (
             <React.Fragment key={i}>
@@ -210,6 +209,7 @@ export function LandingPage() {
             <Github size={16} /> GitHub
           </a>
         </div>
+        </div>{/* end zIndex wrapper */}
       </section>
 
       {/* ── Warum VoteBroker? ── */}
