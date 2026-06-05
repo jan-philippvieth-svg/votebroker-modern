@@ -609,7 +609,9 @@ export async function registerContentRoutes(app: FastifyInstance): Promise<void>
     if (!existsSync(filePath)) return reply.code(404).send({ error: "file_not_found" });
 
     const rawContent = readFileSync(filePath, "utf8");
-    const { meta, body: postBody } = parseFrontmatter(rawContent);
+    const { meta, body: rawBody } = parseFrontmatter(rawContent);
+    // Strip HTML comments — they are internal review metadata, never publishable
+    const postBody = rawBody.replace(/<!--[\s\S]*?-->/g, "").trim();
     const title    = meta.title?.replace(/^["']|["']$/g, "") || existing.title || filename;
     const type     = existing.type;
     const permlink = existing.published_permlink || generatePermlink(title, existing.date_str);
