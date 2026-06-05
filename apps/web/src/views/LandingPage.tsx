@@ -107,7 +107,7 @@ function ScreenshotSection({ t, locale }: { t: ReturnType<typeof createTranslato
         ))}
       </div>
       <div style={{ border: `1px solid ${C.border}`, borderRadius: "12px", overflow: "hidden", background: C.bg1, boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }}>
-        <img src={shot.url} alt={shot.label} style={{ width: "100%", display: "block" }} loading="lazy" />
+        <Zoomable src={shot.url} alt={shot.label} style={{ width: "100%", display: "block" }} />
       </div>
       <p style={{ color: C.muted, fontSize: "0.85rem", marginTop: "0.75rem", textAlign: "center" }}>
         {shot.caption}
@@ -149,6 +149,69 @@ function Bullet({ text }: { text: string }) {
       <CheckCircle2 size={16} color={C.green} style={{ marginTop: "0.15rem", flexShrink: 0 }} />
       <span style={{ color: C.muted, fontSize: "0.88rem", lineHeight: 1.6 }}>{text}</span>
     </li>
+  );
+}
+
+// ── Lightbox ──────────────────────────────────────────────────────────────────
+
+function Lightbox({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 1000,
+        background: "rgba(0,0,0,0.88)", backdropFilter: "blur(4px)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        cursor: "zoom-out", padding: "1.5rem",
+      }}
+    >
+      <img
+        src={src} alt={alt}
+        onClick={e => e.stopPropagation()}
+        style={{
+          maxWidth: "95vw", maxHeight: "92vh",
+          borderRadius: "10px", boxShadow: "0 24px 80px rgba(0,0,0,0.7)",
+          cursor: "default", display: "block",
+        }}
+      />
+      <button
+        onClick={onClose}
+        aria-label="Schließen"
+        style={{
+          position: "absolute", top: "1rem", right: "1.25rem",
+          background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)",
+          color: "#fff", borderRadius: "50%", width: 36, height: 36,
+          fontSize: "1.1rem", cursor: "pointer", lineHeight: 1,
+        }}
+      >×</button>
+    </div>
+  );
+}
+
+// ── Zoomable image wrapper ─────────────────────────────────────────────────────
+
+function Zoomable({ src, alt, style }: { src: string; alt: string; style?: React.CSSProperties }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <img
+        src={src} alt={alt}
+        onClick={() => setOpen(true)}
+        style={{ ...style, cursor: "zoom-in" }}
+        loading="lazy"
+      />
+      {open && <Lightbox src={src} alt={alt} onClose={() => setOpen(false)} />}
+    </>
   );
 }
 
@@ -311,7 +374,7 @@ export function LandingPage() {
             </ul>
           </div>
           <div style={{ background: C.bg1, border: `1px solid ${C.border}`, borderRadius: "12px", overflow: "hidden", boxShadow: "0 4px 24px rgba(0,0,0,0.3)" }}>
-            <img src={screenshotUrl("vote-dna", locale)} alt="Vote-DNA" style={{ width: "100%", display: "block" }} loading="lazy" />
+            <Zoomable src={screenshotUrl("vote-dna", locale)} alt="Vote-DNA" style={{ width: "100%", display: "block" }} />
           </div>
         </div>
       </section>
@@ -321,7 +384,7 @@ export function LandingPage() {
         <section style={{ maxWidth: "1040px", margin: "0 auto", padding: "4rem 2rem" }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "3rem", alignItems: "center" }}>
             <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: "12px", overflow: "hidden", boxShadow: "0 4px 24px rgba(0,0,0,0.3)" }}>
-              <img src={screenshotUrl("community", locale)} alt="Community" style={{ width: "100%", display: "block" }} loading="lazy" />
+              <Zoomable src={screenshotUrl("community", locale)} alt="Community" style={{ width: "100%", display: "block" }} />
             </div>
             <div>
               <SectionLabel>{t("landingComLabel")}</SectionLabel>
@@ -367,11 +430,10 @@ export function LandingPage() {
             border: `1px solid ${C.border}`, borderRadius: "12px",
             overflow: "hidden", boxShadow: "0 8px 32px rgba(0,0,0,0.35)",
           }}>
-            <img
+            <Zoomable
               src={screenshotUrl("settings", locale)}
               alt="VoteBroker Berechtigungen"
               style={{ width: "100%", display: "block" }}
-              loading="lazy"
             />
           </div>
         </div>
