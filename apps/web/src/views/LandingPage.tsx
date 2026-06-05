@@ -350,7 +350,7 @@ export function LandingPage() {
           {t("landingConText")}
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", textAlign: "left" }}>
-          {([1,2,3,4] as const).map(i => (
+          {([1,3,4] as const).map(i => (
             <div key={i} style={{ background: C.bg1, border: `1px solid ${C.border}`, borderRadius: "10px", padding: "1.1rem 1.25rem" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.35rem" }}>
                 <ShieldCheck size={14} color={C.green} />
