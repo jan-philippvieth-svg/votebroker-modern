@@ -223,11 +223,16 @@ export function LandingPage() {
       {/* ── Nav ── */}
       <nav style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "1rem 2rem", borderBottom: `1px solid ${C.border}`,
+        padding: "0.75rem 2rem", borderBottom: `1px solid ${C.border}`,
         position: "sticky", top: 0, background: "rgba(13,17,23,0.92)",
         backdropFilter: "blur(10px)", zIndex: 50,
       }}>
-        <img src="/assets/branding/logo/logo-dark.svg" alt="VoteBroker" width={280} style={{ display: "block", height: "auto" }} />
+        {/* clamp: 220px on mobile (375px) → 380px on desktop (1440px) */}
+        <img
+          src="/assets/branding/logo/logo-dark.svg"
+          alt="VoteBroker"
+          style={{ display: "block", height: "auto", width: "clamp(220px, 28vw, 380px)" }}
+        />
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
           <LocaleSwitcher locale={locale} onChange={setLocale} />
           <a href="/dashboard" style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", background: C.blueDark, color: "#fff", padding: "0.4rem 1rem", borderRadius: "6px", textDecoration: "none", fontSize: "0.85rem", fontWeight: 600 }}>
