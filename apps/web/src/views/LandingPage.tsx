@@ -54,7 +54,7 @@ function LocaleSwitcher({ locale, onChange }: { locale: Locale; onChange: (l: Lo
       }}
       title="Sprache / Language"
     >
-      {locales.filter(l => SCREENSHOT_LOCALES.has(l.code)).map(l => (
+      {locales.filter(l => l.code !== "pcm").map(l => (
         <option key={l.code} value={l.code}>{l.label}</option>
       ))}
     </select>
@@ -64,8 +64,8 @@ function LocaleSwitcher({ locale, onChange }: { locale: Locale; onChange: (l: Lo
 // ── Screenshot Tabs ───────────────────────────────────────────────────────────
 
 // Locales with dedicated screenshot sets.
-// A locale may only appear in the public dropdown if it has screenshots.
-// Extend this set after running capture_landing.py for the new locale.
+// All other public locales fall back to "en" screenshots — they still appear
+// in the dropdown. Extend this set after running capture_landing.py for a locale.
 const SCREENSHOT_LOCALES = new Set(["de", "en"]);
 
 function screenshotUrl(name: string, locale: Locale): string {

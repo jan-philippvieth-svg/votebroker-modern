@@ -90,18 +90,18 @@ def capture_tab(page, tab_id: str) -> None:
     page.wait_for_timeout(2500)
 
     if tab_id == "dashboard":
-        # Scroll to the operational KPI section (Curation Timeline, VP chart).
-        # data-testid="dashboard-kpi-section" is on the CurationTriple container.
-        kpi_sel = '[data-testid="dashboard-kpi-section"]'
-        if wait_sel(page, kpi_sel, timeout=8000):
+        # Scroll to OperativeKPIRow: Voting Power | Heute | 7 Tage | Lifetime | VP-Chart
+        # data-testid="dashboard-marketing-section" is on the OperativeKPIRow wrapper.
+        mkt_sel = '[data-testid="dashboard-marketing-section"]'
+        if wait_sel(page, mkt_sel, timeout=8000):
             page.evaluate(
-                "document.querySelector('[data-testid=\"dashboard-kpi-section\"]')"
+                "document.querySelector('[data-testid=\"dashboard-marketing-section\"]')"
                 ".scrollIntoView({ behavior: 'instant', block: 'start' })"
             )
             page.wait_for_timeout(800)
         else:
-            # Fallback: scroll past the header area
-            page.evaluate("window.scrollTo(0, 320)")
+            # Fallback: scroll past the DNA profile header
+            page.evaluate("window.scrollTo(0, 260)")
             page.wait_for_timeout(500)
 
     elif tab_id == "dna":

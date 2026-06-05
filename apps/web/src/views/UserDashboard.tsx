@@ -610,7 +610,7 @@ function OperativeKPIRow({ snapshot, snapshotLoading, snapshotRefreshedAt, oppor
   const openOpps = opportunities?.filter(p => p.eligible) ?? [];
 
   return (
-    <div style={{ display:"grid", gridTemplateColumns:"1.4fr 1fr", gap:"1rem" }}>
+    <div data-testid="dashboard-marketing-section" style={{ display:"grid", gridTemplateColumns:"1.4fr 1fr", gap:"1rem" }}>
 
       {/* Voting Power */}
       <div style={card}>
