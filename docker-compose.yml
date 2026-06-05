@@ -84,3 +84,4 @@ volumes:
   caddy_data:
   caddy_config:
   votebroker_data:
+    external: true
