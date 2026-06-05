@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  captureScreenshots, ContentValidationError, editDraftContent, fixScreenshotUrls,
+  captureScreenshots, ContentValidationError, deleteDraft, editDraftContent, fixScreenshotUrls,
   generateDevlogContent, generatePromoPost, getAdminCockpit, getContentDrafts, getContentPreview,
   injectScreenshots, listScreenshots, publishDraft, triggerFeePost, updateDraftStatus,
   type AdminCockpit, type AuthSession, type BroadcastEntry,
@@ -894,6 +894,27 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
 
                   {selectedDraft?.status !== "published" && selectedDraft?.status !== "failed" && (
                     <button style={btnStyle(C.err)} type="button" disabled={saving} onClick={() => void setStatus(selected, "failed", { failedReason: "Manually rejected" })}>Ablehnen</button>
+                  )}
+
+                  {selectedDraft && !["published", "scheduled"].includes(selectedDraft.status) && (
+                    <button
+                      style={{ ...btnStyle(C.err), opacity: 0.7 }}
+                      type="button"
+                      disabled={saving}
+                      onClick={async () => {
+                        if (!confirm(`Draft "${selected}" dauerhaft löschen?`)) return;
+                        setSaving(true);
+                        try {
+                          await deleteDraft(session.token, selected);
+                          setActionMsg("✓ Gelöscht");
+                          setSelected(null);
+                          setPreview(null);
+                          await load();
+                        } catch (e) {
+                          setActionMsg(`✗ ${e instanceof Error ? e.message : "Fehler"}`);
+                        } finally { setSaving(false); }
+                      }}
+                    >🗑 Löschen</button>
                   )}
                 </>
               )}

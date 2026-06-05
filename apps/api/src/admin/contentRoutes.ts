@@ -471,6 +471,30 @@ export async function registerContentRoutes(app: FastifyInstance): Promise<void>
     return { filename, content, meta };
   });
 
+  // Delete draft — only allowed for failed/draft status, never for published
+  app.delete("/api/admin/content", async (request, reply) => {
+    const body = z.object({ filename: z.string().min(1).max(200) }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: "invalid_request" });
+    const { filename } = body.data;
+    if (!DRAFT_PATTERN.test(filename)) return reply.code(400).send({ error: "invalid_filename" });
+
+    const db = getDb();
+    const row = db.prepare("SELECT status FROM content_drafts WHERE filename = ?").get(filename) as { status: string } | undefined;
+
+    // Safety: never allow deleting published posts
+    if (row?.status === "published" || row?.status === "scheduled") {
+      return reply.code(403).send({ error: "cannot_delete_published", hint: "Published and scheduled drafts cannot be deleted." });
+    }
+
+    const filePath = resolve(CONTENT_DIR, filename);
+    if (existsSync(filePath)) {
+      const { unlinkSync } = await import("node:fs");
+      unlinkSync(filePath);
+    }
+    db.prepare("DELETE FROM content_drafts WHERE filename = ?").run(filename);
+    return { deleted: filename };
+  });
+
   // Update draft status
   app.post("/api/admin/content/status", async (request, reply) => {
     const body = z.object({

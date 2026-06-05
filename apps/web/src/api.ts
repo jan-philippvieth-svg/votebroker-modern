@@ -782,6 +782,18 @@ export async function editDraftContent(token: string, filename: string, content:
   if (!res.ok) throw new Error("edit_failed");
 }
 
+export async function deleteDraft(token: string, filename: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/admin/content`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json", session: token },
+    body: JSON.stringify({ filename }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: string; hint?: string };
+    throw new Error(err.hint ?? err.error ?? `delete_failed (${res.status})`);
+  }
+}
+
 /** Trigger a fee settlement post. Pass `date` (YYYY-MM-DD) to retroactively publish, `forceUpdate` to overwrite an existing post (fix wrong title). */
 export async function triggerFeePost(token: string, date?: string, forceUpdate?: boolean): Promise<FeePostLogEntry> {
   const payload: Record<string, unknown> = {};
