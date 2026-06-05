@@ -808,7 +808,7 @@ export function App() {
     <main className="shell">
 
       {/* Compact topbar */}
-      <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.75rem 1.5rem", borderBottom: "1px solid #21262d", background: "#ffffff", flexWrap: "wrap", gap: "0.5rem" }}>
+      <header data-testid="app-ready" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.75rem 1.5rem", borderBottom: "1px solid #21262d", background: "#ffffff", flexWrap: "wrap", gap: "0.5rem" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
           <img src="/assets/branding/logo/logo-light.svg" alt="VoteBroker" height={36} style={{ display: "block", maxWidth: 148 }} />
           {accountSnapshot ? (
@@ -871,6 +871,7 @@ export function App() {
             <button
               key={tab}
               type="button"
+              data-testid={`tab-${tab}`}
               onClick={() => setActiveTab(tab)}
               style={{
                 background: "none", border: "none", cursor: "pointer",
