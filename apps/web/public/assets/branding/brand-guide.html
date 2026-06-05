@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VoteBroker — Brand Guide</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@200;400;500;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+--navy900:#0B1020;--navy800:#0F1A2E;--navy700:#141E35;--nodebg:#0d1424;
+--blue600:#2563EB;--blue500:#378ADD;--blue300:#93C5FD;--cyan400:#00D4FF;--cyan300:#67E8F9;
+--purple:#7C3AED;--mint:#5DCAA5;--success:#22C55E;--warning:#F59E0B;--danger:#EF4444;
+--t100:#E2EBF0;--t300:#B8CADF;--t500:#7C9BBF;--t700:#4B6080;
+--grad:linear-gradient(90deg,#2563EB,#00D4FF);
+--font:"Poppins","Segoe UI",system-ui,-apple-system,Arial,sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--navy900);color:var(--t100);font-family:var(--font);line-height:1.6;font-weight:400}
+.svg-embed{width:100%;height:auto;display:block}
+header{padding:64px 56px 48px;border-bottom:1px solid rgba(37,99,235,0.18);background:linear-gradient(180deg,#0F1535,#0B1020)}
+.badge{display:inline-block;padding:5px 14px;border:1px solid var(--cyan400);border-radius:20px;font-size:11px;letter-spacing:3px;color:var(--cyan400);margin-bottom:24px;text-transform:uppercase}
+h1{font-size:46px;font-weight:200;letter-spacing:-0.02em}
+h1 b{font-weight:800;background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.tag{font-size:13px;letter-spacing:3px;color:var(--t500);margin-top:8px;text-transform:uppercase}
+main{max-width:1080px;margin:0 auto;padding:56px}
+section{margin-bottom:72px}
+h2{font-size:11px;letter-spacing:4px;color:var(--t500);text-transform:uppercase;margin-bottom:28px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.07)}
+h3{font-size:15px;font-weight:500;color:var(--t100);margin:24px 0 12px}
+p{color:var(--t300);font-size:14px;margin-bottom:12px}
+.lead{font-size:16px;color:var(--t300);max-width:70ch}
+.logo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.logo-card{background:var(--navy700);border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:32px;display:flex;flex-direction:column;align-items:center;gap:16px;min-height:200px;justify-content:center}
+.logo-card.light{background:#F4F7FB}
+.logo-card .lbl{font-size:10px;letter-spacing:2px;color:var(--t500);text-transform:uppercase}
+.logo-card.light .lbl{color:#5B7A9A}
+.mark-box{width:120px;height:120px}
+.hero-mark{display:flex;align-items:center;gap:40px;background:var(--navy700);border-radius:16px;padding:36px;border:1px solid rgba(255,255,255,0.06)}
+.hero-mark .m{width:160px;height:160px;flex:none}
+.wm{font-size:48px;letter-spacing:-0.02em;line-height:1}
+.wm .v{font-weight:200}.wm .b{font-weight:800;background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.colors{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px}
+.sw{border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,0.08)}
+.sw .chip{height:72px}
+.sw .meta{padding:8px 10px;background:var(--navy800)}
+.sw .name{font-size:12px;font-weight:500;color:var(--t100)}
+.sw .hex{font-size:11px;color:var(--t500);font-family:monospace}
+.type-row{margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid rgba(255,255,255,0.05)}
+.type-row .meta{font-size:11px;color:var(--t500);letter-spacing:1px;margin-top:6px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:32px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+tr{border-bottom:1px solid rgba(255,255,255,0.06)}
+th{text-align:left;padding:10px 8px;font-size:10px;letter-spacing:2px;color:var(--t500);text-transform:uppercase}
+td{padding:11px 8px;color:var(--t300)}
+td code{font-family:monospace;font-size:12px;color:var(--cyan400);background:rgba(0,212,255,0.07);padding:2px 7px;border-radius:4px}
+.do-dont{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.box{background:var(--navy700);border-radius:12px;padding:20px;border:1px solid rgba(255,255,255,0.06)}
+.box.do{border-top:2px solid var(--success)}
+.box.dont{border-top:2px solid var(--danger)}
+.box h3{margin-top:0}
+.box ul{list-style:none;font-size:13px;color:var(--t300)}
+.box li{padding:5px 0 5px 22px;position:relative}
+.box.do li:before{content:"✓";position:absolute;left:0;color:var(--success)}
+.box.dont li:before{content:"✕";position:absolute;left:0;color:var(--danger)}
+.clearspace{background:var(--navy700);border-radius:12px;padding:32px;display:flex;justify-content:center;border:1px solid rgba(255,255,255,0.06)}
+.cs-wrap{position:relative;width:200px;height:200px;outline:1px dashed rgba(0,212,255,0.4);outline-offset:24px}
+.cs-wrap .m{width:100%;height:100%}
+.values{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.vcard{background:var(--navy700);border-radius:12px;padding:20px;border:1px solid rgba(255,255,255,0.06);border-top:2px solid var(--blue600)}
+.vcard h3{margin:0 0 6px;font-size:14px}
+.vcard p{font-size:12px;color:var(--t500);margin:0}
+.anim-demo{display:flex;gap:32px;align-items:center;background:var(--navy700);border-radius:16px;padding:36px;border:1px solid rgba(255,255,255,0.06)}
+.anim-demo .m{width:140px;height:140px;flex:none}
+@media(max-width:760px){.logo-grid,.grid2,.do-dont,.values{grid-template-columns:1fr}.hero-mark,.anim-demo{flex-direction:column;text-align:center}main,header{padding:32px 24px}}
+</style></head>
+<body>
+<header>
+<div class="badge">Brand Guide · v1.0 · Produktionsreif</div>
+<h1>VOTE<b>BROKER</b></h1>
+<div class="tag">Smarter Curating. Stable Voting Power.</div>
+</header>
+<main>
+
+<section>
+<h2>Markenhaltung</h2>
+<p class="lead">VoteBroker steht für Community Intelligence, Signal-Analyse und Curation-Networking im Steem-Ökosystem. Das Logo zeigt einen aktiven zentralen Hub, in dem Signale zusammenlaufen und verarbeitet werden.</p>
+<div class="values" style="margin-top:24px">
+<div class="vcard" style="border-top-color:#00D4FF"><h3>Intelligence</h3><p>Daten, Signale, Entscheidungen</p></div>
+<div class="vcard" style="border-top-color:#2563EB"><h3>Signal Processing</h3><p>Echtzeit-Analyse</p></div>
+<div class="vcard" style="border-top-color:#7C3AED"><h3>Community Discovery</h3><p>Whale & Vote-DNA</p></div>
+<div class="vcard" style="border-top-color:#5DCAA5"><h3>Curation Network</h3><p>Vernetzte Kuratierung</p></div>
+</div>
+</section>
+
+<section>
+<h2>Das Logo</h2>
+<div class="hero-mark">
+<div class="m"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" class="svg-embed" role="img" aria-label="VoteBroker">
+  <title>VoteBroker — Signal Processing Mark</title>
+  <defs>
+    <radialGradient id="vbHubGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00D4FF" stop-opacity="0.30"/>
+      <stop offset="55%" stop-color="#2563EB" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#2563EB" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- hub glow -->
+  <circle cx="100" cy="118" r="40" fill="url(#vbHubGlow)"/>
+
+  <!-- edges -->
+  <g fill="none" stroke-linecap="round">
+    <line x1="100" y1="118" x2="55"  y2="58"  stroke="#2563EB" stroke-width="1.5" opacity="0.6"/>
+    <line x1="100" y1="118" x2="145" y2="58"  stroke="#378ADD" stroke-width="1.5" opacity="0.6"/>
+    <line x1="100" y1="118" x2="100" y2="42"  stroke="#00D4FF" stroke-width="1.2" opacity="0.5"/>
+    <line x1="55"  y1="58"  x2="100" y2="42"  stroke="#378ADD" stroke-width="0.8" opacity="0.35"/>
+    <line x1="145" y1="58"  x2="100" y2="42"  stroke="#378ADD" stroke-width="0.8" opacity="0.35"/>
+    <line x1="100" y1="118" x2="48"  y2="150" stroke="#2563EB" stroke-width="0.8" opacity="0.4"/>
+    <line x1="100" y1="118" x2="152" y2="150" stroke="#378ADD" stroke-width="0.8" opacity="0.4"/>
+    <line x1="100" y1="118" x2="72"  y2="172" stroke="#00D4FF" stroke-width="0.7" opacity="0.35"/>
+    <line x1="100" y1="118" x2="128" y2="172" stroke="#00D4FF" stroke-width="0.7" opacity="0.35"/>
+  </g>
+
+  <!-- frozen signal pulses on the two primary V arms -->
+  <circle cx="78"  cy="89" r="2.4" fill="#67E8F9" opacity="0.9"/>
+  <circle cx="122" cy="89" r="2.2" fill="#93C5FD" opacity="0.85"/>
+
+  <!-- satellite (lower) nodes -->
+  <circle cx="48"  cy="150" r="5"   fill="#0d1424" stroke="#2563EB" stroke-width="1.3"/><circle cx="48"  cy="150" r="2"   fill="#2563EB"/>
+  <circle cx="152" cy="150" r="5"   fill="#0d1424" stroke="#378ADD" stroke-width="1.3"/><circle cx="152" cy="150" r="2"   fill="#378ADD"/>
+  <circle cx="72"  cy="172" r="4.5" fill="#0d1424" stroke="#00D4FF" stroke-width="1.3"/><circle cx="72"  cy="172" r="1.8" fill="#00D4FF"/>
+  <circle cx="128" cy="172" r="4.5" fill="#0d1424" stroke="#00D4FF" stroke-width="1.3"/><circle cx="128" cy="172" r="1.8" fill="#00D4FF"/>
+
+  <!-- upper nodes -->
+  <circle cx="100" cy="42" r="7"   fill="#0d1424" stroke="#00D4FF" stroke-width="1.6"/><circle cx="100" cy="42" r="3"   fill="#00D4FF"/>
+  <circle cx="55"  cy="58" r="8.5" fill="#0d1424" stroke="#2563EB" stroke-width="1.8"/><circle cx="55"  cy="58" r="3.8" fill="#2563EB"/>
+  <circle cx="145" cy="58" r="8.5" fill="#0d1424" stroke="#378ADD" stroke-width="1.8"/><circle cx="145" cy="58" r="3.8" fill="#378ADD"/>
+
+  <!-- active hub -->
+  <circle cx="100" cy="118" r="23" fill="none"    stroke="#2563EB" stroke-width="0.8" opacity="0.35"/>
+  <circle cx="100" cy="118" r="16" fill="#0d1424" stroke="#2563EB" stroke-width="2.2"/>
+  <circle cx="100" cy="118" r="9"  fill="#0d1424" stroke="#378ADD" stroke-width="1.2"/>
+  <circle cx="100" cy="118" r="5.2" fill="#00D4FF"/>
+</svg>
+</div>
+<div class="wm"><span class="v">VOTE</span><span class="b">BROKER</span></div>
+</div>
+<p style="margin-top:16px">Dominanter, leuchtender Hub mit Doppelring · drei obere Knoten bilden ein subtiles umgedrehtes „V" · Ring ruhiger Satelliten-Knoten. Der Hub wirkt aktiv: Glow, Doppelring und (im Web) wandernde Signalpulse.</p>
+</section>
+
+<section>
+<h2>Logo-Varianten</h2>
+<div class="logo-grid">
+<div class="logo-card"><div class="mark-box"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" class="svg-embed" role="img" aria-label="VoteBroker">
+  <title>VoteBroker — Signal Processing Mark</title>
+  <defs>
+    <radialGradient id="vbHubGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00D4FF" stop-opacity="0.30"/>
+      <stop offset="55%" stop-color="#2563EB" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#2563EB" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- hub glow -->
+  <circle cx="100" cy="118" r="40" fill="url(#vbHubGlow)"/>
+
+  <!-- edges -->
+  <g fill="none" stroke-linecap="round">
+    <line x1="100" y1="118" x2="55"  y2="58"  stroke="#2563EB" stroke-width="1.5" opacity="0.6"/>
+    <line x1="100" y1="118" x2="145" y2="58"  stroke="#378ADD" stroke-width="1.5" opacity="0.6"/>
+    <line x1="100" y1="118" x2="100" y2="42"  stroke="#00D4FF" stroke-width="1.2" opacity="0.5"/>
+    <line x1="55"  y1="58"  x2="100" y2="42"  stroke="#378ADD" stroke-width="0.8" opacity="0.35"/>
+    <line x1="145" y1="58"  x2="100" y2="42"  stroke="#378ADD" stroke-width="0.8" opacity="0.35"/>
+    <line x1="100" y1="118" x2="48"  y2="150" stroke="#2563EB" stroke-width="0.8" opacity="0.4"/>
+    <line x1="100" y1="118" x2="152" y2="150" stroke="#378ADD" stroke-width="0.8" opacity="0.4"/>
+    <line x1="100" y1="118" x2="72"  y2="172" stroke="#00D4FF" stroke-width="0.7" opacity="0.35"/>
+    <line x1="100" y1="118" x2="128" y2="172" stroke="#00D4FF" stroke-width="0.7" opacity="0.35"/>
+  </g>
+
+  <!-- frozen signal pulses on the two primary V arms -->
+  <circle cx="78"  cy="89" r="2.4" fill="#67E8F9" opacity="0.9"/>
+  <circle cx="122" cy="89" r="2.2" fill="#93C5FD" opacity="0.85"/>
+
+  <!-- satellite (lower) nodes -->
+  <circle cx="48"  cy="150" r="5"   fill="#0d1424" stroke="#2563EB" stroke-width="1.3"/><circle cx="48"  cy="150" r="2"   fill="#2563EB"/>
+  <circle cx="152" cy="150" r="5"   fill="#0d1424" stroke="#378ADD" stroke-width="1.3"/><circle cx="152" cy="150" r="2"   fill="#378ADD"/>
+  <circle cx="72"  cy="172" r="4.5" fill="#0d1424" stroke="#00D4FF" stroke-width="1.3"/><circle cx="72"  cy="172" r="1.8" fill="#00D4FF"/>
+  <circle cx="128" cy="172" r="4.5" fill="#0d1424" stroke="#00D4FF" stroke-width="1.3"/><circle cx="128" cy="172" r="1.8" fill="#00D4FF"/>
+
+  <!-- upper nodes -->
+  <circle cx="100" cy="42" r="7"   fill="#0d1424" stroke="#00D4FF" stroke-width="1.6"/><circle cx="100" cy="42" r="3"   fill="#00D4FF"/>
+  <circle cx="55"  cy="58" r="8.5" fill="#0d1424" stroke="#2563EB" stroke-width="1.8"/><circle cx="55"  cy="58" r="3.8" fill="#2563EB"/>
+  <circle cx="145" cy="58" r="8.5" fill="#0d1424" stroke="#378ADD" stroke-width="1.8"/><circle cx="145" cy="58" r="3.8" fill="#378ADD"/>
+
+  <!-- active hub -->
+  <circle cx="100" cy="118" r="23" fill="none"    stroke="#2563EB" stroke-width="0.8" opacity="0.35"/>
+  <circle cx="100" cy="118" r="16" fill="#0d1424" stroke="#2563EB" stroke-width="2.2"/>
+  <circle cx="100" cy="118" r="9"  fill="#0d1424" stroke="#378ADD" stroke-width="1.2"/>
+  <circle cx="100" cy="118" r="5.2" fill="#00D4FF"/>
+</svg>
+</div><span class="lbl">Master / Dark</span></div>
+<div class="logo-card light"><div class="mark-box"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" class="svg-embed" role="img" aria-label="VoteBroker">
+  <title>VoteBroker — Signal Processing Mark</title>
+  <defs>
+    <radialGradient id="vbHubGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00D4FF" stop-opacity="0.30"/>
+      <stop offset="55%" stop-color="#2563EB" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#2563EB" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- hub glow -->
+  <circle cx="100" cy="118" r="40" fill="url(#vbHubGlow)"/>
+
+  <!-- edges -->
+  <g fill="none" stroke-linecap="round">
+    <line x1="100" y1="118" x2="55"  y2="58"  stroke="#2563EB" stroke-width="1.5" opacity="0.6"/>
+    <line x1="100" y1="118" x2="145" y2="58"  stroke="#378ADD" stroke-width="1.5" opacity="0.6"/>
+    <line x1="100" y1="118" x2="100" y2="42"  stroke="#00D4FF" stroke-width="1.2" opacity="0.5"/>
+    <line x1="55"  y1="58"  x2="100" y2="42"  stroke="#378ADD" stroke-width="0.8" opacity="0.35"/>
+    <line x1="145" y1="58"  x2="100" y2="42"  stroke="#378ADD" stroke-width="0.8" opacity="0.35"/>
+    <line x1="100" y1="118" x2="48"  y2="150" stroke="#2563EB" stroke-width="0.8" opacity="0.4"/>
+    <line x1="100" y1="118" x2="152" y2="150" stroke="#378ADD" stroke-width="0.8" opacity="0.4"/>
+    <line x1="100" y1="118" x2="72"  y2="172" stroke="#00D4FF" stroke-width="0.7" opacity="0.35"/>
+    <line x1="100" y1="118" x2="128" y2="172" stroke="#00D4FF" stroke-width="0.7" opacity="0.35"/>
+  </g>
+
+  <!-- frozen signal pulses on the two primary V arms -->
+  <circle cx="78"  cy="89" r="2.4" fill="#67E8F9" opacity="0.9"/>
+  <circle cx="122" cy="89" r="2.2" fill="#93C5FD" opacity="0.85"/>
+
+  <!-- satellite (lower) nodes -->
+  <circle cx="48"  cy="150" r="5"   fill="#F4F7FB" stroke="#2563EB" stroke-width="1.3"/><circle cx="48"  cy="150" r="2"   fill="#2563EB"/>
+  <circle cx="152" cy="150" r="5"   fill="#F4F7FB" stroke="#378ADD" stroke-width="1.3"/><circle cx="152" cy="150" r="2"   fill="#378ADD"/>
+  <circle cx="72"  cy="172" r="4.5" fill="#F4F7FB" stroke="#00D4FF" stroke-width="1.3"/><circle cx="72"  cy="172" r="1.8" fill="#00D4FF"/>
+  <circle cx="128" cy="172" r="4.5" fill="#F4F7FB" stroke="#00D4FF" stroke-width="1.3"/><circle cx="128" cy="172" r="1.8" fill="#00D4FF"/>
+
+  <!-- upper nodes -->
+  <circle cx="100" cy="42" r="7"   fill="#F4F7FB" stroke="#00D4FF" stroke-width="1.6"/><circle cx="100" cy="42" r="3"   fill="#00D4FF"/>
+  <circle cx="55"  cy="58" r="8.5" fill="#F4F7FB" stroke="#2563EB" stroke-width="1.8"/><circle cx="55"  cy="58" r="3.8" fill="#2563EB"/>
+  <circle cx="145" cy="58" r="8.5" fill="#F4F7FB" stroke="#378ADD" stroke-width="1.8"/><circle cx="145" cy="58" r="3.8" fill="#378ADD"/>
+
+  <!-- active hub -->
+  <circle cx="100" cy="118" r="23" fill="none"    stroke="#2563EB" stroke-width="0.8" opacity="0.35"/>
+  <circle cx="100" cy="118" r="16" fill="#F4F7FB" stroke="#2563EB" stroke-width="2.2"/>
+  <circle cx="100" cy="118" r="9"  fill="#F4F7FB" stroke="#378ADD" stroke-width="1.2"/>
+  <circle cx="100" cy="118" r="5.2" fill="#00D4FF"/>
+</svg>
+</div><span class="lbl">Light</span></div>
+<div class="logo-card"><div class="mark-box"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" class="svg-embed" role="img" aria-label="VoteBroker">
+  <title>VoteBroker — Signal Processing Mark</title>
+  <defs>
+    <radialGradient id="vbHubGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00D4FF" stop-opacity="0.30"/>
+      <stop offset="55%" stop-color="#2563EB" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#2563EB" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- hub glow -->
+  
+
+  <!-- edges -->
+  <g fill="none" stroke-linecap="round">
+    <line x1="100" y1="118" x2="55"  y2="58"  stroke="#E2EBF0" stroke-width="1.5" opacity="0.6"/>
+    <line x1="100" y1="118" x2="145" y2="58"  stroke="#E2EBF0" stroke-width="1.5" opacity="0.6"/>
+    <line x1="100" y1="118" x2="100" y2="42"  stroke="#E2EBF0" stroke-width="1.2" opacity="0.5"/>
+    <line x1="55"  y1="58"  x2="100" y2="42"  stroke="#E2EBF0" stroke-width="0.8" opacity="0.35"/>
+    <line x1="145" y1="58"  x2="100" y2="42"  stroke="#E2EBF0" stroke-width="0.8" opacity="0.35"/>
+    <line x1="100" y1="118" x2="48"  y2="150" stroke="#E2EBF0" stroke-width="0.8" opacity="0.4"/>
+    <line x1="100" y1="118" x2="152" y2="150" stroke="#E2EBF0" stroke-width="0.8" opacity="0.4"/>
+    <line x1="100" y1="118" x2="72"  y2="172" stroke="#E2EBF0" stroke-width="0.7" opacity="0.35"/>
+    <line x1="100" y1="118" x2="128" y2="172" stroke="#E2EBF0" stroke-width="0.7" opacity="0.35"/>
+  </g>
+
+  <!-- frozen signal pulses on the two primary V arms -->
+  <circle cx="78"  cy="89" r="2.4" fill="#E2EBF0" opacity="0.9"/>
+  <circle cx="122" cy="89" r="2.2" fill="#E2EBF0" opacity="0.85"/>
+
+  <!-- satellite (lower) nodes -->
+  <circle cx="48"  cy="150" r="5"   fill="none" stroke="#E2EBF0" stroke-width="1.3"/><circle cx="48"  cy="150" r="2"   fill="#E2EBF0"/>
+  <circle cx="152" cy="150" r="5"   fill="none" stroke="#E2EBF0" stroke-width="1.3"/><circle cx="152" cy="150" r="2"   fill="#E2EBF0"/>
+  <circle cx="72"  cy="172" r="4.5" fill="none" stroke="#E2EBF0" stroke-width="1.3"/><circle cx="72"  cy="172" r="1.8" fill="#E2EBF0"/>
+  <circle cx="128" cy="172" r="4.5" fill="none" stroke="#E2EBF0" stroke-width="1.3"/><circle cx="128" cy="172" r="1.8" fill="#E2EBF0"/>
+
+  <!-- upper nodes -->
+  <circle cx="100" cy="42" r="7"   fill="none" stroke="#E2EBF0" stroke-width="1.6"/><circle cx="100" cy="42" r="3"   fill="#E2EBF0"/>
+  <circle cx="55"  cy="58" r="8.5" fill="none" stroke="#E2EBF0" stroke-width="1.8"/><circle cx="55"  cy="58" r="3.8" fill="#E2EBF0"/>
+  <circle cx="145" cy="58" r="8.5" fill="none" stroke="#E2EBF0" stroke-width="1.8"/><circle cx="145" cy="58" r="3.8" fill="#E2EBF0"/>
+
+  <!-- active hub -->
+  <circle cx="100" cy="118" r="23" fill="none"    stroke="#E2EBF0" stroke-width="0.8" opacity="0.35"/>
+  <circle cx="100" cy="118" r="16" fill="none" stroke="#E2EBF0" stroke-width="2.2"/>
+  <circle cx="100" cy="118" r="9"  fill="none" stroke="#E2EBF0" stroke-width="1.2"/>
+  <circle cx="100" cy="118" r="5.2" fill="#E2EBF0"/>
+</svg>
+</div><span class="lbl">Monochrom</span></div>
+</div>
+<table style="margin-top:24px">
+<tr><th>Variante</th><th>Datei</th><th>Verwendung</th></tr>
+<tr><td>Master</td><td><code>logo/logo-master.svg</code></td><td>Standard, transparent</td></tr>
+<tr><td>Dark / Light</td><td><code>logo/logo-dark.svg</code> · <code>-light.svg</code></td><td>Dunkle / helle Flächen</td></tr>
+<tr><td>Mono hell / dunkel</td><td><code>logo/logo-mono-light.svg</code> · <code>-dark.svg</code></td><td>Einfarbig</td></tr>
+<tr><td>Animiert</td><td><code>logo/logo-animated.svg</code></td><td>Nur Web/App</td></tr>
+<tr><td>Icon</td><td><code>logo/icon.svg</code> · <code>icon-animated.svg</code></td><td>Ohne Wortmarke</td></tr>
+</table>
+</section>
+
+<section>
+<h2>Farbpalette</h2>
+<h3>Primär</h3>
+<div class="colors">
+<div class="sw"><div class="chip" style="background:#0B1020;border-bottom:1px solid rgba(255,255,255,0.1)"></div><div class="meta"><div class="name">Navy 900</div><div class="hex">#0B1020</div></div></div>
+<div class="sw"><div class="chip" style="background:#2563EB"></div><div class="meta"><div class="name">Primary Blue</div><div class="hex">#2563EB</div></div></div>
+<div class="sw"><div class="chip" style="background:#00D4FF"></div><div class="meta"><div class="name">Cyan 400</div><div class="hex">#00D4FF</div></div></div>
+</div>
+<h3>Sekundär</h3>
+<div class="colors">
+<div class="sw"><div class="chip" style="background:#0F1A2E"></div><div class="meta"><div class="name">Navy 800</div><div class="hex">#0F1A2E</div></div></div>
+<div class="sw"><div class="chip" style="background:#141E35"></div><div class="meta"><div class="name">Navy 700</div><div class="hex">#141E35</div></div></div>
+<div class="sw"><div class="chip" style="background:#378ADD"></div><div class="meta"><div class="name">Blue 500</div><div class="hex">#378ADD</div></div></div>
+<div class="sw"><div class="chip" style="background:#93C5FD"></div><div class="meta"><div class="name">Blue 300</div><div class="hex">#93C5FD</div></div></div>
+<div class="sw"><div class="chip" style="background:#67E8F9"></div><div class="meta"><div class="name">Cyan 300</div><div class="hex">#67E8F9</div></div></div>
+</div>
+<h3>Akzente & Status</h3>
+<div class="colors">
+<div class="sw"><div class="chip" style="background:#7C3AED"></div><div class="meta"><div class="name">Purple</div><div class="hex">#7C3AED</div></div></div>
+<div class="sw"><div class="chip" style="background:#5DCAA5"></div><div class="meta"><div class="name">Mint</div><div class="hex">#5DCAA5</div></div></div>
+<div class="sw"><div class="chip" style="background:#22C55E"></div><div class="meta"><div class="name">Success</div><div class="hex">#22C55E</div></div></div>
+<div class="sw"><div class="chip" style="background:#F59E0B"></div><div class="meta"><div class="name">Warning</div><div class="hex">#F59E0B</div></div></div>
+<div class="sw"><div class="chip" style="background:#EF4444"></div><div class="meta"><div class="name">Danger</div><div class="hex">#EF4444</div></div></div>
+</div>
+</section>
+
+<section>
+<h2>Typografie</h2>
+<div class="grid2">
+<div>
+<div class="type-row"><div class="wm" style="font-size:40px"><span class="v">VOTE</span><span class="b">BROKER</span></div><div class="meta">Wortmarke — Poppins Light 200 + Black 800, Verlauf</div></div>
+<div class="type-row"><div style="font-size:34px;font-weight:200">Display Light</div><div class="meta">Poppins 200 · Tracking -0.02em</div></div>
+<div class="type-row"><div style="font-size:20px;font-weight:500">Medium — Navigation & Labels</div><div class="meta">Poppins 500</div></div>
+<div class="type-row"><div style="font-size:15px">Regular — Fließtext für längere Inhalte und Beschreibungen.</div><div class="meta">Poppins 400 · line-height 1.6</div></div>
+<div class="type-row"><div style="font-size:12px;letter-spacing:3px;color:var(--t500)">TAGLINE / LABEL · TRACKING 0.18EM</div><div class="meta">Poppins 400 · Uppercase</div></div>
+</div>
+<div>
+<h3>Primärschrift</h3>
+<p><b style="font-weight:500;color:var(--t100)">Poppins</b> — geometrische Sans mit Enterprise-/SaaS-Charakter.</p>
+<p style="font-family:monospace;font-size:12px;color:var(--cyan400);background:rgba(0,212,255,0.07);padding:12px;border-radius:8px;display:block;margin-top:8px">"Poppins", "Segoe UI", system-ui, -apple-system, Arial, sans-serif</p>
+<h3>Typo-Skala (1.250)</h3>
+<p style="font-family:monospace;font-size:12px">0.64 · 0.8 · 1 · 1.25 · 1.563 · 1.953 · 2.441 · 3.052 rem</p>
+<h3>Gewichte</h3>
+<p>200 Light · 400 Regular · 500 Medium · 700 Bold · 800 Black</p>
+</div>
+</div>
+</section>
+
+<section>
+<h2>Abstände & Radien</h2>
+<div class="grid2">
+<div><h3>8-Punkt-Raster</h3><p style="font-family:monospace;font-size:13px">4 · 8 · 12 · 16 · 24 · 32 · 48 · 64 · 96 px</p><p>Vertikaler Rhythmus in rem (1 / 1.5 / 2), komponenteninterne Abstände in px.</p></div>
+<div><h3>Radien</h3><p style="font-family:monospace;font-size:13px">sm 6 · md 10 · lg 16 · xl 24 · full 9999 px</p></div>
+</div>
+</section>
+
+<section>
+<h2>Logo-Schutzraum</h2>
+<div class="grid2">
+<div class="clearspace"><div class="cs-wrap"><div class="m"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" class="svg-embed" role="img" aria-label="VoteBroker">
+  <title>VoteBroker — Signal Processing Mark</title>
+  <defs>
+    <radialGradient id="vbHubGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00D4FF" stop-opacity="0.30"/>
+      <stop offset="55%" stop-color="#2563EB" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#2563EB" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- hub glow -->
+  <circle cx="100" cy="118" r="40" fill="url(#vbHubGlow)"/>
+
+  <!-- edges -->
+  <g fill="none" stroke-linecap="round">
+    <line x1="100" y1="118" x2="55"  y2="58"  stroke="#2563EB" stroke-width="1.5" opacity="0.6"/>
+    <line x1="100" y1="118" x2="145" y2="58"  stroke="#378ADD" stroke-width="1.5" opacity="0.6"/>
+    <line x1="100" y1="118" x2="100" y2="42"  stroke="#00D4FF" stroke-width="1.2" opacity="0.5"/>
+    <line x1="55"  y1="58"  x2="100" y2="42"  stroke="#378ADD" stroke-width="0.8" opacity="0.35"/>
+    <line x1="145" y1="58"  x2="100" y2="42"  stroke="#378ADD" stroke-width="0.8" opacity="0.35"/>
+    <line x1="100" y1="118" x2="48"  y2="150" stroke="#2563EB" stroke-width="0.8" opacity="0.4"/>
+    <line x1="100" y1="118" x2="152" y2="150" stroke="#378ADD" stroke-width="0.8" opacity="0.4"/>
+    <line x1="100" y1="118" x2="72"  y2="172" stroke="#00D4FF" stroke-width="0.7" opacity="0.35"/>
+    <line x1="100" y1="118" x2="128" y2="172" stroke="#00D4FF" stroke-width="0.7" opacity="0.35"/>
+  </g>
+
+  <!-- frozen signal pulses on the two primary V arms -->
+  <circle cx="78"  cy="89" r="2.4" fill="#67E8F9" opacity="0.9"/>
+  <circle cx="122" cy="89" r="2.2" fill="#93C5FD" opacity="0.85"/>
+
+  <!-- satellite (lower) nodes -->
+  <circle cx="48"  cy="150" r="5"   fill="#0d1424" stroke="#2563EB" stroke-width="1.3"/><circle cx="48"  cy="150" r="2"   fill="#2563EB"/>
+  <circle cx="152" cy="150" r="5"   fill="#0d1424" stroke="#378ADD" stroke-width="1.3"/><circle cx="152" cy="150" r="2"   fill="#378ADD"/>
+  <circle cx="72"  cy="172" r="4.5" fill="#0d1424" stroke="#00D4FF" stroke-width="1.3"/><circle cx="72"  cy="172" r="1.8" fill="#00D4FF"/>
+  <circle cx="128" cy="172" r="4.5" fill="#0d1424" stroke="#00D4FF" stroke-width="1.3"/><circle cx="128" cy="172" r="1.8" fill="#00D4FF"/>
+
+  <!-- upper nodes -->
+  <circle cx="100" cy="42" r="7"   fill="#0d1424" stroke="#00D4FF" stroke-width="1.6"/><circle cx="100" cy="42" r="3"   fill="#00D4FF"/>
+  <circle cx="55"  cy="58" r="8.5" fill="#0d1424" stroke="#2563EB" stroke-width="1.8"/><circle cx="55"  cy="58" r="3.8" fill="#2563EB"/>
+  <circle cx="145" cy="58" r="8.5" fill="#0d1424" stroke="#378ADD" stroke-width="1.8"/><circle cx="145" cy="58" r="3.8" fill="#378ADD"/>
+
+  <!-- active hub -->
+  <circle cx="100" cy="118" r="23" fill="none"    stroke="#2563EB" stroke-width="0.8" opacity="0.35"/>
+  <circle cx="100" cy="118" r="16" fill="#0d1424" stroke="#2563EB" stroke-width="2.2"/>
+  <circle cx="100" cy="118" r="9"  fill="#0d1424" stroke="#378ADD" stroke-width="1.2"/>
+  <circle cx="100" cy="118" r="5.2" fill="#00D4FF"/>
+</svg>
+</div></div></div>
+<div>
+<p>Der Mindest-Schutzraum entspricht der <b style="font-weight:500;color:var(--t100)">Höhe des Hub-Kerns</b> (das „x"-Maß). Innerhalb dieses Bereichs liegen keine anderen Elemente oder Bildkanten.</p>
+<table style="margin-top:16px">
+<tr><td>Min. Lockup-Breite</td><td><code>120px</code></td></tr>
+<tr><td>Min. Icon-Größe</td><td><code>24px</code></td></tr>
+<tr><td>Unter 32px</td><td>Vereinfacht (Hub + 3 Knoten)</td></tr>
+</table>
+</div>
+</div>
+</section>
+
+<section>
+<h2>Icon-Verwendung</h2>
+<div class="do-dont">
+<div class="box do"><h3>Erlaubt</h3><ul>
+<li>Icon allein als App-/Favicon-/Avatar-Mark</li>
+<li>Passende Variante je nach Hintergrund</li>
+<li>Animierte Version nur in Web/App</li>
+<li>Auf abgedunkelter Fläche über Fotos</li>
+</ul></div>
+<div class="box dont"><h3>Nicht erlaubt</h3><ul>
+<li>Verzerren, drehen, spiegeln (das V ist gesetzt)</li>
+<li>Verlaufsfarben ändern</li>
+<li>Glow/Pulse zum „Gaming"-Look verstärken</li>
+<li>Zahnrad / Industrie-Motive hinzufügen</li>
+</ul></div>
+</div>
+</section>
+
+<section>
+<h2>Animation — nur Web/App</h2>
+<div class="anim-demo">
+<div class="m"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" class="svg-embed" role="img" aria-label="VoteBroker">
+  <title>VoteBroker — Signal Processing Mark (animated)</title>
+  <defs>
+    <radialGradient id="vbHubGlowA" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00D4FF" stop-opacity="0.30"/>
+      <stop offset="55%" stop-color="#2563EB" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#2563EB" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- pulsing glow -->
+  <circle cx="100" cy="118" r="40" fill="url(#vbHubGlowA)">
+    <animate attributeName="opacity" values="0.75;1;0.75" dur="3.4s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1; 0.4 0 0.2 1" keyTimes="0;0.5;1"/>
+  </circle>
+
+  <!-- edges -->
+  <g fill="none" stroke-linecap="round">
+    <line x1="100" y1="118" x2="55"  y2="58"  stroke="#2563EB" stroke-width="1.5" opacity="0.55"/>
+    <line x1="100" y1="118" x2="145" y2="58"  stroke="#378ADD" stroke-width="1.5" opacity="0.55"/>
+    <line x1="100" y1="118" x2="100" y2="42"  stroke="#00D4FF" stroke-width="1.2" opacity="0.45"/>
+    <line x1="55"  y1="58"  x2="100" y2="42"  stroke="#378ADD" stroke-width="0.8" opacity="0.32"/>
+    <line x1="145" y1="58"  x2="100" y2="42"  stroke="#378ADD" stroke-width="0.8" opacity="0.32"/>
+    <line x1="100" y1="118" x2="48"  y2="150" stroke="#2563EB" stroke-width="0.8" opacity="0.38"/>
+    <line x1="100" y1="118" x2="152" y2="150" stroke="#378ADD" stroke-width="0.8" opacity="0.38"/>
+    <line x1="100" y1="118" x2="72"  y2="172" stroke="#00D4FF" stroke-width="0.7" opacity="0.33"/>
+    <line x1="100" y1="118" x2="128" y2="172" stroke="#00D4FF" stroke-width="0.7" opacity="0.33"/>
+  </g>
+
+  <!-- travelling signal pulses (inbound to hub) -->
+  <circle r="2.6" fill="#67E8F9">
+    <animateMotion path="M55 58 L100 118" dur="3.4s" repeatCount="indefinite" calcMode="spline" keySplines="0.45 0 0.55 1" keyPoints="0;1" keyTimes="0;1"/>
+    <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.8;1" dur="3.4s" repeatCount="indefinite"/>
+  </circle>
+  <circle r="2.4" fill="#93C5FD">
+    <animateMotion path="M145 58 L100 118" dur="3.4s" begin="1.1s" repeatCount="indefinite" calcMode="spline" keySplines="0.45 0 0.55 1" keyPoints="0;1" keyTimes="0;1"/>
+    <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.8;1" dur="3.4s" begin="1.1s" repeatCount="indefinite"/>
+  </circle>
+  <circle r="2.2" fill="#00D4FF">
+    <animateMotion path="M100 42 L100 118" dur="3.4s" begin="2.2s" repeatCount="indefinite" calcMode="spline" keySplines="0.45 0 0.55 1" keyPoints="0;1" keyTimes="0;1"/>
+    <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.8;1" dur="3.4s" begin="2.2s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- satellite nodes -->
+  <circle cx="48"  cy="150" r="5"   fill="#0d1424" stroke="#2563EB" stroke-width="1.3"/><circle cx="48"  cy="150" r="2"   fill="#2563EB"/>
+  <circle cx="152" cy="150" r="5"   fill="#0d1424" stroke="#378ADD" stroke-width="1.3"/><circle cx="152" cy="150" r="2"   fill="#378ADD"/>
+  <circle cx="72"  cy="172" r="4.5" fill="#0d1424" stroke="#00D4FF" stroke-width="1.3"/><circle cx="72"  cy="172" r="1.8" fill="#00D4FF"/>
+  <circle cx="128" cy="172" r="4.5" fill="#0d1424" stroke="#00D4FF" stroke-width="1.3"/><circle cx="128" cy="172" r="1.8" fill="#00D4FF"/>
+
+  <!-- upper nodes -->
+  <circle cx="100" cy="42" r="7"   fill="#0d1424" stroke="#00D4FF" stroke-width="1.6"/><circle cx="100" cy="42" r="3"   fill="#00D4FF"/>
+  <circle cx="55"  cy="58" r="8.5" fill="#0d1424" stroke="#2563EB" stroke-width="1.8"/><circle cx="55"  cy="58" r="3.8" fill="#2563EB"/>
+  <circle cx="145" cy="58" r="8.5" fill="#0d1424" stroke="#378ADD" stroke-width="1.8"/><circle cx="145" cy="58" r="3.8" fill="#378ADD"/>
+
+  <!-- expanding hub rings -->
+  <circle cx="100" cy="118" r="16" fill="none" stroke="#00D4FF" stroke-width="1.2">
+    <animate attributeName="r" values="16;30" dur="3.4s" repeatCount="indefinite" calcMode="spline" keySplines="0.2 0.6 0.3 1"/>
+    <animate attributeName="opacity" values="0.6;0" dur="3.4s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="100" cy="118" r="16" fill="none" stroke="#378ADD" stroke-width="1">
+    <animate attributeName="r" values="16;26" dur="3.4s" begin="1.7s" repeatCount="indefinite" calcMode="spline" keySplines="0.2 0.6 0.3 1"/>
+    <animate attributeName="opacity" values="0.45;0" dur="3.4s" begin="1.7s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- hub body -->
+  <circle cx="100" cy="118" r="16" fill="#0d1424" stroke="#2563EB" stroke-width="2.2"/>
+  <circle cx="100" cy="118" r="9"  fill="#0d1424" stroke="#378ADD" stroke-width="1.2"/>
+  <!-- breathing core -->
+  <circle cx="100" cy="118" r="5.2" fill="#00D4FF">
+    <animate attributeName="r" values="4.6;5.8;4.6" dur="3.4s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1; 0.4 0 0.2 1" keyTimes="0;0.5;1"/>
+  </circle>
+
+  <!-- respects reduced-motion -->
+  <style>
+    @media (prefers-reduced-motion: reduce) {
+      animate, animateMotion { display: none; }
+    }
+  </style>
+</svg>
+</div>
+<div>
+<p>Signalpulse wandern entlang der Hauptkanten nach innen zum Hub. Doppelringe strahlen aus, der Kern atmet.</p>
+<table>
+<tr><td>Dauer</td><td><code>~3.4s</code></td></tr>
+<tr><td>Stil</td><td>SaaS / Enterprise — kein Gaming, kein Neon</td></tr>
+<tr><td>Barrierefreiheit</td><td><code>prefers-reduced-motion</code> deaktiviert alles</td></tr>
+<tr><td>Statisch</td><td>Favicon, Print, Avatar — nie animiert</td></tr>
+</table>
+</div>
+</div>
+</section>
+
+</main>
+</body></html>

@@ -702,7 +702,7 @@ export function App() {
     return (
       <main className="shell" style={{ minHeight: "100vh", background: "#ffffff" }}>
         <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 1.5rem", borderBottom: "1px solid #21262d" }}>
-          <span style={{ fontWeight: 700, color: "#2563eb", fontSize: "1rem", letterSpacing: "-0.3px" }}>VoteBroker</span>
+          <img src="/assets/branding/logo/logo-dark.svg" alt="VoteBroker" height={28} style={{ display: "block" }} />
           <label className="language-select">
             <span>{t("language")}</span>
             <select value={locale} onChange={(event) => changeLocale(event.target.value as Locale)}>
@@ -810,7 +810,7 @@ export function App() {
       {/* Compact topbar */}
       <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.75rem 1.5rem", borderBottom: "1px solid #21262d", background: "#ffffff", flexWrap: "wrap", gap: "0.5rem" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-          <span style={{ fontWeight: 700, color: "#2563eb", fontSize: "0.95rem" }}>VoteBroker</span>
+          <img src="/assets/branding/logo/logo-dark.svg" alt="VoteBroker" height={24} style={{ display: "block" }} />
           {accountSnapshot ? (
             <span style={{ color: "#607078", fontSize: "0.82rem" }}>
               @{accountSnapshot.username} · <b style={{ color: "#17202a" }}>{accountSnapshot.steemPowerSp.toFixed(0)} SP</b> · <b style={{ color: "#17202a" }}>{(accountSnapshot.votingPowerBps / 100).toFixed(1)}%</b> VP · ~<b style={{ color: "#17202a" }}>${accountSnapshot.currentVoteUsd.toFixed(4)}</b>

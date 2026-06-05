@@ -1,0 +1,14 @@
+{
+  "name": "VoteBroker",
+  "short_name": "VoteBroker",
+  "description": "Smarter Curating. Stable Voting Power. — Community Intelligence & Signal Analytics for the Steem ecosystem.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B1020",
+  "theme_color": "#0B1020",
+  "icons": [
+    { "src": "/assets/branding/favicon/pwa-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/branding/favicon/pwa-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/branding/favicon/pwa-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

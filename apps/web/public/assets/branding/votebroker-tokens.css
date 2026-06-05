@@ -1,0 +1,96 @@
+/* ============================================================
+   VoteBroker — Design Tokens
+   Brand Direction: A2 "Active Hub — Signal Processing"
+   Palette derived directly from the logo mark.
+   ============================================================ */
+
+:root {
+  /* ---- Core surfaces (deep navy canvas) ---- */
+  --vb-navy-900: #0B1020;   /* primary background */
+  --vb-navy-800: #0F1A2E;   /* raised background  */
+  --vb-navy-700: #141E35;   /* card surface       */
+  --vb-node-bg:  #0d1424;   /* icon node fill     */
+
+  /* ---- Primary brand (the signal blues) ---- */
+  --vb-blue-600: #2563EB;   /* primary action / hub ring   */
+  --vb-blue-500: #378ADD;   /* secondary blue / right arm  */
+  --vb-blue-300: #93C5FD;   /* soft pulse                  */
+
+  /* ---- Highlight (the active core) ---- */
+  --vb-cyan-400: #00D4FF;   /* core / highlight / focus    */
+  --vb-cyan-300: #67E8F9;   /* bright signal pulse         */
+
+  /* ---- Accents (use sparingly) ---- */
+  --vb-purple:   #7C3AED;   /* Vote-DNA sub-brand accent   */
+  --vb-mint:     #5DCAA5;   /* rare data accent            */
+  --vb-success:  #22C55E;   /* positive deltas             */
+  --vb-warning:  #F59E0B;
+  --vb-danger:   #EF4444;
+
+  /* ---- Text ---- */
+  --vb-text-100: #E2EBF0;   /* primary text on dark        */
+  --vb-text-300: #B8CADF;   /* secondary text              */
+  --vb-text-500: #7C9BBF;   /* muted / tagline             */
+  --vb-text-700: #4B6080;   /* faint / labels              */
+  --vb-text-ink: #0B1020;   /* text on light surfaces      */
+
+  /* ---- Gradients ---- */
+  --vb-grad-brand:   linear-gradient(90deg, #2563EB 0%, #00D4FF 100%);
+  --vb-grad-brand-3: linear-gradient(120deg, #2563EB 0%, #7C3AED 50%, #00D4FF 100%);
+  --vb-grad-hub:     radial-gradient(circle, rgba(0,212,255,0.30) 0%, rgba(37,99,235,0.10) 55%, rgba(37,99,235,0) 100%);
+  --vb-grad-surface: linear-gradient(180deg, #0F1535 0%, #0B1020 100%);
+
+  /* ---- Typography ---- */
+  --vb-font-sans: "Poppins", "Segoe UI", "Helvetica Neue", system-ui, -apple-system, Arial, sans-serif;
+  --vb-font-mono: "JetBrains Mono", "SF Mono", "Consolas", monospace;
+
+  --vb-weight-light: 200;
+  --vb-weight-regular: 400;
+  --vb-weight-medium: 500;
+  --vb-weight-bold: 700;
+  --vb-weight-black: 800;
+
+  /* type scale (1.250 major third) */
+  --vb-text-xs:   0.64rem;
+  --vb-text-sm:   0.8rem;
+  --vb-text-base: 1rem;
+  --vb-text-lg:   1.25rem;
+  --vb-text-xl:   1.563rem;
+  --vb-text-2xl:  1.953rem;
+  --vb-text-3xl:  2.441rem;
+  --vb-text-4xl:  3.052rem;
+  --vb-tracking-wide: 0.18em;   /* taglines / labels */
+  --vb-tracking-tight: -0.02em; /* display headings  */
+
+  /* ---- Spacing (8pt grid) ---- */
+  --vb-space-1: 4px;
+  --vb-space-2: 8px;
+  --vb-space-3: 12px;
+  --vb-space-4: 16px;
+  --vb-space-6: 24px;
+  --vb-space-8: 32px;
+  --vb-space-12: 48px;
+  --vb-space-16: 64px;
+  --vb-space-24: 96px;
+
+  /* ---- Radius ---- */
+  --vb-radius-sm: 6px;
+  --vb-radius-md: 10px;
+  --vb-radius-lg: 16px;
+  --vb-radius-xl: 24px;
+  --vb-radius-full: 9999px;
+
+  /* ---- Logo protection / clear space ---- */
+  /* minimum clear space around the logo = height of the hub core ('x') */
+  --vb-logo-clearspace: 0.5em;
+
+  /* ---- Elevation ---- */
+  --vb-shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --vb-shadow-md: 0 4px 16px rgba(0,0,0,0.35);
+  --vb-shadow-glow: 0 0 24px rgba(0,212,255,0.25);
+}
+
+/* Reduced-motion: disable signal pulse animations globally */
+@media (prefers-reduced-motion: reduce) {
+  .vb-animated * { animation: none !important; }
+}

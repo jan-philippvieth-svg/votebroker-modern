@@ -158,7 +158,7 @@ export function LandingPage() {
         position: "sticky", top: 0, background: "rgba(13,17,23,0.92)",
         backdropFilter: "blur(10px)", zIndex: 50,
       }}>
-        <span style={{ fontWeight: 800, fontSize: "1.05rem", color: C.blue, letterSpacing: "-0.5px" }}>VoteBroker</span>
+        <img src="/assets/branding/logo/logo-dark.svg" alt="VoteBroker" height={32} style={{ display: "block" }} />
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
           <LocaleSwitcher locale={locale} onChange={setLocale} />
           <a href="/dashboard" style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", background: C.blueDark, color: "#fff", padding: "0.4rem 1rem", borderRadius: "6px", textDecoration: "none", fontSize: "0.85rem", fontWeight: 600 }}>
@@ -304,7 +304,7 @@ export function LandingPage() {
 
       {/* ── Footer ── */}
       <footer style={{ borderTop: `1px solid ${C.border}`, padding: "1.5rem 2rem", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem", color: C.dim, fontSize: "0.8rem" }}>
-        <span style={{ fontWeight: 700, color: C.blue }}>VoteBroker</span>
+        <img src="/assets/branding/logo/icon.svg" alt="VoteBroker" height={20} style={{ display: "block" }} />
         <div style={{ display: "flex", gap: "1.5rem" }}>
           <a href="/dashboard" style={{ color: C.muted, textDecoration: "none" }}>{t("landingHeroCta")}</a>
           <a href="/operator"  style={{ color: C.muted, textDecoration: "none" }}>Operator</a>

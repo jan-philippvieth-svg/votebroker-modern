@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 380" width="500" height="380" role="img" aria-label="VoteBroker">
+<defs><linearGradient id="vbText" x1="0%" y1="0%" x2="100%" y2="0%">
+  <stop offset="0%" stop-color="#2563EB"/><stop offset="100%" stop-color="#00D4FF"/>
+</linearGradient></defs>
+<g transform="translate(170,20) scale(0.8)">
+  <title>VoteBroker — Signal Processing Mark (animated)</title>
+  <defs>
+    <radialGradient id="vbHubGlowLGA" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00D4FF" stop-opacity="0.30"/>
+      <stop offset="55%" stop-color="#2563EB" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#2563EB" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- pulsing glow -->
+  <circle cx="100" cy="118" r="40" fill="url(#vbHubGlowLGA)">
+    <animate attributeName="opacity" values="0.75;1;0.75" dur="3.4s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1; 0.4 0 0.2 1" keyTimes="0;0.5;1"/>
+  </circle>
+
+  <!-- edges -->
+  <g fill="none" stroke-linecap="round">
+    <line x1="100" y1="118" x2="55"  y2="58"  stroke="#2563EB" stroke-width="1.5" opacity="0.55"/>
+    <line x1="100" y1="118" x2="145" y2="58"  stroke="#378ADD" stroke-width="1.5" opacity="0.55"/>
+    <line x1="100" y1="118" x2="100" y2="42"  stroke="#00D4FF" stroke-width="1.2" opacity="0.45"/>
+    <line x1="55"  y1="58"  x2="100" y2="42"  stroke="#378ADD" stroke-width="0.8" opacity="0.32"/>
+    <line x1="145" y1="58"  x2="100" y2="42"  stroke="#378ADD" stroke-width="0.8" opacity="0.32"/>
+    <line x1="100" y1="118" x2="48"  y2="150" stroke="#2563EB" stroke-width="0.8" opacity="0.38"/>
+    <line x1="100" y1="118" x2="152" y2="150" stroke="#378ADD" stroke-width="0.8" opacity="0.38"/>
+    <line x1="100" y1="118" x2="72"  y2="172" stroke="#00D4FF" stroke-width="0.7" opacity="0.33"/>
+    <line x1="100" y1="118" x2="128" y2="172" stroke="#00D4FF" stroke-width="0.7" opacity="0.33"/>
+  </g>
+
+  <!-- travelling signal pulses (inbound to hub) -->
+  <circle r="2.6" fill="#67E8F9">
+    <animateMotion path="M55 58 L100 118" dur="3.4s" repeatCount="indefinite" calcMode="spline" keySplines="0.45 0 0.55 1" keyPoints="0;1" keyTimes="0;1"/>
+    <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.8;1" dur="3.4s" repeatCount="indefinite"/>
+  </circle>
+  <circle r="2.4" fill="#93C5FD">
+    <animateMotion path="M145 58 L100 118" dur="3.4s" begin="1.1s" repeatCount="indefinite" calcMode="spline" keySplines="0.45 0 0.55 1" keyPoints="0;1" keyTimes="0;1"/>
+    <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.8;1" dur="3.4s" begin="1.1s" repeatCount="indefinite"/>
+  </circle>
+  <circle r="2.2" fill="#00D4FF">
+    <animateMotion path="M100 42 L100 118" dur="3.4s" begin="2.2s" repeatCount="indefinite" calcMode="spline" keySplines="0.45 0 0.55 1" keyPoints="0;1" keyTimes="0;1"/>
+    <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.8;1" dur="3.4s" begin="2.2s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- satellite nodes -->
+  <circle cx="48"  cy="150" r="5"   fill="#0d1424" stroke="#2563EB" stroke-width="1.3"/><circle cx="48"  cy="150" r="2"   fill="#2563EB"/>
+  <circle cx="152" cy="150" r="5"   fill="#0d1424" stroke="#378ADD" stroke-width="1.3"/><circle cx="152" cy="150" r="2"   fill="#378ADD"/>
+  <circle cx="72"  cy="172" r="4.5" fill="#0d1424" stroke="#00D4FF" stroke-width="1.3"/><circle cx="72"  cy="172" r="1.8" fill="#00D4FF"/>
+  <circle cx="128" cy="172" r="4.5" fill="#0d1424" stroke="#00D4FF" stroke-width="1.3"/><circle cx="128" cy="172" r="1.8" fill="#00D4FF"/>
+
+  <!-- upper nodes -->
+  <circle cx="100" cy="42" r="7"   fill="#0d1424" stroke="#00D4FF" stroke-width="1.6"/><circle cx="100" cy="42" r="3"   fill="#00D4FF"/>
+  <circle cx="55"  cy="58" r="8.5" fill="#0d1424" stroke="#2563EB" stroke-width="1.8"/><circle cx="55"  cy="58" r="3.8" fill="#2563EB"/>
+  <circle cx="145" cy="58" r="8.5" fill="#0d1424" stroke="#378ADD" stroke-width="1.8"/><circle cx="145" cy="58" r="3.8" fill="#378ADD"/>
+
+  <!-- expanding hub rings -->
+  <circle cx="100" cy="118" r="16" fill="none" stroke="#00D4FF" stroke-width="1.2">
+    <animate attributeName="r" values="16;30" dur="3.4s" repeatCount="indefinite" calcMode="spline" keySplines="0.2 0.6 0.3 1"/>
+    <animate attributeName="opacity" values="0.6;0" dur="3.4s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="100" cy="118" r="16" fill="none" stroke="#378ADD" stroke-width="1">
+    <animate attributeName="r" values="16;26" dur="3.4s" begin="1.7s" repeatCount="indefinite" calcMode="spline" keySplines="0.2 0.6 0.3 1"/>
+    <animate attributeName="opacity" values="0.45;0" dur="3.4s" begin="1.7s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- hub body -->
+  <circle cx="100" cy="118" r="16" fill="#0d1424" stroke="#2563EB" stroke-width="2.2"/>
+  <circle cx="100" cy="118" r="9"  fill="#0d1424" stroke="#378ADD" stroke-width="1.2"/>
+  <!-- breathing core -->
+  <circle cx="100" cy="118" r="5.2" fill="#00D4FF">
+    <animate attributeName="r" values="4.6;5.8;4.6" dur="3.4s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1; 0.4 0 0.2 1" keyTimes="0;0.5;1"/>
+  </circle>
+
+  <!-- respects reduced-motion -->
+  <style>
+    @media (prefers-reduced-motion: reduce) {
+      animate, animateMotion { display: none; }
+    }
+  </style>
+</g>
+
+  <text x="116" y="320" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="52" font-weight="200" letter-spacing="-1.0" fill="#E2EBF0">VOTE</text>
+  <text x="245" y="320" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="52" font-weight="800" letter-spacing="-1.0" fill="url(#vbText)">BROKER</text>
+<text x="118" y="348" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" letter-spacing="3" fill="#7C9BBF">COMMUNITY INTELLIGENCE · SIGNAL ANALYTICS</text>
+</svg>

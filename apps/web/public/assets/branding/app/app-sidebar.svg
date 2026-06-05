@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 56" width="200" height="56" role="img" aria-label="VoteBroker">
+<defs><linearGradient id="vbText" x1="0%" y1="0%" x2="100%" y2="0%">
+  <stop offset="0%" stop-color="#2563EB"/><stop offset="100%" stop-color="#00D4FF"/>
+</linearGradient></defs>
+<g transform="translate(6,4) scale(0.24)">
+  <title>VoteBroker — Signal Processing Mark</title>
+  <defs>
+    <radialGradient id="vbHubGlowSB" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00D4FF" stop-opacity="0.30"/>
+      <stop offset="55%" stop-color="#2563EB" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#2563EB" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- hub glow -->
+  <circle cx="100" cy="118" r="40" fill="url(#vbHubGlowSB)"/>
+
+  <!-- edges -->
+  <g fill="none" stroke-linecap="round">
+    <line x1="100" y1="118" x2="55"  y2="58"  stroke="#2563EB" stroke-width="1.5" opacity="0.6"/>
+    <line x1="100" y1="118" x2="145" y2="58"  stroke="#378ADD" stroke-width="1.5" opacity="0.6"/>
+    <line x1="100" y1="118" x2="100" y2="42"  stroke="#00D4FF" stroke-width="1.2" opacity="0.5"/>
+    <line x1="55"  y1="58"  x2="100" y2="42"  stroke="#378ADD" stroke-width="0.8" opacity="0.35"/>
+    <line x1="145" y1="58"  x2="100" y2="42"  stroke="#378ADD" stroke-width="0.8" opacity="0.35"/>
+    <line x1="100" y1="118" x2="48"  y2="150" stroke="#2563EB" stroke-width="0.8" opacity="0.4"/>
+    <line x1="100" y1="118" x2="152" y2="150" stroke="#378ADD" stroke-width="0.8" opacity="0.4"/>
+    <line x1="100" y1="118" x2="72"  y2="172" stroke="#00D4FF" stroke-width="0.7" opacity="0.35"/>
+    <line x1="100" y1="118" x2="128" y2="172" stroke="#00D4FF" stroke-width="0.7" opacity="0.35"/>
+  </g>
+
+  <!-- frozen signal pulses on the two primary V arms -->
+  <circle cx="78"  cy="89" r="2.4" fill="#67E8F9" opacity="0.9"/>
+  <circle cx="122" cy="89" r="2.2" fill="#93C5FD" opacity="0.85"/>
+
+  <!-- satellite (lower) nodes -->
+  <circle cx="48"  cy="150" r="5"   fill="#0d1424" stroke="#2563EB" stroke-width="1.3"/><circle cx="48"  cy="150" r="2"   fill="#2563EB"/>
+  <circle cx="152" cy="150" r="5"   fill="#0d1424" stroke="#378ADD" stroke-width="1.3"/><circle cx="152" cy="150" r="2"   fill="#378ADD"/>
+  <circle cx="72"  cy="172" r="4.5" fill="#0d1424" stroke="#00D4FF" stroke-width="1.3"/><circle cx="72"  cy="172" r="1.8" fill="#00D4FF"/>
+  <circle cx="128" cy="172" r="4.5" fill="#0d1424" stroke="#00D4FF" stroke-width="1.3"/><circle cx="128" cy="172" r="1.8" fill="#00D4FF"/>
+
+  <!-- upper nodes -->
+  <circle cx="100" cy="42" r="7"   fill="#0d1424" stroke="#00D4FF" stroke-width="1.6"/><circle cx="100" cy="42" r="3"   fill="#00D4FF"/>
+  <circle cx="55"  cy="58" r="8.5" fill="#0d1424" stroke="#2563EB" stroke-width="1.8"/><circle cx="55"  cy="58" r="3.8" fill="#2563EB"/>
+  <circle cx="145" cy="58" r="8.5" fill="#0d1424" stroke="#378ADD" stroke-width="1.8"/><circle cx="145" cy="58" r="3.8" fill="#378ADD"/>
+
+  <!-- active hub -->
+  <circle cx="100" cy="118" r="23" fill="none"    stroke="#2563EB" stroke-width="0.8" opacity="0.35"/>
+  <circle cx="100" cy="118" r="16" fill="#0d1424" stroke="#2563EB" stroke-width="2.2"/>
+  <circle cx="100" cy="118" r="9"  fill="#0d1424" stroke="#378ADD" stroke-width="1.2"/>
+  <circle cx="100" cy="118" r="5.2" fill="#00D4FF"/>
+</g>
+<text x="62" y="34" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="200" fill="#E2EBF0">VOTE</text>
+<text x="108" y="34" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="800" fill="url(#vbText)">BROKER</text>
+</svg>
