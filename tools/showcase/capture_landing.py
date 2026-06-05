@@ -118,10 +118,16 @@ def capture_tab(page, tab_id: str) -> None:
         page.wait_for_timeout(500)
 
     elif tab_id == "billing":
-        # Wait for consent/settings content
+        # Wait for consent/settings content, then scroll to Berechtigungen section
         wait_text(page, "Berechtigungen", timeout=8000)
-        page.evaluate("window.scrollTo(0, 0)")
-        page.wait_for_timeout(500)
+        page.evaluate("""
+            const el = Array.from(document.querySelectorAll('*'))
+                .find(e => e.children.length < 4 &&
+                           e.textContent.trim().startsWith('Berechtigungen'));
+            if (el) el.scrollIntoView({ behavior: 'instant', block: 'start' });
+        """)
+        page.evaluate("window.scrollBy(0, -20)")  # small breathing room above header
+        page.wait_for_timeout(600)
 
     page.wait_for_timeout(400)
 
