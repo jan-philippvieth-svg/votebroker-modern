@@ -191,8 +191,11 @@ export function LandingPage() {
       </nav>
 
       {/* ── Hero ── */}
-      <section style={{ maxWidth: "860px", margin: "0 auto", padding: "6rem 2rem 4rem", textAlign: "center", position: "relative", overflow: "hidden" }}>
-        {/* Atmospheric network mark — large, behind content, subtle glow */}
+      {/* Full-width so the network can bleed right/top without being constrained */}
+      <section style={{ width: "100%", padding: "6rem 0 4rem", textAlign: "center", position: "relative", overflow: "hidden" }}>
+
+        {/* Signal network — massive, upper-right, bleeds outside viewport.
+            Not a logo. Storytelling: a living intelligence running in the background. */}
         <img
           src={reducedMotion
             ? "/assets/branding/logo/icon.svg"
@@ -201,42 +204,43 @@ export function LandingPage() {
           aria-hidden
           style={{
             position: "absolute",
-            top: "50%", left: "50%",
-            transform: "translate(-50%, -52%)",
-            width: 720, height: 720,
-            opacity: 0.09,
+            top: "-20%",
+            right: "-18%",
+            width: "clamp(900px, 85vw, 1440px)",
+            height: "auto",
+            opacity: 0.045,
             pointerEvents: "none",
             userSelect: "none",
             zIndex: 0,
-            filter: "drop-shadow(0 0 80px rgba(0,212,255,0.3)) drop-shadow(0 0 40px rgba(37,99,235,0.35))",
           }}
         />
 
-        <div style={{ position: "relative", zIndex: 1 }}>
+        {/* Content — constrained width, always above background */}
+        <div style={{ maxWidth: "860px", margin: "0 auto", padding: "0 2rem", position: "relative", zIndex: 1 }}>
           <div style={{ display: "inline-block", background: C.bg1, border: `1px solid ${C.border}`, borderRadius: "99px", padding: "0.3rem 1rem", fontSize: "0.75rem", color: C.muted, marginBottom: "1.75rem", letterSpacing: "0.5px", textTransform: "uppercase" as const }}>
             {t("landingHeroBadge")}
           </div>
-        <h1 style={{ fontSize: "clamp(2rem,5.5vw,3.5rem)", fontWeight: 800, lineHeight: 1.12, margin: "0 0 1.25rem", color: C.text, letterSpacing: "-1.5px" }}>
-          {t("landingHeroTitle").split(". ").map((part, i, arr) => (
-            <React.Fragment key={i}>
-              {i === arr.length - 1
-                ? <span style={{ color: C.blue }}>{part}</span>
-                : <>{part}.<br /></>}
-            </React.Fragment>
-          ))}
-        </h1>
-        <p style={{ fontSize: "1.1rem", color: C.muted, lineHeight: 1.75, maxWidth: "600px", margin: "0 auto 2.5rem" }}>
-          {t("landingHeroSubtitle")}
-        </p>
-        <div style={{ display: "flex", gap: "0.875rem", justifyContent: "center", flexWrap: "wrap" }}>
-          <a href="/dashboard" style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", background: C.blueDark, color: "#fff", padding: "0.8rem 1.75rem", borderRadius: "8px", textDecoration: "none", fontWeight: 700, fontSize: "1rem" }}>
-            {t("landingHeroCta")} <ArrowRight size={16} />
-          </a>
-          <a href="https://github.com/jan-philippvieth-svg/votebroker-modern" target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", background: C.bg1, color: C.text, padding: "0.8rem 1.75rem", borderRadius: "8px", textDecoration: "none", fontWeight: 600, fontSize: "1rem", border: `1px solid ${C.border}` }}>
-            <Github size={16} /> GitHub
-          </a>
+          <h1 style={{ fontSize: "clamp(2rem,5.5vw,3.5rem)", fontWeight: 800, lineHeight: 1.12, margin: "0 0 1.25rem", color: C.text, letterSpacing: "-1.5px" }}>
+            {t("landingHeroTitle").split(". ").map((part, i, arr) => (
+              <React.Fragment key={i}>
+                {i === arr.length - 1
+                  ? <span style={{ color: C.blue }}>{part}</span>
+                  : <>{part}.<br /></>}
+              </React.Fragment>
+            ))}
+          </h1>
+          <p style={{ fontSize: "1.1rem", color: C.muted, lineHeight: 1.75, maxWidth: "600px", margin: "0 auto 2.5rem" }}>
+            {t("landingHeroSubtitle")}
+          </p>
+          <div style={{ display: "flex", gap: "0.875rem", justifyContent: "center", flexWrap: "wrap" }}>
+            <a href="/dashboard" style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", background: C.blueDark, color: "#fff", padding: "0.8rem 1.75rem", borderRadius: "8px", textDecoration: "none", fontWeight: 700, fontSize: "1rem" }}>
+              {t("landingHeroCta")} <ArrowRight size={16} />
+            </a>
+            <a href="https://github.com/jan-philippvieth-svg/votebroker-modern" target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", background: C.bg1, color: C.text, padding: "0.8rem 1.75rem", borderRadius: "8px", textDecoration: "none", fontWeight: 600, fontSize: "1rem", border: `1px solid ${C.border}` }}>
+              <Github size={16} /> GitHub
+            </a>
+          </div>
         </div>
-        </div>{/* end zIndex wrapper */}
       </section>
 
       {/* ── Warum VoteBroker? ── */}
