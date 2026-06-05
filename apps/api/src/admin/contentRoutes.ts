@@ -31,7 +31,7 @@ const SCREENSHOTS_DIR = (() => {
   return resolve("docs/screenshots");
 })();
 
-const DRAFT_PATTERN = /^(\d{4}-\d{2}-\d{2})-(product-post|tech-post|devlog-post)\.md$/;
+const DRAFT_PATTERN = /^(\d{4}-\d{2}-\d{2})-(product-post|tech-post|devlog-post|promo-post|promo-[a-z]{2,5})\.md$/;
 
 // Hours between scheduled posts
 const SCHEDULE_SPACING_HOURS = 8;

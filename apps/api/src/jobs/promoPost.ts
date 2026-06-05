@@ -209,6 +209,18 @@ function buildRecommendation(
 
 // ── Community Observation (locale-native, uses real scan data) ─────────────────
 
+// ── Promo Draft Template ─────────────────────────────────────────────────────
+// A promo post introduces VoteBroker to the community.
+// It is NOT a devlog. It tells a story:
+//   - Why was VoteBroker built?
+//   - What problem does it solve?
+//   - How is it different from classic vote tools?
+//   - Which features matter for curators?
+//   - Vision and invitation to try it
+//
+// Community scan data (tags, community, timing) is used for metadata only.
+
+// @deprecated — kept only as fallback reference; not called from generatePromoDraft
 function getCommunityObservation(locale: PromoLocale, topics: string[], tag: string, author: string): string {
   const obs: Record<PromoLocale, string> = {
     en: `I've been exploring the **#${tag}** community and noticed active discussions around ${topics.slice(0,2).join(" and ") || "various topics"}. Authors like @${author} are posting consistently. VoteBroker is built exactly for communities like this — to discover active voices earlier and use Voting Power more deliberately.`,
@@ -233,120 +245,228 @@ function getCommunityObservation(locale: PromoLocale, topics: string[], tag: str
 
 function generatePromoDraft(locale: PromoLocale, analysis: PromoAnalysis): string {
   const config = LOCALE_CONFIG[locale];
-  const { styleProfile, recommendation, topAuthors, trendingTopics } = analysis;
+  const { recommendation } = analysis;
 
-  const communityName = recommendation.community || config.searchTags[0];
-  const topAuthor = topAuthors[0] || "active community members";
-  const topic = trendingTopics[0] || "quality content";
-
-  const isLong = styleProfile.avgLength === "long";
-  const isTechnical = styleProfile.tone === "technical";
-
-  // Locale-specific intro patterns
-  const INTROS: Record<string, string> = {
-    en: `${config.greeting}\n\nI want to share a tool that has been making my curation work much more effective: **VoteBroker**.`,
-    de: `${config.greeting}\n\nIch möchte euch ein Werkzeug vorstellen, das meine Kurationsstrategie deutlich verbessert hat: **VoteBroker**.`,
-    es: `${config.greeting}\n\nQuiero compartir con ustedes una herramienta que ha mejorado mucho mi trabajo de curación: **VoteBroker**.`,
-    pt: `${config.greeting}\n\nQuero compartilhar uma ferramenta que melhorou muito meu trabalho de curadoria: **VoteBroker**.`,
-    id: `${config.greeting}\n\nSaya ingin berbagi alat yang telah membuat pekerjaan kurasi saya jauh lebih efektif: **VoteBroker**.`,
-    ru: `${config.greeting}\n\nХочу поделиться инструментом, который значительно улучшил мою работу по куратории: **VoteBroker**.`,
-    ko: `${config.greeting}\n\n큐레이션 작업을 훨씬 효과적으로 만들어준 도구를 소개하고 싶습니다: **VoteBroker**.`,
-    zh: `${config.greeting}\n\n我想和大家分享一个让我的策展工作更有效率的工具：**VoteBroker**。`,
-    ja: `${config.greeting}\n\nキュレーション活動をより効果的にするツールをご紹介したいと思います：**VoteBroker**。`,
-    hi: `${config.greeting}\n\nमैं एक ऐसे टूल के बारे में बताना चाहता हूं जिसने मेरी क्यूरेशन को बहुत बेहतर बना दिया है: **VoteBroker**।`,
-    bn: `${config.greeting}\n\nআমি একটি টুল শেয়ার করতে চাই যা আমার কিউরেশন কাজকে অনেক কার্যকর করেছে: **VoteBroker**।`,
-    tr: `${config.greeting}\n\nKürasyon çalışmamı çok daha etkili hale getiren bir araç paylaşmak istiyorum: **VoteBroker**.`,
-    pl: `${config.greeting}\n\nChcę podzielić się narzędziem, które znacznie poprawiło moją pracę z kuracją: **VoteBroker**.`,
-    pcm: `${config.greeting}\n\nI wan share one tool wey don make my curation work beta: **VoteBroker**.`,
-  };
-
-  const intro = INTROS[locale] || INTROS.en;
-
-  // Core sections — adapt based on style profile
-  const listMarker = styleProfile.usesLists ? "- " : "• ";
-
-  const CORE: Record<string, string> = {
-    en: `If you're active in the **${communityName}** community like authors such as @${topAuthor}, you know how challenging it can be to consistently find and support quality content.\n\n**What VoteBroker does:**\n\n${listMarker}Automatically scans for new posts from your favorite authors\n${listMarker}Manages your Voting Power intelligently\n${listMarker}Shows you real-time curation analytics\n${listMarker}Helps you discover new voices through community signals`,
-    de: `Wenn du in der **${communityName}**-Community aktiv bist, weißt du wie zeitaufwendig gute Kuration sein kann.\n\n**Was VoteBroker macht:**\n\n${listMarker}Scannt automatisch neue Posts deiner Lieblingsautoren\n${listMarker}Verwaltet deine Voting Power intelligent\n${listMarker}Zeigt Echtzeit-Kurationsdaten\n${listMarker}Hilft dir neue Autoren durch Community-Signale zu entdecken`,
-    es: `Si eres activo en la comunidad **${communityName}**, sabes lo desafiante que puede ser la curación constante.\n\n**Qué hace VoteBroker:**\n\n${listMarker}Escanea automáticamente nuevos posts de tus autores favoritos\n${listMarker}Gestiona tu Voting Power de forma inteligente\n${listMarker}Muestra análisis de curación en tiempo real\n${listMarker}Te ayuda a descubrir nuevas voces`,
-    pt: `Se você é ativo na comunidade **${communityName}**, sabe como pode ser desafiador manter uma curadoria consistente.\n\n**O que o VoteBroker faz:**\n\n${listMarker}Escaneia automaticamente novos posts dos seus autores favoritos\n${listMarker}Gerencia seu Voting Power de forma inteligente\n${listMarker}Exibe análises de curadoria em tempo real\n${listMarker}Ajuda a descobrir novas vozes`,
-    id: `Jika kamu aktif di komunitas **${communityName}**, kamu tahu betapa sulitnya melakukan kurasi yang konsisten.\n\n**Apa yang VoteBroker lakukan:**\n\n${listMarker}Secara otomatis memindai postingan baru dari penulis favoritmu\n${listMarker}Mengelola Voting Power-mu secara cerdas\n${listMarker}Menampilkan analitik kurasi secara real-time\n${listMarker}Membantu menemukan suara-suara baru`,
-    ru: `Если вы активны в сообществе **${communityName}**, вы знаете, насколько сложно поддерживать последовательную курацию.\n\n**Что делает VoteBroker:**\n\n${listMarker}Автоматически сканирует новые посты ваших любимых авторов\n${listMarker}Умно управляет вашей Voting Power\n${listMarker}Показывает аналитику кураторства в реальном времени\n${listMarker}Помогает открывать новые голоса через сигналы сообщества`,
-    ko: `**${communityName}** 커뮤니티에서 활동하신다면, 꾸준한 큐레이션이 얼마나 어려운지 아실 것입니다.\n\n**VoteBroker가 하는 일:**\n\n${listMarker}즐겨찾는 작가들의 새 게시물 자동 스캔\n${listMarker}투표력(Voting Power) 지능적 관리\n${listMarker}실시간 큐레이션 분석 제공\n${listMarker}커뮤니티 신호를 통한 새로운 목소리 발견`,
-    zh: `如果您活跃在 **${communityName}** 社区，您一定知道持续策展有多么挑战。\n\n**VoteBroker 能做什么：**\n\n${listMarker}自动扫描您喜爱作者的新帖子\n${listMarker}智能管理您的 Voting Power\n${listMarker}实时显示策展分析数据\n${listMarker}通过社区信号帮助发现新声音`,
-    ja: `**${communityName}**コミュニティで活動されているなら、継続的なキュレーションがどれほど難しいかご存知でしょう。\n\n**VoteBrokerができること：**\n\n${listMarker}お気に入りの著者の新しい投稿を自動的にスキャン\n${listMarker}Voting Powerをインテリジェントに管理\n${listMarker}リアルタイムのキュレーション分析を表示\n${listMarker}コミュニティシグナルで新しい声を発見`,
-    hi: `यदि आप **${communityName}** समुदाय में सक्रिय हैं, तो आप जानते हैं कि लगातार क्यूरेशन कितना चुनौतीपूर्ण हो सकता है।\n\n**VoteBroker क्या करता है:**\n\n${listMarker}अपने पसंदीदा लेखकों के नए पोस्ट स्वचालित रूप से स्कैन करता है\n${listMarker}आपकी Voting Power को बुद्धिमानी से प्रबंधित करता है\n${listMarker}रियल-टाइम क्यूरेशन एनालिटिक्स दिखाता है`,
-    bn: `যদি আপনি **${communityName}** সম্প্রদায়ে সক্রিয় থাকেন, তাহলে আপনি জানেন ধারাবাহিক কিউরেশন কতটা চ্যালেঞ্জিং হতে পারে।\n\n**VoteBroker কী করে:**\n\n${listMarker}আপনার প্রিয় লেখকদের নতুন পোস্ট স্বয়ংক্রিয়ভাবে স্ক্যান করে\n${listMarker}আপনার Voting Power বুদ্ধিমত্তার সাথে পরিচালনা করে\n${listMarker}রিয়েল-টাইম কিউরেশন বিশ্লেষণ দেখায়`,
-    tr: `**${communityName}** topluluğunda aktifseniz, tutarlı kürasyon yapmanın ne kadar zor olduğunu bilirsiniz.\n\n**VoteBroker'ın yaptıkları:**\n\n${listMarker}Favori yazarlarınızın yeni gönderilerini otomatik olarak tarar\n${listMarker}Voting Power'ınızı akıllıca yönetir\n${listMarker}Gerçek zamanlı kürasyon analitiği gösterir\n${listMarker}Topluluk sinyalleri aracılığıyla yeni sesleri keşfetmenize yardımcı olur`,
-    pl: `Jeśli jesteś aktywny w społeczności **${communityName}**, wiesz jak trudna może być systematyczna kuracja.\n\n**Co robi VoteBroker:**\n\n${listMarker}Automatycznie skanuje nowe posty ulubionych autorów\n${listMarker}Inteligentnie zarządza Voting Power\n${listMarker}Wyświetla analizy kuracji w czasie rzeczywistym\n${listMarker}Pomaga odkrywać nowe głosy przez sygnały społeczności`,
-    pcm: `If you dey active for **${communityName}** community, you know say consistent curation no easy.\n\n**Wetin VoteBroker dey do:**\n\n${listMarker}E go automatically scan new posts from your favorite authors\n${listMarker}E go manage your Voting Power wisely\n${listMarker}E go show you real-time curation analytics\n${listMarker}E go help you discover new voices`,
-  };
-
-  const core = CORE[locale] || CORE.en;
-
-  // CTA section
-  const CTAS: Record<string, string> = {
-    en: `**Try VoteBroker:** https://votebroker.org\n\nI'd love to hear your thoughts. Have you tried automated curation tools before? What's your experience with ${topic} on Steem?`,
-    de: `**VoteBroker ausprobieren:** https://votebroker.org\n\nIch freue mich auf eure Gedanken. Habt ihr schon automatisierte Kurationswerkzeuge genutzt?`,
-    es: `**Prueba VoteBroker:** https://votebroker.org\n\nMe encantaría escuchar tu opinión. ¿Has probado antes herramientas de curación automatizadas?`,
-    pt: `**Experimente o VoteBroker:** https://votebroker.org\n\nGostaria de ouvir sua opinião. Você já usou ferramentas de curadoria automatizadas antes?`,
-    id: `**Coba VoteBroker:** https://votebroker.org\n\nSaya ingin mendengar pendapatmu. Sudahkah kamu mencoba alat kurasi otomatis sebelumnya?`,
-    ru: `**Попробуйте VoteBroker:** https://votebroker.org\n\nБуду рад услышать ваши мысли. Пробовали ли вы раньше инструменты автоматической кураторства?`,
-    ko: `**VoteBroker 사용해보기:** https://votebroker.org\n\n여러분의 의견을 듣고 싶습니다. 이전에 자동화된 큐레이션 도구를 사용해 본 적 있으신가요?`,
-    zh: `**试用 VoteBroker：** https://votebroker.org\n\n我很想听听您的想法。您以前使用过自动化策展工具吗？`,
-    ja: `**VoteBrokerを試してみる：** https://votebroker.org\n\nご意見をぜひお聞かせください。以前に自動キュレーションツールを使ったことはありますか？`,
-    hi: `**VoteBroker आज़माएं:** https://votebroker.org\n\nमैं आपके विचार सुनना चाहूंगा। क्या आपने पहले स्वचालित क्यूरेशन टूल का उपयोग किया है?`,
-    bn: `**VoteBroker চেষ্টা করুন:** https://votebroker.org\n\nআমি আপনার মতামত শুনতে চাই। আপনি কি আগে স্বয়ংক্রিয় কিউরেশন টুল ব্যবহার করেছেন?`,
-    tr: `**VoteBroker'ı deneyin:** https://votebroker.org\n\nDüşüncelerinizi duymak isterim. Daha önce otomatik kürasyon araçları kullandınız mı?`,
-    pl: `**Wypróbuj VoteBroker:** https://votebroker.org\n\nChętnie poznam Twoje zdanie. Czy wcześniej korzystałeś z automatycznych narzędzi do kuracji?`,
-    pcm: `**Try VoteBroker:** https://votebroker.org\n\nI wan hear your thoughts. You don try automated curation tools before?`,
-  };
-
-  const cta = CTAS[locale] || CTAS.en;
-
-  // Build draft title
-  const TITLES: Record<string, string> = {
-    en: "VoteBroker — Smarter Curation for the Steem Community",
-    de: "VoteBroker — Intelligentere Kuration für die Steem-Community",
-    es: "VoteBroker — Curación más inteligente para la comunidad Steem",
-    pt: "VoteBroker — Curadoria mais inteligente para a comunidade Steem",
-    id: "VoteBroker — Kurasi Lebih Cerdas untuk Komunitas Steem",
-    ru: "VoteBroker — Умное кураторство для сообщества Steem",
-    ko: "VoteBroker — Steem 커뮤니티를 위한 더 스마트한 큐레이션",
-    zh: "VoteBroker — 为 Steem 社区提供更智能的策展",
-    ja: "VoteBroker — Steemコミュニティのためのスマートなキュレーション",
-    hi: "VoteBroker — Steem समुदाय के लिए स्मार्ट क्यूरेशन",
-    bn: "VoteBroker — Steem সম্প্রদায়ের জন্য স্মার্ট কিউরেশন",
-    tr: "VoteBroker — Steem Topluluğu için Daha Akıllı Kürasyon",
-    pl: "VoteBroker — Mądrzejsza Kuracja dla Społeczności Steem",
-    pcm: "VoteBroker — Better Curation for the Steem Community",
-  };
-
-  const title = TITLES[locale] || TITLES.en;
-
-  const hasRealData = analysis.topAuthors.length > 0 && analysis.topTags.length > 0;
-  const dataWarning = !hasRealData ? "\n⚠️ Wenig Daten gefunden — Text neutral gehalten." : "";
-
-  // Build organic content with real scan data embedded naturally
-  const realDataSection = hasRealData
-    ? `\n\n---\n\n${getCommunityObservation(locale, analysis.trendingTopics, recommendation.tags[0] || locale, analysis.topAuthors[0] || "aktive Mitglieder")}`
-    : "";
-
+  // Community scan provides tags, community, timing — NOT the content body.
   const tagsLine = `**Tags:** ${recommendation.tags.map(t => `#${t}`).join(" ")}`;
   const communityLine = recommendation.community ? `**Community:** ${recommendation.community}` : "";
-  const body = `${intro}\n\n---\n\n${core}${realDataSection}\n\n---\n\n${cta}\n\n---\n\n${communityLine ? communityLine + "\n" : ""}${tagsLine}`;
 
-  // Analyse-Metadaten als YAML-Kommentar im Header — sichtbar im Preview, nicht im publizierten Text
+  // ── Titles ──────────────────────────────────────────────────────────────────
+  const TITLES: Record<string, string> = {
+    de:  "VoteBroker — Wie ich mein Curation-System auf Steem neu aufgebaut habe",
+    en:  "VoteBroker — How I rebuilt my curation system on Steem",
+    es:  "VoteBroker — Cómo reconstruí mi sistema de curación en Steem",
+    pt:  "VoteBroker — Como reconstruí meu sistema de curadoria no Steem",
+    id:  "VoteBroker — Bagaimana Saya Membangun Ulang Sistem Kurasi di Steem",
+    ru:  "VoteBroker — Как я перестроил свою систему кураторства на Steem",
+    ko:  "VoteBroker — Steem에서 나의 큐레이션 시스템을 재구축한 방법",
+    zh:  "VoteBroker — 我如何在 Steem 上重建我的策展系统",
+    ja:  "VoteBroker — Steemでキュレーションシステムを再構築した方法",
+    hi:  "VoteBroker — मैंने Steem पर अपना क्यूरेशन सिस्टम कैसे बनाया",
+    bn:  "VoteBroker — আমি কীভাবে Steem-এ আমার কিউরেশন সিস্টেম পুনর্নির্মাণ করলাম",
+    tr:  "VoteBroker — Steem'de Kürasyon Sistemimi Nasıl Yeniden Kurdum",
+    pl:  "VoteBroker — Jak przebudowałem swój system kuracji na Steem",
+    pcm: "VoteBroker — How I Build Better Curation System for Steem",
+  };
+
+  // ── Body templates — product story, not community scan ───────────────────────
+  // Structure per locale:
+  //   1. Hook: the problem with old vote tools
+  //   2. Story: why VoteBroker was built
+  //   3. What it does differently (consent, USD strategies, Vote-DNA, Community Intelligence)
+  //   4. Vision
+  //   5. CTA
+  const BODIES: Record<string, string> = {
+    de: `${config.greeting}
+
+Ich möchte euch heute ein Open-Source-Projekt vorstellen, an dem ich seit einiger Zeit arbeite: **VoteBroker**.
+
+---
+
+## Das Problem
+
+Wer auf Steem kuriert, kennt das: Man möchte gute Autoren unterstützen, aber die Voting Power ist schnell aufgebraucht. Klassische Vote-Bots setzen Votes automatisch — ohne Kontext, ohne Kontrolle, ohne echte Strategie.
+
+Ich wollte etwas anderes bauen.
+
+---
+
+## Was ist VoteBroker?
+
+VoteBroker ist kein Vote-Bot. Es ist ein **Curation-System**, das mir hilft, bessere Entscheidungen zu treffen — nicht statt mir.
+
+**Wer entwickelt es?**
+Ich, Jan-Philipp Vieth — ein Entwickler aus der Steem-Community. VoteBroker ist Open Source und unter [github.com/jan-philippvieth-svg/votebroker-modern](https://github.com/jan-philippvieth-svg/votebroker-modern) frei zugänglich.
+
+---
+
+## Was macht es anders?
+
+**1. Explizites Consent-Modell**
+Login ist nicht gleich Erlaubnis. Jeder operative Schritt — Vote absenden, Fee-Post, Community-Daten — wird separat bestätigt. Du kannst jede Berechtigung jederzeit widerrufen.
+
+**2. USD-präzise Vote-Strategien**
+Statt prozentualem Gewicht setzt man einen Zielwert in USD. VoteBroker berechnet daraus das exakte Gewicht auf Basis der aktuellen Voting Power und des STEEM-Preises.
+
+**3. Vote-DNA — optimaler Zeitpunkt, optimales Gewicht**
+Das System analysiert historische Curation-Daten und schlägt vor, wann und mit welchem Gewicht ein Vote maximalen Curation-Reward erzielt.
+
+**4. Community Intelligence**
+Der Autor-Radar zeigt, welche Autoren von mehreren erfahrenen Kuratoren unabhängig voneinander unterstützt werden — ein starkes Signal für Qualität.
+
+**5. Power-Stable Modus**
+VoteBroker empfiehlt das maximale Vote-Gewicht, das die Voting Power langfristig stabil hält.
+
+---
+
+## Warum ich das gebaut habe
+
+Ich wollte nicht blind voten. Ich wollte verstehen, warum ein Vote gut oder schlecht ist. VoteBroker macht Kuration transparent — mit echten Daten aus der Blockchain.
+
+Das Tool ist kostenlos nutzbar. Eine kleine Service-Gebühr fällt nur bei genutzten Votes an — abgerechnet als Vote auf einen ausgewiesenen Fee-Post. Kein Token-Transfer, alles on-chain.
+
+---
+
+## Was noch kommt
+
+VoteBroker ist Work in Progress. Fertig und nutzbar sind: Dashboard, Vote-DNA, Community Intelligence und das Consent-System. Was ich noch plane:
+
+- Direkte Veröffentlichung von Drafts aus dem Admin-Panel
+- Mehr Sprachen und Community-spezifische Anpassungen
+- Verbesserungen bei der Timing-Intelligenz
+
+---
+
+**Jetzt ausprobieren:** https://votebroker.org
+
+Ich freue mich auf Feedback — was fehlt, was würde euch wirklich helfen, was findet ihr gut oder weniger gut? Ehrliche Meinungen sind wertvoller als Lob.`,
+
+    en: `${config.greeting}
+
+Today I want to introduce an open-source project I've been building: **VoteBroker**.
+
+---
+
+## The Problem
+
+Anyone who curates on Steem knows the challenge: you want to support good authors, but Voting Power runs out fast. Classic vote bots cast votes automatically — without context, without control, without a real strategy.
+
+I wanted to build something different.
+
+---
+
+## What is VoteBroker?
+
+VoteBroker is not a vote bot. It's a **curation system** that helps me make better decisions — not instead of me.
+
+**Who built it?**
+Me, Jan-Philipp Vieth — a developer in the Steem community. VoteBroker is open source and freely available at [github.com/jan-philippvieth-svg/votebroker-modern](https://github.com/jan-philippvieth-svg/votebroker-modern).
+
+---
+
+## What makes it different?
+
+**1. Explicit Consent Model**
+Login is not permission. Every operational step — sending a vote, fee posts, community data — requires separate confirmation. You can revoke any permission at any time.
+
+**2. USD-precise Vote Strategies**
+Instead of percentage weights, you set a target value in USD. VoteBroker calculates the exact weight based on your current Voting Power and the STEEM price.
+
+**3. Vote-DNA — optimal timing, optimal weight**
+The system analyzes historical curation data and recommends when and at what weight a vote will generate maximum curation rewards.
+
+**4. Community Intelligence**
+The Author Radar shows which authors are independently supported by multiple experienced curators — a strong signal for quality content.
+
+**5. Power-Stable Mode**
+VoteBroker recommends the maximum vote weight that keeps your Voting Power stable long-term.
+
+---
+
+## Why I built this
+
+I didn't want to vote blindly. I wanted to understand why a vote is good or bad. VoteBroker makes curation transparent — with real data from the blockchain.
+
+The tool is free to use. A small service fee only applies to votes cast — settled as a vote on a designated fee post. No token transfer, everything on-chain.
+
+---
+
+## What's still in progress
+
+VoteBroker is a work in progress. What's working today: Dashboard, Vote-DNA, Community Intelligence, and the consent system. What I'm still building:
+
+- Direct publishing of drafts from the admin panel
+- More languages and community-specific tuning
+- Improvements to timing intelligence
+
+---
+
+**Try it now:** https://votebroker.org
+
+I'd love honest feedback — what's missing, what would actually help you, what works and what doesn't? Real opinions are more valuable than praise.`,
+
+    ko: `${config.greeting}
+
+오늘 제가 만들고 있는 오픈소스 프로젝트를 소개하고 싶습니다: **VoteBroker**.
+
+---
+
+## 문제점
+
+Steem에서 큐레이션을 해보신 분이라면 아실 겁니다. 좋은 작가들을 지원하고 싶지만 투표력(Voting Power)은 빨리 소진됩니다. 기존 보팅 봇들은 자동으로 투표하지만 — 맥락도, 통제권도, 실제 전략도 없이.
+
+저는 다른 것을 만들고 싶었습니다.
+
+---
+
+## VoteBroker란?
+
+VoteBroker는 봇이 아닙니다. 저 대신이 아니라, 더 나은 결정을 내리도록 도와주는 **큐레이션 시스템**입니다.
+
+**누가 만들었나요?**
+저, Jan-Philipp Vieth — Steem 커뮤니티의 개발자입니다. VoteBroker는 오픈소스이며 [github.com/jan-philippvieth-svg/votebroker-modern](https://github.com/jan-philippvieth-svg/votebroker-modern)에서 무료로 이용 가능합니다.
+
+---
+
+## 무엇이 다른가요?
+
+**1. 명시적 동의 모델**
+로그인 ≠ 권한. 모든 작업 — 투표 전송, 수수료 포스트, 커뮤니티 데이터 — 은 별도 확인이 필요합니다. 언제든지 모든 권한을 취소할 수 있습니다.
+
+**2. USD 정밀 투표 전략**
+퍼센트 가중치 대신 USD 목표값을 설정합니다. VoteBroker는 현재 투표력과 STEEM 가격을 기반으로 정확한 가중치를 계산합니다.
+
+**3. 투표 DNA — 최적 타이밍, 최적 가중치**
+시스템이 과거 큐레이션 데이터를 분석하여 최대 큐레이션 보상을 얻을 수 있는 시기와 가중치를 추천합니다.
+
+**4. 커뮤니티 인텔리전스**
+저자 레이더는 여러 경험 많은 큐레이터들이 독립적으로 지지하는 작가를 보여줍니다 — 품질 콘텐츠의 강력한 신호입니다.
+
+**5. 파워 스테이블 모드**
+장기적으로 투표력을 안정적으로 유지하는 최대 투표 가중치를 추천합니다.
+
+---
+
+**지금 사용해보기:** https://votebroker.org
+
+여러분의 피드백을 기다립니다 — 무엇이 부족한지, 더 나아질 수 있는 것이 무엇인지 알려주세요.`,
+  };
+
+  // Fallback to EN for locales without native template yet
+  const body = BODIES[locale] ?? BODIES.en;
+  const title = TITLES[locale] ?? TITLES.en;
+
+  // Analyse metadata — visible in review, not publishable
   const analyseMeta = `<!--
 ANALYSE (für Review — wird nicht veröffentlicht)
 Sprache:    ${config.nativeName} (${locale})
 Community:  ${recommendation.community || "keine eindeutige Community"}
 Tags:       ${recommendation.tags.join(", ")}
 Autoren:    ${analysis.topAuthors.slice(0, 5).join(", ") || "keine"}
-Themen:     ${analysis.trendingTopics.slice(0, 3).join(" · ") || "keine"}
-Stil:       ${styleProfile.tone} · ${styleProfile.avgLength} · Listen:${styleProfile.usesLists} · Bilder:${styleProfile.usesImages}
+Stil:       ${analysis.styleProfile.tone} · ${analysis.styleProfile.avgLength}
 Posting:    ${recommendation.postingHour}:00 UTC
-Begründung: ${recommendation.reasoning}${dataWarning}
+Begründung: ${recommendation.reasoning}
+HINWEIS:    Draft-Template — Inhalt für die Zielsprache vor Veröffentlichung prüfen.
 -->
 
 `;
@@ -364,7 +484,11 @@ ${body}
 
 ---
 
-*VoteBroker — Community Curation on Steem · [votebroker.org](https://votebroker.org)*
+${communityLine ? communityLine + "\n" : ""}${tagsLine}
+
+---
+
+*VoteBroker — Open Source · [votebroker.org](https://votebroker.org) · [GitHub](https://github.com/jan-philippvieth-svg/votebroker-modern)*
 `;
 }
 
