@@ -172,7 +172,30 @@ export function LandingPage() {
   }, []);
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif" }}>
+    // Outer wrapper — position:relative so the network can be page-level
+    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif", position: "relative" }}>
+
+      {/* ── Page-level signal network ──────────────────────────────────────────
+          Lives OUTSIDE all sections. No overflow:hidden clipping.
+          Spans hero → feature cards. Content layers sit on top via zIndex.  */}
+      <img
+        src={reducedMotion
+          ? "/assets/branding/logo/icon.svg"
+          : "/assets/branding/logo/icon-animated.svg"}
+        alt=""
+        aria-hidden
+        style={{
+          position: "absolute",
+          top: "40px",           // just below nav, network starts in hero
+          right: "-2%",          // slightly bleeds right, but hub is mostly in view
+          width: "clamp(1000px, 80vw, 1400px)",
+          height: "auto",
+          opacity: 0.042,
+          pointerEvents: "none",
+          userSelect: "none",
+          zIndex: 0,             // behind everything
+        }}
+      />
 
       {/* ── Nav ── */}
       <nav style={{
@@ -181,7 +204,7 @@ export function LandingPage() {
         position: "sticky", top: 0, background: "rgba(13,17,23,0.92)",
         backdropFilter: "blur(10px)", zIndex: 50,
       }}>
-        <img src="/assets/branding/logo/logo-dark.svg" alt="VoteBroker" width={250} style={{ display: "block", height: "auto" }} />
+        <img src="/assets/branding/logo/logo-dark.svg" alt="VoteBroker" width={280} style={{ display: "block", height: "auto" }} />
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
           <LocaleSwitcher locale={locale} onChange={setLocale} />
           <a href="/dashboard" style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", background: C.blueDark, color: "#fff", padding: "0.4rem 1rem", borderRadius: "6px", textDecoration: "none", fontSize: "0.85rem", fontWeight: 600 }}>
@@ -190,33 +213,9 @@ export function LandingPage() {
         </div>
       </nav>
 
-      {/* ── Hero ── */}
-      {/* Full-width so the network can bleed right/top without being constrained */}
-      <section style={{ width: "100%", padding: "6rem 0 4rem", textAlign: "center", position: "relative", overflow: "hidden" }}>
-
-        {/* Signal network — massive, upper-right, bleeds outside viewport.
-            Not a logo. Storytelling: a living intelligence running in the background. */}
-        <img
-          src={reducedMotion
-            ? "/assets/branding/logo/icon.svg"
-            : "/assets/branding/logo/icon-animated.svg"}
-          alt=""
-          aria-hidden
-          style={{
-            position: "absolute",
-            top: "-15%",
-            right: "-6%",
-            width: "clamp(1100px, 95vw, 1600px)",
-            height: "auto",
-            opacity: 0.042,
-            pointerEvents: "none",
-            userSelect: "none",
-            zIndex: 0,
-          }}
-        />
-
-        {/* Content — constrained width, always above background */}
-        <div style={{ maxWidth: "860px", margin: "0 auto", padding: "0 2rem", position: "relative", zIndex: 1 }}>
+      {/* ── Hero ── no overflow:hidden — network passes through freely */}
+      <section style={{ width: "100%", padding: "6rem 0 4rem", textAlign: "center", position: "relative", zIndex: 1 }}>
+        <div style={{ maxWidth: "860px", margin: "0 auto", padding: "0 2rem" }}>
           <div style={{ display: "inline-block", background: C.bg1, border: `1px solid ${C.border}`, borderRadius: "99px", padding: "0.3rem 1rem", fontSize: "0.75rem", color: C.muted, marginBottom: "1.75rem", letterSpacing: "0.5px", textTransform: "uppercase" as const }}>
             {t("landingHeroBadge")}
           </div>
@@ -243,8 +242,8 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* ── Warum VoteBroker? ── */}
-      <section style={{ maxWidth: "1040px", margin: "0 auto", padding: "4rem 2rem" }}>
+      {/* ── Warum VoteBroker? — zIndex:1 so cards sit above the network ── */}
+      <section style={{ maxWidth: "1040px", margin: "0 auto", padding: "4rem 2rem", position: "relative", zIndex: 1 }}>
         <SectionLabel>{t("landingWhyLabel")}</SectionLabel>
         <h2 style={{ fontSize: "clamp(1.5rem,3.5vw,2.2rem)", fontWeight: 800, color: C.text, margin: "0 0 0.5rem", letterSpacing: "-0.5px" }}>
           {t("landingWhyTitle")}
