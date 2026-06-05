@@ -64,9 +64,10 @@ const PUBLIC_IMAGES_DIR = (() => {
   return pathResolve(base, "public-screenshots");
 })();
 
-// Safe filename: lowercase letters, digits, dash, underscore; .png/.jpg/.webp only.
+// Safe filename: lowercase letters, digits, dash, underscore; .png only for now.
 // No slashes, no dots in the name part → path traversal impossible.
-const PUBLIC_IMG_RE = /^[a-z0-9_-]+\.(png|jpg|webp)$/;
+// Extend to jpg/webp when needed — each extension requires a correct Content-Type mapping.
+const PUBLIC_IMG_RE = /^[a-z0-9_-]+\.png$/;
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   app.get("/health", async () => ({
