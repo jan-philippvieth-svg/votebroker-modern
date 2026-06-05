@@ -158,6 +158,19 @@ export function LandingPage() {
   const [locale, setLocale] = useState<Locale>(getStoredLocale);
   const t = createTranslator(locale);
 
+  // Respect prefers-reduced-motion: swap animated SVG for static one
+  const [reducedMotion, setReducedMotion] = useState(() =>
+    typeof window !== "undefined"
+      ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      : false
+  );
+  React.useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const handler = (e: MediaQueryListEvent) => setReducedMotion(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif" }}>
 
@@ -179,19 +192,23 @@ export function LandingPage() {
 
       {/* ── Hero ── */}
       <section style={{ maxWidth: "860px", margin: "0 auto", padding: "6rem 2rem 4rem", textAlign: "center", position: "relative", overflow: "hidden" }}>
-        {/* Network mark as atmospheric background — not a UI element */}
+        {/* Atmospheric network mark — large, behind content, subtle glow */}
         <img
-          src="/assets/branding/logo/icon-animated.svg"
+          src={reducedMotion
+            ? "/assets/branding/logo/icon.svg"
+            : "/assets/branding/logo/icon-animated.svg"}
           alt=""
           aria-hidden
           style={{
             position: "absolute",
             top: "50%", left: "50%",
-            transform: "translate(-50%, -54%)",
-            width: 520, height: 520,
-            opacity: 0.055,
+            transform: "translate(-50%, -52%)",
+            width: 720, height: 720,
+            opacity: 0.09,
             pointerEvents: "none",
             userSelect: "none",
+            zIndex: 0,
+            filter: "drop-shadow(0 0 80px rgba(0,212,255,0.3)) drop-shadow(0 0 40px rgba(37,99,235,0.35))",
           }}
         />
 
