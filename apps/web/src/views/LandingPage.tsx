@@ -54,7 +54,7 @@ function LocaleSwitcher({ locale, onChange }: { locale: Locale; onChange: (l: Lo
       }}
       title="Sprache / Language"
     >
-      {locales.map(l => (
+      {locales.filter(l => l.code !== "pcm").map(l => (
         <option key={l.code} value={l.code}>{l.label}</option>
       ))}
     </select>
@@ -63,13 +63,21 @@ function LocaleSwitcher({ locale, onChange }: { locale: Locale; onChange: (l: Lo
 
 // ── Screenshot Tabs ───────────────────────────────────────────────────────────
 
-function ScreenshotSection({ t }: { t: ReturnType<typeof createTranslator> }) {
+// Locales with dedicated screenshot sets. All others fall back to "en".
+const SCREENSHOT_LOCALES = new Set(["de", "en"]);
+
+function screenshotUrl(name: string, locale: Locale): string {
+  const l = SCREENSHOT_LOCALES.has(locale) ? locale : "en";
+  return `/api/public/screenshots/${name}-${l}.png`;
+}
+
+function ScreenshotSection({ t, locale }: { t: ReturnType<typeof createTranslator>; locale: Locale }) {
   const [active, setActive] = useState("dashboard");
 
   const SHOTS = [
-    { id: "dashboard", label: t("landingTabDashboard"), url: "/api/public/screenshots/dashboard.png",  caption: t("landingCapDashboard") },
-    { id: "dna",       label: t("landingTabDna"),       url: "/api/public/screenshots/vote-dna.png",   caption: t("landingCapDna") },
-    { id: "community", label: t("landingTabCommunity"), url: "/api/public/screenshots/community.png",  caption: t("landingCapCommunity") },
+    { id: "dashboard", label: t("landingTabDashboard"), url: screenshotUrl("dashboard", locale),  caption: t("landingCapDashboard") },
+    { id: "dna",       label: t("landingTabDna"),       url: screenshotUrl("vote-dna",  locale),   caption: t("landingCapDna") },
+    { id: "community", label: t("landingTabCommunity"), url: screenshotUrl("community", locale),   caption: t("landingCapCommunity") },
   ];
 
   const shot = SHOTS.find(s => s.id === active)!;
@@ -233,7 +241,7 @@ export function LandingPage() {
 
       {/* ── Screenshots ── */}
       <div style={{ background: C.bg1, borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
-        <ScreenshotSection t={t} />
+        <ScreenshotSection t={t} locale={locale} />
       </div>
 
       {/* ── Vote-DNA erklärt ── */}
