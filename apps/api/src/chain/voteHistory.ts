@@ -19,9 +19,14 @@ export async function fetchVoteHistory(
   const seen = new Set<string>();
 
   while (votes.length < maxVotes) {
+    const limit = fromSeq < 0
+      ? MAX_OPS_PER_BATCH
+      : Math.min(Math.max(fromSeq - 1, 0), MAX_OPS_PER_BATCH);
+    if (fromSeq >= 0 && limit <= 0) break;
+
     const batch = await (client.database as unknown as {
       call(method: string, params: unknown[]): Promise<[number, RawHistoryEntry][]>
-    }).call("get_account_history", [username, fromSeq, MAX_OPS_PER_BATCH]);
+    }).call("get_account_history", [username, fromSeq, limit]);
 
     if (!batch || batch.length === 0) break;
 
@@ -45,8 +50,9 @@ export async function fetchVoteHistory(
       }
     }
 
-    const firstSeq = batch[0][0];
-    if (firstSeq <= 1 || batch.length < MAX_OPS_PER_BATCH) break;
+    const firstSeq = batch[0]?.[0];
+    if (typeof firstSeq !== "number" || firstSeq <= 0) break;
+    if (batch.length < limit) break;
     fromSeq = firstSeq - 1;
   }
 
