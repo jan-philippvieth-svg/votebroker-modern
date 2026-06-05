@@ -927,6 +927,7 @@ export function App() {
             onGenerateWithTarget={generateVotes}
             targetVotingPowerPct={targetVotingPowerPct}
             locale={locale}
+            onNavigate={setActiveTab}
           />
       )}
 
@@ -1545,6 +1546,70 @@ function generateStrategyFromProfile(profile: CurationProfile): StrategyRule[] {
   });
 }
 
+// ── InlineStrategyEditor — minimal author-add always available ────────────
+
+function InlineStrategyEditor(props: {
+  addUsername: string;
+  setAddUsername: (v: string) => void;
+  addCategory: StrategyCategory;
+  setAddCategory: (v: StrategyCategory) => void;
+  addManually: () => void;
+  strategyRules: StrategyRule[] | null;
+  onStrategyChange: (rules: StrategyRule[] | null) => void;
+  t: ReturnType<typeof createTranslator>;
+}) {
+  const inputStyle = { background: "#f8fbfc", border: "1px solid #dde8ed", borderRadius: "6px", color: "#17202a", fontSize: "0.82rem", padding: "0.3rem 0.6rem" };
+  return (
+    <div style={{ border: "1px solid #dde8ed", borderRadius: "10px", padding: "1.25rem" }}>
+      <p style={{ color: "#607078", fontSize: "0.75rem", fontWeight: 600, textTransform: "uppercase" as const, letterSpacing: "0.5px", margin: "0 0 0.85rem" }}>
+        🧬 Autor direkt hinzufügen
+      </p>
+      <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" as const, alignItems: "center", marginBottom: props.strategyRules && props.strategyRules.length > 0 ? "1rem" : 0 }}>
+        <input
+          placeholder="@username"
+          value={props.addUsername}
+          onChange={e => props.setAddUsername(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && props.addManually()}
+          style={{ ...inputStyle, width: "160px" }}
+        />
+        <select
+          value={props.addCategory}
+          onChange={e => props.setAddCategory(e.target.value as StrategyCategory)}
+          style={{ ...inputStyle, cursor: "pointer" }}
+        >
+          {(Object.keys(categoryLabel) as StrategyCategory[]).filter(k => k !== "ignorieren").map(k => (
+            <option key={k} value={k}>{categoryLabel[k]}</option>
+          ))}
+        </select>
+        <button
+          onClick={props.addManually}
+          type="button"
+          style={{ background: "#2563eb", border: "none", borderRadius: "6px", color: "#fff", cursor: "pointer", fontSize: "0.82rem", fontWeight: 700, padding: "0.35rem 0.85rem" }}
+        >
+          Hinzufügen
+        </button>
+      </div>
+      {props.strategyRules && props.strategyRules.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column" as const, gap: "0.4rem" }}>
+          {props.strategyRules.filter(r => r.enabled).map(r => (
+            <div key={r.username} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.82rem", color: "#2d3a42" }}>
+              <span style={{ background: categoryColor[r.category] + "18", color: categoryColor[r.category], borderRadius: "4px", padding: "0.1rem 0.4rem", fontSize: "0.7rem", fontWeight: 700 }}>
+                {categoryLabel[r.category].split(" ")[0]}
+              </span>
+              <span style={{ fontWeight: 600 }}>@{r.username}</span>
+              <button
+                type="button"
+                onClick={() => props.onStrategyChange(props.strategyRules!.filter(x => x.username !== r.username))}
+                style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: "0.75rem", padding: "0 0.2rem", marginLeft: "auto" }}
+              >✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── CurationDnaPanel ─────────────────────────────────────────────────────
 
 function CurationDnaPanel(props: {
@@ -1569,6 +1634,7 @@ function CurationDnaPanel(props: {
   onGenerateWithTarget: (targetPct: number) => void;
   targetVotingPowerPct: number;
   locale?: import("../i18n").Locale;
+  onNavigate?: (tab: "dna" | "dashboard" | "community" | "billing" | "admin") => void;
 }) {
   const t = createTranslator(props.locale ?? "de");
   const [addUsername, setAddUsername] = useState("");
@@ -1585,6 +1651,32 @@ function CurationDnaPanel(props: {
     color: "#607078", cursor: "pointer" as const, fontSize: "0.78rem", padding: "0.3rem 0.65rem",
   };
 
+  const addManually = () => {
+    const clean = addUsername.replace(/^@/, "").toLowerCase().trim();
+    if (!clean) return;
+    const dailyBudgetBps = 2000;
+    const weights = computeDynamicWeights(
+      [...(props.strategyRules ?? []), { username: clean, category: addCategory }],
+      dailyBudgetBps
+    );
+    const weightBps = weights.get(clean) ?? 200;
+    const newRule: StrategyRule = {
+      username: clean, category: addCategory,
+      maxWeightPct: Math.round(weightBps / 100 * 10) / 10,
+      minWeightPct: addCategory === "immer_voten" ? 10 : 0,
+      enabled: addCategory !== "ignorieren",
+      source: "Manuell",
+      sharePct: 0, voteCount: 0, avgWeightPct: 0,
+      lastVoteDaysAgo: 0, selectionReasons: [],
+      manuallyModified: true,
+    };
+    const existing = props.strategyRules ?? [];
+    if (!existing.find(r => r.username === clean)) {
+      props.onStrategyChange([...existing, newRule]);
+    }
+    setAddUsername("");
+  };
+
   if (!props.session) return null;
 
   if (props.loading) {
@@ -1597,27 +1689,67 @@ function CurationDnaPanel(props: {
 
   if (props.error) {
     return (
-      <section className="auth-bar">
-        <div>
-          <span>Vote-DNA</span>
-          <strong style={{ color: "#dc2626" }}>Fehler beim Laden der Vote-Historie</strong>
-          <p style={{ color: "#607078", fontSize: "0.82rem", margin: "0.25rem 0 0" }}>{props.error}</p>
+      <div style={{ maxWidth: "860px", margin: "0 auto" }}>
+        <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: "10px", padding: "1rem 1.25rem", marginBottom: "1.5rem" }}>
+          <strong style={{ color: "#dc2626", fontSize: "0.9rem" }}>Fehler beim Laden der Vote-Historie</strong>
+          <p style={{ color: "#607078", fontSize: "0.82rem", margin: "0.25rem 0 0.75rem" }}>{props.error}</p>
+          <button
+            type="button"
+            onClick={props.onGenerateVotes}
+            style={{ background: "#fff", border: "1px solid #fca5a5", borderRadius: "6px", color: "#dc2626", cursor: "pointer", fontSize: "0.78rem", fontWeight: 600, padding: "0.3rem 0.75rem" }}
+          >
+            ↻ Erneut versuchen
+          </button>
         </div>
-      </section>
+        <InlineStrategyEditor
+          addUsername={addUsername}
+          setAddUsername={setAddUsername}
+          addCategory={addCategory}
+          setAddCategory={setAddCategory}
+          addManually={addManually}
+          strategyRules={props.strategyRules}
+          onStrategyChange={props.onStrategyChange}
+          t={t}
+        />
+      </div>
     );
   }
 
   if (!props.profile || props.profile.votesAnalyzed === 0) {
     return (
-      <section className="auth-bar">
-        <div>
-          <span>Vote-DNA</span>
-          <strong>Keine Vote-Historie gefunden</strong>
-          <p style={{ color: "#607078", fontSize: "0.82rem", margin: "0.25rem 0 0" }}>
-            Für eine Vote-DNA-Analyse werden mindestens einige Votes benötigt.
+      <div style={{ maxWidth: "860px", margin: "0 auto" }}>
+        {/* Onboarding Start-Box */}
+        <div style={{ background: "linear-gradient(135deg, #f0f9ff 0%, #f8fbfc 100%)", border: "1px solid #bae6fd", borderRadius: "12px", padding: "1.5rem", marginBottom: "1.5rem" }}>
+          <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>👋</div>
+          <strong style={{ color: "#0369a1", fontSize: "1rem", display: "block", marginBottom: "0.4rem" }}>
+            Willkommen bei VoteBroker
+          </strong>
+          <p style={{ color: "#607078", fontSize: "0.85rem", margin: "0 0 1rem", lineHeight: 1.6 }}>
+            Noch keine Vote-Historie gefunden. Füge Autoren hinzu, die du regelmäßig unterstützen möchtest — VoteBroker erstellt daraus deine Strategie.
           </p>
+          <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" as const }}>
+            {props.onNavigate && (
+              <button
+                type="button"
+                onClick={() => props.onNavigate!("community")}
+                style={{ background: "#0369a1", border: "none", borderRadius: "8px", color: "#fff", cursor: "pointer", fontSize: "0.85rem", fontWeight: 700, padding: "0.55rem 1.1rem" }}
+              >
+                🔍 Community-Tab: Autoren entdecken →
+              </button>
+            )}
+          </div>
         </div>
-      </section>
+        <InlineStrategyEditor
+          addUsername={addUsername}
+          setAddUsername={setAddUsername}
+          addCategory={addCategory}
+          setAddCategory={setAddCategory}
+          addManually={addManually}
+          strategyRules={props.strategyRules}
+          onStrategyChange={props.onStrategyChange}
+          t={t}
+        />
+      </div>
     );
   }
 
@@ -1646,32 +1778,6 @@ function CurationDnaPanel(props: {
 
   const removeRule = (username: string) => {
     props.onStrategyChange(props.strategyRules?.filter(r => r.username !== username) ?? null);
-  };
-
-  const addManually = () => {
-    const clean = addUsername.replace(/^@/, "").toLowerCase().trim();
-    if (!clean) return;
-    const dailyBudgetBps = 2000;
-    const weights = computeDynamicWeights(
-      [...(props.strategyRules ?? []), { username: clean, category: addCategory }],
-      dailyBudgetBps
-    );
-    const weightBps = weights.get(clean) ?? 200;
-    const newRule: StrategyRule = {
-      username: clean, category: addCategory,
-      maxWeightPct: Math.round(weightBps / 100 * 10) / 10,
-      minWeightPct: addCategory === "immer_voten" ? 10 : 0,
-      enabled: addCategory !== "ignorieren",
-      source: "Manuell",
-      sharePct: 0, voteCount: 0, avgWeightPct: 0,
-      lastVoteDaysAgo: 0, selectionReasons: [],
-      manuallyModified: true,
-    };
-    const existing = props.strategyRules ?? [];
-    if (!existing.find(r => r.username === clean)) {
-      props.onStrategyChange([...existing, newRule]);
-    }
-    setAddUsername("");
   };
 
   const strategyRules = props.strategyRules;
@@ -1981,6 +2087,7 @@ function CurationDnaPanel(props: {
                 accountSnapshot={props.accountSnapshot}
                 onRefresh={props.onLoadOpportunities}
                 onExecuteVotes={props.onExecuteVotes}
+                locale={props.locale}
               />
             </div>
           </div>
@@ -2904,7 +3011,7 @@ function VotePlanSection(props: {
                 type="button"
                 onClick={() => { setPhase("confirming"); setConfirmed(false); }}
               >
-                {allPlanEntries.length} Votes bestätigen →
+                {t("planConfirmBtn").replace("{{count}}", String(allPlanEntries.length))}
               </button>
             </>
           )}
@@ -2915,20 +3022,20 @@ function VotePlanSection(props: {
       {phase === "confirming" && plan && (
         <div style={{ background: "#ffffff", border: "1px solid #f0a500", borderRadius: "6px", padding: "1rem" }}>
           <p style={{ color: "#d97706", fontWeight: 700, margin: "0 0 0.75rem", fontSize: "0.9rem" }}>
-            ⚠ Bestätigung erforderlich — {allPlanEntries.length} Votes werden sequenziell gesendet
+            {t("planConfirmTitle").replace("{{count}}", String(allPlanEntries.length))}
           </p>
 
           <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", fontSize: "0.82rem", marginBottom: "0.75rem" }}>
-            <span style={{ color: "#607078" }}>VP jetzt: <b style={{ color: "#17202a" }}>{plan.summary.currentVpPct.toFixed(1)}%</b></span>
-            <span style={{ color: "#607078" }}>Verbrauch: <b style={{ color: "#17202a" }}>{plan.summary.estimatedVpSpendPct}%</b></span>
-            <span style={{ color: "#607078" }}>VP danach: <b style={{ color: sustainColor }}>{plan.summary.estimatedVpAfterPct.toFixed(1)}%</b></span>
+            <span style={{ color: "#607078" }}>{t("planVpNow")} <b style={{ color: "#17202a" }}>{plan.summary.currentVpPct.toFixed(1)}%</b></span>
+            <span style={{ color: "#607078" }}>{t("planVpCost")} <b style={{ color: "#17202a" }}>{plan.summary.estimatedVpSpendPct}%</b></span>
+            <span style={{ color: "#607078" }}>{t("planVpAfter")} <b style={{ color: sustainColor }}>{plan.summary.estimatedVpAfterPct.toFixed(1)}%</b></span>
             <span style={{ color: sustainColor, fontWeight: 600 }}>
-              {plan.summary.sustainability === "sustainable" ? "✓ Nachhaltig" : plan.summary.sustainability === "aggressive" ? "⚠ Aggressiv" : "🔴 Kritisch"}
+              {plan.summary.sustainability === "sustainable" ? t("planSustainSustainable") : plan.summary.sustainability === "aggressive" ? t("planSustainAggressive") : t("planSustainCritical")}
             </span>
           </div>
 
           <div style={{ background: "#f0f5f7", borderRadius: "4px", padding: "0.5rem 0.75rem", marginBottom: "0.75rem", fontSize: "0.77rem", color: "#607078" }}>
-            <b style={{ color: "#2d3a42" }}>Safeguards:</b> Bereits gevotete Posts werden übersprungen · Fehler stoppen die Ausführung · 1.5s Pause zwischen Votes
+            <b style={{ color: "#2d3a42" }}>{t("planSafeguards")}</b> {t("planSafeguardsDetail")}
           </div>
 
           <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem", cursor: "pointer", fontSize: "0.82rem", color: "#2d3a42" }}>
@@ -2938,7 +3045,7 @@ function VotePlanSection(props: {
               onChange={e => setConfirmed(e.target.checked)}
               style={{ accentColor: "#d97706" }}
             />
-            Ich habe den Plan überprüft und bestätige, dass diese {allPlanEntries.length} Votes gesendet werden sollen.
+            {t("planConfirmCheck").replace("{{count}}", String(allPlanEntries.length))}
           </label>
 
           <div style={{ display: "flex", gap: "0.5rem" }}>
@@ -2948,9 +3055,9 @@ function VotePlanSection(props: {
               disabled={!confirmed}
               onClick={() => void startExecution()}
             >
-              Jetzt {allPlanEntries.length} Votes senden
+              {t("planSendNow").replace("{{count}}", String(allPlanEntries.length))}
             </button>
-            <button style={chipBtn} type="button" onClick={reset}>Zurück</button>
+            <button style={chipBtn} type="button" onClick={reset}>{t("planBack")}</button>
           </div>
         </div>
       )}
@@ -2959,7 +3066,7 @@ function VotePlanSection(props: {
       {phase === "executing" && (
         <div style={{ background: "#ffffff", border: "1px solid #30363d", borderRadius: "6px", padding: "0.75rem 1rem" }}>
           <p style={{ color: "#2d3a42", fontWeight: 600, margin: "0 0 0.5rem" }}>
-            Sende Votes... {execLog.length}/{allPlanEntries.length}
+            {t("planSendingProgress").replace("{{sent}}", String(execLog.length)).replace("{{total}}", String(allPlanEntries.length))}
           </p>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem", fontFamily: "monospace", fontSize: "0.77rem" }}>
             {execLog.map((l, i) => (
@@ -2970,7 +3077,7 @@ function VotePlanSection(props: {
             {execLog.length < allPlanEntries.length && !aborted && (
               <div style={{ color: "#607078" }}>⏳ @{allPlanEntries[execIndex]?.author ?? "..."}...</div>
             )}
-            {aborted && <div style={{ color: "#dc2626" }}>⛔ Gestoppt wegen Fehler</div>}
+            {aborted && <div style={{ color: "#dc2626" }}>{t("planAbortError")}</div>}
           </div>
         </div>
       )}
@@ -2979,10 +3086,10 @@ function VotePlanSection(props: {
       {phase === "done" && (
         <div>
           <div style={{ padding: "0.6rem 0.75rem", background: "#f0f5f7", borderRadius: "5px", border: "1px solid #30363d", fontSize: "0.82rem", marginBottom: "0.5rem" }}>
-            <b style={{ color: "#2d3a42" }}>Ergebnis:</b>
-            {" "}<span style={{ color: "#16a34a" }}>{execLog.filter(l => l.status === "sent").length} gesendet</span>
-            {execLog.filter(l => l.status === "skipped").length > 0 && <span style={{ color: "#607078", marginLeft: "0.75rem" }}>{execLog.filter(l => l.status === "skipped").length} übersprungen</span>}
-            {execLog.filter(l => l.status === "failed").length > 0 && <span style={{ color: "#dc2626", marginLeft: "0.75rem" }}>{execLog.filter(l => l.status === "failed").length} fehlgeschlagen</span>}
+            <b style={{ color: "#2d3a42" }}>{t("planResultTitle")}</b>
+            {" "}<span style={{ color: "#16a34a" }}>{t("planResultSent").replace("{{count}}", String(execLog.filter(l => l.status === "sent").length))}</span>
+            {execLog.filter(l => l.status === "skipped").length > 0 && <span style={{ color: "#607078", marginLeft: "0.75rem" }}>{t("planResultSkipped").replace("{{count}}", String(execLog.filter(l => l.status === "skipped").length))}</span>}
+            {execLog.filter(l => l.status === "failed").length > 0 && <span style={{ color: "#dc2626", marginLeft: "0.75rem" }}>{t("planResultFailed").replace("{{count}}", String(execLog.filter(l => l.status === "failed").length))}</span>}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.15rem", fontFamily: "monospace", fontSize: "0.75rem", marginBottom: "0.5rem", maxHeight: "200px", overflowY: "auto" }}>
             {execLog.map((l, i) => (
@@ -2991,7 +3098,7 @@ function VotePlanSection(props: {
               </div>
             ))}
           </div>
-          <button style={chipBtn} type="button" onClick={() => { reset(); props.onGenerate(); }}>Plan neu generieren</button>
+          <button style={chipBtn} type="button" onClick={() => { reset(); props.onGenerate(); }}>{t("planRegenerate")}</button>
         </div>
       )}
     </div>
@@ -3007,7 +3114,9 @@ function OpenVoteOpportunities(props: {
   accountSnapshot: SteemAccountSnapshot | null;
   onRefresh: () => void;
   onExecuteVotes: (targets: VoteTarget[]) => Promise<VoteBatchResult>;
+  locale?: import("../i18n").Locale;
 }) {
+  const t = createTranslator(props.locale ?? "de");
   const [preview, setPreview] = useState<VoteTarget[] | null>(null);
   const [voting, setVoting] = useState(false);
   const [voteResult, setVoteResult] = useState<VoteBatchResult | null>(null);
@@ -3092,7 +3201,7 @@ function OpenVoteOpportunities(props: {
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <span style={{ fontSize: "1.1rem" }}>🚀</span>
             <span style={{ color: "#4ade80", fontWeight: 700, fontSize: "0.88rem" }}>
-              Eigener neuer Post erkannt
+              {t("selfPostDetected")}
             </span>
           </div>
           {selfPostOpps.map(p => (
@@ -3101,12 +3210,12 @@ function OpenVoteOpportunities(props: {
                 {p.title || `${p.author}/${p.permlink}`}
               </div>
               <div style={{ color: "#94a3b8", fontSize: "0.78rem" }}>
-                veröffentlicht vor {p.ageMinutes < 60
-                  ? `${p.ageMinutes} Min.`
-                  : `${(p.ageMinutes / 60).toFixed(1)} Std.`}
+                {p.ageMinutes < 60
+                  ? t("selfPostPublishedMin").replace("{{min}}", String(p.ageMinutes))
+                  : t("selfPostPublishedHour").replace("{{hours}}", (p.ageMinutes / 60).toFixed(1))}
               </div>
               <div style={{ color: "#6ee7b7", fontSize: "0.78rem", marginTop: "0.1rem" }}>
-                Empfehlung: Sofort voten für maximale Sichtbarkeit
+                {t("selfPostRecommend")}
               </div>
             </div>
           ))}
@@ -3124,7 +3233,7 @@ function OpenVoteOpportunities(props: {
               {totalOpen}
             </span>
             <span style={{ color: "#607078", fontSize: "0.85rem", fontWeight: 700 }}>
-              {totalOpen === 1 ? "offener Vote" : totalOpen === 0 ? "✓ Alles gevoted" : "offene Votes"}
+              {totalOpen === 1 ? t("openVoteLabel1") : totalOpen === 0 ? t("openVoteLabelDone") : t("openVoteLabelN")}
             </span>
           </div>
           <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginLeft: "auto" }}>
@@ -3134,7 +3243,7 @@ function OpenVoteOpportunities(props: {
               disabled={props.loading}
               onClick={props.onRefresh}
             >
-              {props.loading ? "Scannt..." : "↻ Aktualisieren"}
+              {props.loading ? t("btnScanning") : t("btnRefresh")}
             </button>
           </div>
         </div>
@@ -3148,7 +3257,7 @@ function OpenVoteOpportunities(props: {
       {props.meta && !props.loading && (
         <div style={{ background: "#f8fbfc", border: "1px solid #dde8ed", borderRadius: "8px", padding: "0.5rem 0.85rem", marginBottom: "0.75rem", fontSize: "0.73rem" }}>
           <div style={{ display: "flex", gap: "1.25rem", flexWrap: "wrap" as const, color: "#8fa4b0" }}>
-            <span>{props.meta.scannedAuthors}/{props.meta.requestedAuthors} Autoren · {props.meta.totalPosts} Posts · <b style={{ color: props.meta.eligiblePosts > 0 ? "#16a34a" : "#8fa4b0" }}>{props.meta.eligiblePosts} wählbar</b></span>
+            <span>{t("scanMetaSummary").replace("{{scanned}}", String(props.meta.scannedAuthors)).replace("{{requested}}", String(props.meta.requestedAuthors)).replace("{{posts}}", String(props.meta.totalPosts)).replace("{{eligible}}", String(props.meta.eligiblePosts))}</span>
           </div>
           {/* Per-author breakdown — highlight authors with 0 posts */}
           {(() => {
@@ -3158,12 +3267,12 @@ function OpenVoteOpportunities(props: {
               <>
                 {withPost.length > 0 && (
                   <div style={{ color: "#16a34a", fontSize: "0.72rem" }}>
-                    ✓ Mit offenen Posts: {withPost.join(", ")}
+                    {t("scanMetaWithPosts").replace("{{authors}}", withPost.join(", "))}
                   </div>
                 )}
                 {noPost.length > 0 && (
                   <div style={{ color: "#8fa4b0", fontSize: "0.72rem", marginTop: "0.15rem" }}>
-                    Keine aktuellen Posts (inaktiv / bereits gevoted): {noPost.slice(0, 10).join(", ")}{noPost.length > 10 ? ` +${noPost.length - 10}` : ""}
+                    {t("scanMetaNoPosts").replace("{{authors}}", `${noPost.slice(0, 10).join(", ")}${noPost.length > 10 ? ` +${noPost.length - 10}` : ""}`)}
                   </div>
                 )}
               </>

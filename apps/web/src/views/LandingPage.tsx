@@ -396,7 +396,6 @@ export function LandingPage() {
                 <Bullet text={t("landingComBullet1")} />
                 <Bullet text={t("landingComBullet2")} />
                 <Bullet text={t("landingComBullet3")} />
-                <Bullet text={t("landingComBullet4")} />
               </ul>
             </div>
           </div>
