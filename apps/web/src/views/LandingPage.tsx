@@ -181,7 +181,7 @@ export function LandingPage() {
         position: "sticky", top: 0, background: "rgba(13,17,23,0.92)",
         backdropFilter: "blur(10px)", zIndex: 50,
       }}>
-        <img src="/assets/branding/logo/logo-dark.svg" alt="VoteBroker" width={200} style={{ display: "block", height: "auto" }} />
+        <img src="/assets/branding/logo/logo-dark.svg" alt="VoteBroker" width={250} style={{ display: "block", height: "auto" }} />
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
           <LocaleSwitcher locale={locale} onChange={setLocale} />
           <a href="/dashboard" style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", background: C.blueDark, color: "#fff", padding: "0.4rem 1rem", borderRadius: "6px", textDecoration: "none", fontSize: "0.85rem", fontWeight: 600 }}>
@@ -204,11 +204,11 @@ export function LandingPage() {
           aria-hidden
           style={{
             position: "absolute",
-            top: "-20%",
-            right: "-18%",
-            width: "clamp(900px, 85vw, 1440px)",
+            top: "-15%",
+            right: "-6%",
+            width: "clamp(1100px, 95vw, 1600px)",
             height: "auto",
-            opacity: 0.045,
+            opacity: 0.042,
             pointerEvents: "none",
             userSelect: "none",
             zIndex: 0,
