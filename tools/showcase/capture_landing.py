@@ -56,6 +56,7 @@ TABS = [
     ("dashboard",  "dashboard"),
     ("dna",        "vote-dna"),
     ("community",  "community"),
+    ("billing",    "settings"),    # Consent & Einstellungen
 ]
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -113,6 +114,12 @@ def capture_tab(page, tab_id: str) -> None:
     elif tab_id == "community":
         # Wait for Community-specific content (Whale Discovery / Author Radar)
         wait_text(page, "Signal", timeout=10000)
+        page.evaluate("window.scrollTo(0, 0)")
+        page.wait_for_timeout(500)
+
+    elif tab_id == "billing":
+        # Wait for consent/settings content
+        wait_text(page, "Berechtigungen", timeout=8000)
         page.evaluate("window.scrollTo(0, 0)")
         page.wait_for_timeout(500)
 

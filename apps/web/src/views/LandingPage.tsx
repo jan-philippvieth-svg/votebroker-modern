@@ -360,6 +360,21 @@ export function LandingPage() {
             </div>
           ))}
         </div>
+
+        {/* Settings screenshot — shows real consent controls in action */}
+        <div style={{ marginTop: "2.5rem", maxWidth: "860px", margin: "2.5rem auto 0" }}>
+          <div style={{
+            border: `1px solid ${C.border}`, borderRadius: "12px",
+            overflow: "hidden", boxShadow: "0 8px 32px rgba(0,0,0,0.35)",
+          }}>
+            <img
+              src={screenshotUrl("settings", locale)}
+              alt="VoteBroker Berechtigungen"
+              style={{ width: "100%", display: "block" }}
+              loading="lazy"
+            />
+          </div>
+        </div>
       </section>
 
       {/* ── Open Source / GitHub ── */}
