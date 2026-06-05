@@ -1203,6 +1203,7 @@ function ConsentPanel(props: {
 }) {
   const activeTypes = new Set(props.state?.active.map((r) => r.type) ?? []);
   const history = props.state?.history.filter(r => r.status === "revoked").slice(0, 5) ?? [];
+  const [historyOpen, setHistoryOpen] = React.useState(false);
 
   const panelStyle: React.CSSProperties = {
     background: "#ffffff", border: "1px solid #21262d", borderRadius: "8px", padding: "1.25rem 1.5rem",
@@ -1337,23 +1338,38 @@ function ConsentPanel(props: {
         })}
       </div>
 
-      {/* Recent revocations */}
+      {/* Recent revocations — collapsed by default */}
       {history.length > 0 && (
-        <div style={{ marginTop: "1rem", padding: "0.75rem 1rem", background: "#ffffff", border: "1px solid #21262d", borderRadius: "6px" }}>
-          <p style={{ color: "#607078", fontSize: "0.73rem", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 0.5rem", fontWeight: 600 }}>
-            {props.t("consentHistoryTitle")}
-          </p>
-          {history.map(record => (
-            <div key={record.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.78rem", color: "#607078", marginBottom: "0.2rem" }}>
-              <span style={{ color: record.status === "granted" ? "#16a34a" : "#dc2626" }}>
-                {record.status === "granted" ? props.t("consentStatusGranted") : props.t("consentStatusRevoked")}
-              </span>
-              <span>{getConsentMeta(props.t)[record.type as ConsentType]?.label ?? record.title}</span>
-              <span style={{ color: "#8fa4b0" }}>
-                {new Date(record.revokedAt ?? record.createdAt ?? "").toLocaleDateString(props.locale ?? "de")}
-              </span>
+        <div style={{ marginTop: "1rem", border: "1px solid #21262d", borderRadius: "6px", overflow: "hidden" }}>
+          <button
+            type="button"
+            onClick={() => setHistoryOpen(o => !o)}
+            style={{
+              width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+              background: "#ffffff", border: "none", cursor: "pointer",
+              padding: "0.6rem 1rem", textAlign: "left",
+            }}
+          >
+            <span style={{ color: "#607078", fontSize: "0.73rem", textTransform: "uppercase" as const, letterSpacing: "0.5px", fontWeight: 600 }}>
+              {props.t("consentHistoryTitle")} ({history.length})
+            </span>
+            <span style={{ color: "#607078", fontSize: "0.8rem", transition: "transform 0.2s", display: "inline-block", transform: historyOpen ? "rotate(180deg)" : "rotate(0deg)" }}>▾</span>
+          </button>
+          {historyOpen && (
+            <div style={{ padding: "0.5rem 1rem 0.75rem", background: "#ffffff", borderTop: "1px solid #f0f0f0" }}>
+              {history.map(record => (
+                <div key={record.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.78rem", color: "#607078", marginBottom: "0.2rem" }}>
+                  <span style={{ color: record.status === "granted" ? "#16a34a" : "#dc2626" }}>
+                    {record.status === "granted" ? props.t("consentStatusGranted") : props.t("consentStatusRevoked")}
+                  </span>
+                  <span>{getConsentMeta(props.t)[record.type as ConsentType]?.label ?? record.title}</span>
+                  <span style={{ color: "#8fa4b0" }}>
+                    {new Date(record.revokedAt ?? record.createdAt ?? "").toLocaleDateString(props.locale ?? "de")}
+                  </span>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
       )}
     </div>
