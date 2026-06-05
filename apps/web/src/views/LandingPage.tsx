@@ -171,14 +171,32 @@ export function LandingPage() {
     return () => mq.removeEventListener("change", handler);
   }, []);
 
+  // Parallax: network moves at 55% of scroll speed → stays visible across sections
+  const networkRef = React.useRef<HTMLImageElement>(null);
+  React.useEffect(() => {
+    if (reducedMotion) return;
+    let raf: number;
+    const onScroll = () => {
+      raf = requestAnimationFrame(() => {
+        if (networkRef.current) {
+          networkRef.current.style.transform =
+            `translateX(-50%) translateY(${window.scrollY * 0.55}px)`;
+        }
+      });
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => { window.removeEventListener("scroll", onScroll); cancelAnimationFrame(raf); };
+  }, [reducedMotion]);
+
   return (
-    // Outer wrapper — position:relative so the network can be page-level
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif", position: "relative" }}>
 
-      {/* ── Page-level signal network ──────────────────────────────────────────
-          Lives OUTSIDE all sections. No overflow:hidden clipping.
-          Spans hero → feature cards. Content layers sit on top via zIndex.  */}
+      {/* ── Signal network — page-level, parallax, centered ────────────────────
+          zIndex: 0 → below content wrapper (zIndex: 1).
+          Parallax: scrolls at 55% speed → visible across hero + 2–3 sections.
+          prefers-reduced-motion: static icon, no JS transform.            */}
       <img
+        ref={networkRef}
         src={reducedMotion
           ? "/assets/branding/logo/icon.svg"
           : "/assets/branding/logo/icon-animated.svg"}
@@ -186,16 +204,21 @@ export function LandingPage() {
         aria-hidden
         style={{
           position: "absolute",
-          top: "40px",           // just below nav, network starts in hero
-          right: "-2%",          // slightly bleeds right, but hub is mostly in view
-          width: "clamp(1000px, 80vw, 1400px)",
+          top: "50px",
+          left: "50%",
+          transform: "translateX(-50%)",     // JS overwrites this on scroll
+          width: "clamp(1200px, 100vw, 1560px)",
           height: "auto",
           opacity: 0.042,
           pointerEvents: "none",
           userSelect: "none",
-          zIndex: 0,             // behind everything
+          zIndex: 0,
+          willChange: "transform",
         }}
       />
+
+      {/* ── Content wrapper — zIndex:1 ensures everything sits above the network ── */}
+      <div style={{ position: "relative", zIndex: 1 }}>
 
       {/* ── Nav ── */}
       <nav style={{
@@ -361,6 +384,7 @@ export function LandingPage() {
         <span>© {new Date().getFullYear()} VoteBroker</span>
       </footer>
 
+      </div>{/* end content wrapper */}
     </div>
   );
 }
