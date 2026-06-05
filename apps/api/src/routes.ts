@@ -57,14 +57,45 @@ const PUBLIC_SCREENSHOTS_DIR = (() => {
   return "docs/screenshots";
 })();
 
+// Public landing-page images — only explicitly promoted screenshots live here.
+// No admin, session or private data is ever written to this directory.
+const PUBLIC_IMAGES_DIR = (() => {
+  const base = existsSync("/app/data") ? "/app/data" : ".";
+  return pathResolve(base, "public-screenshots");
+})();
+
+// Safe filename: lowercase letters, digits, dash, underscore; .png/.jpg/.webp only.
+// No slashes, no dots in the name part → path traversal impossible.
+const PUBLIC_IMG_RE = /^[a-z0-9_-]+\.(png|jpg|webp)$/;
+
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   app.get("/health", async () => ({
     status: "ok",
     service: "votebroker-api"
   }));
 
+  // ── GET /api/public/screenshots/:file — landing page images ─────────────────
+  // Only serves from PUBLIC_IMAGES_DIR (/app/data/public-screenshots/).
+  // Files must be explicitly copied there — no admin/session screenshots.
+  // Filename is whitelisted: [a-z0-9_-]+.(png|jpg|webp), no path components.
+  app.get("/api/public/screenshots/:file", async (request, reply) => {
+    const { file } = request.params as { file: string };
+    if (!PUBLIC_IMG_RE.test(file)) return reply.code(400).send({ error: "invalid_filename" });
+    const filePath = pathResolve(PUBLIC_IMAGES_DIR, file);
+    // Extra guard: resolved path must stay inside PUBLIC_IMAGES_DIR
+    if (!filePath.startsWith(PUBLIC_IMAGES_DIR + "/")) {
+      return reply.code(400).send({ error: "invalid_path" });
+    }
+    if (!existsSync(filePath)) return reply.code(404).send({ error: "not_found" });
+    reply.header("Cache-Control", "public, max-age=86400");
+    reply.type("image/png");
+    return reply.send(createReadStream(filePath));
+  });
+
   // ── GET /api/screenshots/:snap/:filename — PUBLIC, no auth ───────────────────
-  // Serves annotated PNGs for Steemit/external use. Two variants:
+  // Serves annotated PNGs for Steemit/external use (devlog + product posts).
+  // These are UI screenshots with secret guard applied — no auth/session data.
+  // Two variants:
   //   /api/screenshots/snap-20260602/01_find_votes_annotated.png  ← devlog snapshot
   //   /api/screenshots/01_find_votes_annotated.png                ← current (product post)
   app.get("/api/screenshots/:snap/:filename", async (request, reply) => {
