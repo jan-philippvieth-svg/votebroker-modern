@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Users, Dna, Target, LayoutDashboard, type LucideIcon } from "lucide-react";
 import type {
   AuthSession, CurationProfile, DailyEarnings, GrowthData,
   OpportunitiesMeta, PendingCuration, PendingDebugPost, PostOpportunity,
@@ -70,33 +71,6 @@ const CAT_DEF: Record<string, { color: string; icon: string; tKey: TranslationKe
   niedrig:        { color: C.faint,  icon: "⬇", tKey: "catLow",       pri: 1 },
 };
 
-const DNA_LABEL_MAP: Record<string, TranslationKey> = {
-  "Regular Curator":         "dnaRegularCurator",
-  "Broad Explorer":          "dnaBroadExplorer",
-  "Loyal Community Curator": "dnaLoyalCommunity",
-  "Loyal Inner Circle":      "dnaLoyalInner",
-  "High-Frequency Curator":  "dnaHighFreq",
-  "Niche Specialist":        "dnaNiche",
-  "Self-Focused Voter":      "dnaLabelSelfVoter",
-  "Strategic Weight Voter":  "dnaStrategicWeight",
-};
-
-const DNA_EMOJI: Record<string, string> = {
-  "Self-Focused Voter": "🔴", "Loyal Inner Circle": "🟣",
-  "Loyal Community Curator": "🟦", "Broad Explorer": "🟢",
-  "Strategic Weight Voter": "🟡", "High-Frequency Curator": "🟠",
-  "Niche Specialist": "🟤", "Regular Curator": "⚫",
-};
-
-// Curator Journey — based on unique AUTHORS
-const JOURNEY: ReadonlyArray<{ key: TranslationKey; minA: number; maxA: number; color: string; emoji: string }> = [
-  { key: "levelNewCurator",       minA: 0,   maxA: 5,        color: C.faint,  emoji: "🌱" },
-  { key: "levelActiveSup",        minA: 5,   maxA: 15,       color: C.ok,     emoji: "🌿" },
-  { key: "levelCommunityBuilder", minA: 15,  maxA: 30,       color: C.info,   emoji: "🌳" },
-  { key: "levelTrustedCurator",   minA: 30,  maxA: 60,       color: C.purple, emoji: "⭐" },
-  { key: "levelEcosystemSup",     minA: 60,  maxA: 100,      color: C.warn,   emoji: "🌟" },
-  { key: "levelLegend",           minA: 100, maxA: Infinity, color: C.gold,   emoji: "🏆" },
-];
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 
@@ -129,11 +103,6 @@ function sortRules(r: StrategyRuleLite[]) {
   return [...r].filter(x => x.enabled && x.category !== "ignorieren")
     .sort((a, b) => (CAT_DEF[b.category]?.pri ?? 0) - (CAT_DEF[a.category]?.pri ?? 0));
 }
-function journeyLevel(authors: number) {
-  for (let i = JOURNEY.length - 1; i >= 0; i--)
-    if (authors >= JOURNEY[i].minA) return { ...JOURNEY[i], idx: i };
-  return { ...JOURNEY[0], idx: 0 };
-}
 function votesPerDay7(votes: RecentVote[]): Array<{ short: string; count: number }> {
   const result: Record<string, number> = {};
   for (let i = 6; i >= 0; i--) {
@@ -159,12 +128,7 @@ function CommunityHero({ profile, growth, todayStats, snapshot, t }: {
   const streak       = growth?.summary.longestStreak ?? 0;
   const currStreak   = growth?.summary.currentStreak ?? 0;
 
-  const dnaKey   = DNA_LABEL_MAP[profile.dnaLabel];
-  const dnaLabel = dnaKey ? t(dnaKey) : profile.dnaLabel;
-  const dnaConv  = profile.avgWeightPct>=70 ? t("dnaHighConviction") : profile.avgWeightPct>=45 ? t("dnaBalanced") : t("dnaExploratory");
-  const selfNote = profile.selfVotePct<5 ? t("dnaCommunityFirst") : profile.selfVotePct>20 ? t("dnaSelfFocused") : "";
-
-  // Profile / journey KPIs (primary — left, large)
+  // Profile KPIs (primary — left, large)
   const profileKpis = [
     { value: totalAuthors.toLocaleString(), label: t("impactAuthors"),   color: C.purple },
     { value: totalVotes.toLocaleString(),   label: t("impactVotes"),     color: C.info   },
@@ -194,17 +158,10 @@ function CommunityHero({ profile, growth, todayStats, snapshot, t }: {
       border: `1px solid #e0d4fc`,
       display: "flex", flexDirection: "column" as const, gap: "1.5rem",
     }}>
-      {/* DNA Identity */}
-      <div style={{ display:"flex", alignItems:"center", gap:"1rem" }}>
-        <span style={{ fontSize:"2.4rem", lineHeight:1 }}>{DNA_EMOJI[profile.dnaLabel] ?? "⚫"}</span>
-        <div>
-          <div style={{ color: C.purple, fontWeight:800, fontSize:"1.1rem" }}>{dnaLabel}</div>
-          <div style={{ color: C.muted, fontSize:"0.75rem", marginTop:"2px" }}>{dnaConv}{selfNote?` · ${selfNote}`:""}</div>
-        </div>
-        <div style={{ marginLeft:"auto", textAlign:"right" as const }}>
-          <div style={{ color: C.muted, fontSize:"0.72rem", fontWeight:700 }}>@{profile.username}</div>
-          <div style={{ color: C.faint, fontSize:"0.68rem" }}>{profile.avgWeightPct}% {t("kpiAvgWeight").toLowerCase()}</div>
-        </div>
+      {/* Account identity — neutral header */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+        <div style={{ color: C.purple, fontWeight:800, fontSize:"1.05rem" }}>@{profile.username}</div>
+        <div style={{ color: C.faint, fontSize:"0.68rem" }}>{profile.avgWeightPct}% {t("kpiAvgWeight").toLowerCase()}</div>
       </div>
 
       {/* KPI-Zeile: Profil-Metriken (links, groß) + Tages-VP (rechts, kompakt) */}
@@ -374,71 +331,64 @@ function CommunityGrowthChart({ growth, growthLoading, growthPeriod, setGrowthPe
   );
 }
 
-// ── Curator Journey ───────────────────────────────────────────────────────────
+// ── Onboarding Flow ───────────────────────────────────────────────────────────
 
-function CuratorJourney({ totalAuthors, t }: { totalAuthors: number; t: ReturnType<typeof createTranslator> }) {
-  const level    = journeyLevel(totalAuthors);
-  const isMax    = level.idx === JOURNEY.length - 1;
-  const nextThr  = isMax ? totalAuthors : JOURNEY[level.idx+1].minA;
-  const pct      = isMax ? 100 : Math.min(100, ((totalAuthors-level.minA)/(nextThr-level.minA))*100);
-  const remaining = isMax ? 0 : nextThr - totalAuthors;
-  const nextLevel = isMax ? null : JOURNEY[level.idx+1];
+const ONBOARDING_STEPS: Array<{
+  icon: LucideIcon;
+  titleKey: TranslationKey;
+  descKey: TranslationKey;
+  tab: "community" | "dna" | "dashboard";
+  color: string;
+}> = [
+  { icon: Users,           titleKey: "stepCommunity", descKey: "stepCommunityDesc", tab: "community", color: C.purple },
+  { icon: Dna,             titleKey: "stepDna",       descKey: "stepDnaDesc",       tab: "dna",       color: C.info   },
+  { icon: Target,          titleKey: "stepStrategy",  descKey: "stepStrategyDesc",  tab: "dna",       color: C.ok     },
+  { icon: LayoutDashboard, titleKey: "stepDashboard", descKey: "stepDashboardDesc", tab: "dashboard", color: C.warn   },
+];
 
+function OnboardingFlow({ onTabChange, t }: {
+  onTabChange: (tab: "community" | "dna" | "dashboard") => void;
+  t: ReturnType<typeof createTranslator>;
+}) {
   return (
-    <div style={{ display:"flex", flexDirection:"column" as const, gap:"1.25rem" }}>
-      {/* Badge */}
-      <div style={{
-        display:"flex", alignItems:"center", gap:"1rem", padding:"1.1rem 1.25rem",
-        background: `linear-gradient(135deg, ${level.color}12 0%, ${C.inner} 100%)`,
-        border:`1.5px solid ${level.color}30`, borderRadius:"12px",
-      }}>
-        <span style={{ fontSize:"2.4rem", lineHeight:1 }}>{level.emoji}</span>
-        <div>
-          <div style={{ color:level.color, fontWeight:900, fontSize:"1.05rem" }}>{t(level.key)}</div>
-          <div style={{ color:C.muted, fontSize:"0.72rem", marginTop:"2px" }}>{totalAuthors} {t("levelAuthorsOf")}</div>
-        </div>
-      </div>
-
-      {/* Progress */}
-      {!isMax && nextLevel && (
-        <div>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"6px", fontSize:"0.73rem" }}>
-            <span style={{ color:C.muted }}>{remaining} {t("levelMoreAuthors")} <b style={{ color:nextLevel.color }}>{t(nextLevel.key)}</b></span>
-            <span style={{ color:level.color, fontWeight:700 }}>{pct.toFixed(0)}%</span>
-          </div>
-          <div style={{ height:"10px", background:C.inner, borderRadius:"5px", overflow:"hidden", border:`1px solid ${C.border}` }}>
-            <div style={{ height:"100%", width:`${pct}%`, background:`linear-gradient(90deg,${level.color}88,${level.color})`, borderRadius:"5px", transition:"width 0.7s ease" }}/>
-          </div>
-          <div style={{ display:"flex", justifyContent:"space-between", marginTop:"4px", fontSize:"0.67rem", color:C.faint }}>
-            <span>{totalAuthors}</span><span>{nextThr}</span>
-          </div>
-        </div>
-      )}
-      {isMax && <p style={{ color:C.gold, fontSize:"0.82rem", fontWeight:700, margin:0 }}>{t("levelMaxReached")}</p>}
-
-      {/* Level track */}
-      <div>
-        <div style={{ display:"flex", gap:"3px", marginBottom:"4px" }}>
-          {JOURNEY.map((l,i)=>(
-            <div key={l.key} title={t(l.key)} style={{ flex:1, height:"6px", borderRadius:"3px", background:i<=level.idx?l.color:C.inner2, border:`1px solid ${C.border}`, transition:"background 0.4s" }}/>
-          ))}
-        </div>
-        <div style={{ display:"flex", justifyContent:"space-between", fontSize:"0.6rem", color:C.faint }}>
-          <span>{JOURNEY[0].emoji}</span><span>{JOURNEY[JOURNEY.length-1].emoji}</span>
-        </div>
-      </div>
-
-      {/* Journey steps */}
-      <div style={{ display:"flex", flexDirection:"column" as const, gap:"0.3rem" }}>
-        {JOURNEY.map((l,i)=>(
-          <div key={l.key} style={{ display:"flex", alignItems:"center", gap:"0.6rem", opacity:i>level.idx+1?0.35:1 }}>
-            <span style={{ fontSize:"0.9rem", width:"20px", textAlign:"center" as const }}>{l.emoji}</span>
-            <div style={{ flex:1, height:"1px", background:i<=level.idx?l.color+"44":C.border }}/>
-            <span style={{ fontSize:"0.68rem", fontWeight:700, color:i<=level.idx?l.color:C.muted, minWidth:"110px" }}>{t(l.key)}</span>
-            <span style={{ fontSize:"0.63rem", color:C.faint, width:"40px", textAlign:"right" as const }}>{l.minA===0?"0":`${l.minA}+`}</span>
-          </div>
-        ))}
-      </div>
+    <div style={{ display:"flex", flexDirection:"column" as const, gap:"0.6rem" }}>
+      {ONBOARDING_STEPS.map((step, i) => {
+        const Icon = step.icon;
+        return (
+          <button
+            key={step.titleKey}
+            type="button"
+            onClick={() => onTabChange(step.tab)}
+            style={{
+              display:"flex", alignItems:"center", gap:"0.85rem",
+              padding:"0.75rem 1rem",
+              background:`${step.color}08`,
+              border:`1px solid ${step.color}28`,
+              borderRadius:"10px",
+              cursor:"pointer",
+              textAlign:"left" as const,
+              width:"100%",
+              transition:"background 0.15s, border-color 0.15s",
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background=`${step.color}14`; (e.currentTarget as HTMLButtonElement).style.borderColor=`${step.color}50`; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background=`${step.color}08`; (e.currentTarget as HTMLButtonElement).style.borderColor=`${step.color}28`; }}
+          >
+            <div style={{
+              width:"32px", height:"32px", borderRadius:"8px", flexShrink:0,
+              background:`${step.color}15`, border:`1px solid ${step.color}30`,
+              display:"flex", alignItems:"center", justifyContent:"center",
+            }}>
+              <span style={{ color:step.color, fontSize:"0.65rem", fontWeight:900, opacity:0.7 }}>{i+1}</span>
+            </div>
+            <Icon size={18} color={step.color} strokeWidth={1.75} />
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ color:step.color, fontWeight:700, fontSize:"0.82rem", lineHeight:1.2 }}>{t(step.titleKey)}</div>
+              <div style={{ color:C.muted, fontSize:"0.7rem", marginTop:"2px", lineHeight:1.3 }}>{t(step.descKey)}</div>
+            </div>
+            <span style={{ color:step.color, fontSize:"0.75rem", opacity:0.6, flexShrink:0 }}>›</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -1880,11 +1830,11 @@ export function UserDashboard(props: {
         </div>
       )}
 
-      {/* 3+4. Curator Journey | Beziehungen | Aktivität */}
+      {/* 3+4. Workflow Guide | Beziehungen | Aktivität */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"1.5rem", alignItems:"start" }}>
         <div style={card}>
-          <p style={lbl}>{t("secCuratorJourney")}</p>
-          <CuratorJourney totalAuthors={growthData?.summary.totalUniqueAuthors??totalAuthors} t={t}/>
+          <p style={lbl}>{t("secWorkflowGuide")}</p>
+          <OnboardingFlow onTabChange={props.onTabChange} t={t}/>
         </div>
         <div style={card}>
           <p style={lbl}>{t("secRelationships")}</p>
