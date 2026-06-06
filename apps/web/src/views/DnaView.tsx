@@ -340,50 +340,11 @@ export function CurationDnaPanel(props: {
   const divider: React.CSSProperties = { marginTop: "1.5rem", borderTop: "1px solid #e8eef2", paddingTop: "1.25rem" };
   const inputStyle: React.CSSProperties = { background: "#f4f7f8", border: "1px solid #dde8ed", borderRadius: "6px", color: "#17202a", padding: "0.35rem 0.6rem", fontSize: "0.82rem" };
 
-  const vpPct = props.accountSnapshot ? props.accountSnapshot.votingPowerBps / 100 : null;
-
-  // Map DNA descriptions from English (domain package) → current locale
-  const dnaDescMap: Record<string, TranslationKey> = {
-    "A significant portion of votes go to own posts":         "dnaDescSelfVoter",
-    "Strong loyalty to a small group":                        "dnaDescLoyalInner",
-    "Regular support for a core set":                         "dnaDescRegular",
-    "Wide discovery across many authors":                     "dnaDescBroad",
-    "Varied vote weights suggest deliberate":                  "dnaDescStrategic",
-    "Active curator with high daily vote frequency":           "dnaDescHighFreq",
-    "Focused on a small niche":                               "dnaDescNiche",
-    "Balanced curation pattern":                              "dnaDescBalanced",
-    "No votes found in the analyzed period":                  "dnaDescNone",
-  };
-  const dnaDescKey = Object.keys(dnaDescMap).find(k => p.dnaDescription?.startsWith(k));
-  const translatedDesc = dnaDescKey ? t(dnaDescMap[dnaDescKey]) : p.dnaDescription;
-
-  const heroStats = [
-    { val: p.votesAnalyzed.toLocaleString(), lbl: t("kpiVotesCast")  },
-    { val: p.uniqueAuthors,                  lbl: t("kpiAuthors")    },
-    ...(vpPct !== null ? [{ val: `${vpPct.toFixed(1)}%`, lbl: "VP" }] : []),
-    { val: p.periodDays,                     lbl: t("growthActiveDays") },
-  ];
-
   return (
     <section style={{ padding: "1.5rem 2rem", display: "flex", flexDirection: "column" as const, gap: "1.25rem" }}>
 
       {/* ── 0. Prozessvisualisierung ── */}
       {props.onNavigate && <WorkflowBar onNavigate={tab => props.onNavigate!(tab as "community" | "dna" | "dashboard" | "billing" | "admin")} t={t} />}
-
-      {/* ── 1. Analyse-Zusammenfassung ── */}
-      <div style={{ display: "flex", alignItems: "center", gap: "1.5rem", padding: "1rem 1.25rem", background: "linear-gradient(135deg, #f5f0ff 0%, #ffffff 60%, #edfbf9 100%)", borderRadius: "12px", border: "1px solid #e0d4fc", flexWrap: "wrap" as const }}>
-        <div style={{ flex: 1, minWidth: "200px" }}>
-          <p style={{ color: "#607078", fontSize: "0.78rem", margin: 0, lineHeight: 1.45, maxWidth: "520px" }}>{translatedDesc}</p>
-        </div>
-        <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" as const }}>
-          {heroStats.map(s => (
-            <div key={s.lbl} style={{ textAlign: "center" as const }}>
-              <div style={{ color: "#17202a", fontWeight: 800, fontSize: "1.15rem", lineHeight: 1 }}>{s.val}</div>
-              <div style={{ color: "#8fa4b0", fontSize: "0.67rem", marginTop: "3px" }}>{s.lbl}</div>
-            </div>
-          ))}
-        </div>
-      </div>
 
       {/* ── 2. Handlungsempfehlung ── */}
       {!strategyRules ? (
