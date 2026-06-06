@@ -24,7 +24,7 @@ Env-Variablen:
   VOTEBROKER_SCREENSHOTS_DIR    default: /var/lib/docker/volumes/…/public-screenshots
 """
 
-import os, json, sys
+import os, json, sys, subprocess
 from pathlib import Path
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
@@ -180,6 +180,26 @@ def capture_locale(browser, locale: str) -> list[str]:
     return captured
 
 
+CONTAINER = os.environ.get("API_CONTAINER", "votebroker-modern-api-1")
+CONTAINER_DIR = "/app/data/public-screenshots"
+
+
+def sync_to_container(files: list[str]) -> None:
+    """Copy captured PNGs into the API container's volume mount via docker cp."""
+    # Ensure destination directory exists inside container
+    subprocess.run(
+        ["docker", "exec", CONTAINER, "mkdir", "-p", CONTAINER_DIR],
+        check=True, capture_output=True,
+    )
+    for f in files:
+        dest = f"{CONTAINER}:{CONTAINER_DIR}/{Path(f).name}"
+        result = subprocess.run(["docker", "cp", f, dest], capture_output=True)
+        if result.returncode == 0:
+            print(f"  → container: {Path(f).name}")
+        else:
+            print(f"  ✗ docker cp failed for {Path(f).name}: {result.stderr.decode().strip()}")
+
+
 def main():
     PUBDIR.mkdir(parents=True, exist_ok=True)
 
@@ -196,6 +216,10 @@ def main():
     print(f"\n✓ Done — {len(all_captured)} screenshots in {PUBDIR}")
     for f in all_captured:
         print(f"  {Path(f).name}")
+
+    if all_captured:
+        print(f"\nSyncing to container {CONTAINER}:{CONTAINER_DIR} …")
+        sync_to_container(all_captured)
 
 
 if __name__ == "__main__":
