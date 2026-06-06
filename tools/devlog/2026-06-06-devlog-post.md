@@ -17,35 +17,48 @@ Der DNA-Tab zeigt jetzt oben eine kompakte Journey-Leiste mit vier Schritten: Co
 Die bisherigen Kurator-Typ-Labels ("Strategischer Gewichts-Voter", "Alles gevotet" etc.) wurden vollständig entfernt. Das Dashboard klassifiziert Nutzer nicht mehr — es führt sie durch einen klaren Prozess.
 
 **Landingpage — Neuer Abschnitt „So funktioniert VoteBroker"**
-Zwischen den Feature-Cards und den Screenshots gibt es jetzt einen eigenen Workflow-Abschnitt. Besucher sehen in fünf Sekunden den gesamten Curation-Prozess: vier Schritt-Karten nebeneinander, gleiche visuelle Logik wie der App-Bereich, aber großzügiger und marketing-tauglich. Der Introtext erklärt die Verbindung: Community-Signale, Voting-Historie und automatische Strategie-Empfehlungen in einem klaren Workflow.
+Zwischen den Feature-Cards und den Screenshots gibt es jetzt einen eigenen Workflow-Abschnitt. Besucher sehen in fünf Sekunden den gesamten Curation-Prozess: vier Schritt-Karten nebeneinander, gleiche visuelle Logik wie der App-Bereich, aber großzügiger und marketing-tauglich.
 
 **Sicherheitstext präzisiert — Auth-Architektur korrekt kommuniziert**
-Die bisherige Aussage auf der Landingpage lautete: „Nur im lokalen Store — nie serverseitig gespeichert." Das war technisch das Gegenteil der Wahrheit. Nach vollständiger Analyse des Auth-Flows (Keychain-Signaturprüfung, SteemConnect-Callback, `AuthSession`-Typ im Browser) wurde der Text auf die tatsächliche Architektur ausgerichtet:
+Die Landingpage beschreibt jetzt korrekt, wie Credentials tatsächlich behandelt werden:
 
 > Keys lokal. Tokens serverseitig. Keine Steem-Credentials im Browser.
 
-Konkret: Posting-Keys verlassen via Keychain nie den Browser. SteemConnect-Access-Tokens werden serverseitig in SQLite gespeichert und nicht an den Client zurückgegeben. Der Browser erhält ausschließlich den VoteBroker-Session-Token (`{ token, expiry, username, provider }`).
-
-**Inhaltliche Korrekturen (alle 14 Locales)**
-Zwei Aussagen auf der Landingpage stimmten nicht mit dem aktuellen Build überein:
-
-- „Dashboard & Empfehlungen nutzen" → **„Dashboard nutzen"** — das Dashboard ist eine Analyse-Übersicht, keine Empfehlungs-Engine
-- „Community Pools für kollaborative Curation" → **„Autoren mit einem Klick zur Curation-Strategie hinzufügen"** — Community Pools sind im aktuellen Build nicht implementiert
-
-Beide Korrekturen wurden in allen 14 Locales (DE, EN, ES, KO, ZH, RU, PT, PCM, ID, HI, BN, JA, TR, PL) durchgeführt.
-
-**Screenshot-Pipeline — Container-Sync gefixt**
-`capture_landing.py` schrieb die erzeugten Screenshots bisher auf den Host-Pfad des Docker-Volumes — der API-Container sieht diesen Pfad jedoch nicht, weil das Volume direkt auf `/dev/vda1` liegt. Das Script endet jetzt automatisch mit einem `docker cp`-Schritt, der alle aufgenommenen PNGs direkt in den Container synchronisiert.
+Posting-Keys verlassen via Keychain nie den Browser. SteemConnect-Access-Tokens werden serverseitig gespeichert, nicht an den Client zurückgegeben.
 
 **Login — Keychain und SteemLogin immer sichtbar**
-Bisher wurde die Keychain-Option im Login nur angezeigt, wenn die Extension innerhalb von 2 Sekunden nach dem Seitenstart erkannt wurde. Wer die Extension frisch installiert hatte oder dessen Browser die Injection verzögerte, sah ausschließlich den SteemLogin-Button — ohne Hinweis auf die Alternative.
+Bisher wurde die Keychain-Option im Login nur angezeigt, wenn die Extension innerhalb von 2 Sekunden erkannt wurde. Ab sofort sind beide Wege immer sichtbar: Keychain-Status wird als Hinweis unterhalb des Buttons angezeigt — grün wenn erkannt, amber mit Installationshinweis wenn nicht. Klickt jemand auf Keychain ohne Extension, erscheint eine klare Fehlermeldung statt stillem Abbruch.
 
-Ab sofort zeigt der Login-Screen immer beide Wege:
+**Dashboard — 7-Tage-Verlauf ersetzt Pending-Karte**
+Die mittlere Dashboard-Karte zeigt jetzt eine kompakte Tabelle mit den letzten 7 Tagen: Votes, Autoren und erwartete Curation pro Tag. Darunter eine Aggregat-Zeile mit Gesamt-Votes, eindeutigen Autoren, Gesamt-Curation, Ø Curation pro Vote sowie dem besten Tag der Woche. Die tägliche Frage „Wie lief es gestern und vorgestern?" ist damit direkt beantwortbar.
 
-- **Steem Keychain**: Benutzername eingeben, Button klicken — der Posting-Key verlässt den Browser nie
-- **SteemLogin**: OAuth-Redirect für alle anderen
+**DNA-Tab — Gestatus nach Vote-Ausführung korrigiert**
+Nach dem Voten und einem Tab-Wechsel wurden die bereits ausgeführten Votes im DNA-Tab noch als offene Einträge angezeigt. Der Fehler lag im Lifecycle: beim Zurückwechseln in den Tab wurde der Plan neu initialisiert. Ab sofort wird der Plan nach erfolgreicher Ausführung dauerhaft geleert — ein Rückwechseln zeigt keine Ghost-Votes mehr.
 
-Der Detektionsstatus wird als Hinweis unterhalb des Keychain-Buttons angezeigt: grün wenn die Extension erkannt wurde, amber mit Installationshinweis wenn nicht. Klickt jemand auf den Keychain-Button ohne installierte Extension, erscheint eine klare Fehlermeldung statt stillem Abbruch.
+**Autopilot-Daten-Infrastruktur**
+VoteBroker erfasst jetzt pro Vote ein vollständiges Daten-Profil:
+- **VP vor dem Vote** — gemessen direkt vor dem Broadcast
+- **VP nach dem Vote** — aus dem Post-Broadcast-Account-Stand
+- **Vote-Wert in SBD** — berechnet über die Reward-Fund-Formel
+- **Community** — aus den Post-Metadaten extrahiert
+
+Zusätzlich werden alle 15 Minuten VP-Snapshots aller aktiven Sessions gespeichert sowie täglich die aktuellen STEEM- und SBD-Preise von CoinGecko. Diese Datenbasis ist die Grundlage für spätere Effizienzanalysen: „Lohnen sich 20 Votes mit 5% mehr als 5 Votes mit 20%?"
+
+**Signal Layer — historische Blockchain-Daten**
+VoteBroker scannt jetzt rückwirkend die Vote-Historie bekannter Whale-Accounts (90 Tage, 60+ Accounts via `get_account_history`). Für jeden erfassten Post werden nachgelagert finale Payouts und Timing-Daten abgerufen. Täglich werden daraus vier Signale berechnet:
+
+- **Author Quality Score** — durchschnittlicher Post-Payout, Whale-Aktivität, Konsistenz
+- **Whale Follow Rate** — wie oft folgen bekannte Großkuratoren auf einen Autor?
+- **Community Yield Score** — welche Communities bringen die höchste Curation-Rendite?
+- **Vote Timing Score** — in welchem Zeitfenster nach Veröffentlichung voten die Whales typischerweise?
+
+Diese Signale sind die geplante Grundlage für das DNA-System und den späteren Autopiloten — beide sollen auf demselben Signal Layer aufbauen.
+
+**Realized Curation — automatische tägliche Aktualisierung**
+Bisher wurden realisierte Curation-Erträge nur manuell über einen Admin-Trigger erfasst. Ab sofort läuft täglich um 04:00 UTC ein automatischer Rebuild: er scannt die Blockchain nach `curation_reward`-Operationen für alle aktiven Nutzer und gleicht sie mit den gespeicherten Votes ab. Zusätzlich werden finale Post-Payouts für abgeschlossene Beiträge nachgepflegt. Das Dashboard zeigt damit immer den aktuellsten Stand der tatsächlich erzielten Erträge.
+
+**VP-Budget-Analyse**
+Das Dashboard zeigt jetzt eine kompakte Budget-Zeile: täglicher VP-Verbrauch, Regenerationsrate, Netto-Balance und die nachhaltige Anzahl von Votes pro Tag beim aktuellen durchschnittlichen Gewicht. Ein Statusindikator zeigt auf einen Blick, ob das VP-Level gerade steigt, stabil bleibt oder sinkt.
 
 ---
 
@@ -61,9 +74,9 @@ Heute (2026-06-06):
 
 ## Was als Nächstes kommt
 
-- Analytics-Auswertung: Welches Zeitfenster nach Veröffentlichung erzielt die besten Curation Rewards? (Daten wachsen täglich durch automatischen Rebuild)
-- Per-Author ROI-Analyse aus `vb_vote_outcomes` — welche Autoren bringen die meisten Curation SP pro investiertem Vote-Dollar?
-- Community Spotlight: bezahlte Sichtbarkeit für Autoren, strikt getrennt von organischen Empfehlungen
+- **Signal Layer ins DNA-System** — Whale-Follow-Rate und optimales Timing-Fenster direkt beim Autor-Vorschlag anzeigen
+- **Shadow Mode** (frühestens Juli) — simuliert was der Autopilot täglich getan hätte; benötigt 30 Tage Daten mit realisierten Curation-Erträgen
+- **Community Spotlight** — bezahlte Sichtbarkeit für Autoren, strikt getrennt von organischen Empfehlungen
 
 ---
 
