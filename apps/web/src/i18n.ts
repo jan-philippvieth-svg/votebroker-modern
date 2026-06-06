@@ -647,6 +647,8 @@ const translations = {
     landingOssTitle: "Open Source",
     landingOssText: "VoteBroker ist vollständig Open Source. Kein Vendor-Lock-in, keine Black Box. Der gesamte Stack — API, Frontend, Blockchain-Integration — liegt offen.",
     landingOssCta: "Code auf GitHub ansehen",
+    landingHowLabel:   "Workflow",
+    landingHowSub:     "VoteBroker verbindet Community-Signale, deine Voting-Historie und automatische Strategie-Empfehlungen zu einem klaren Curation-Workflow.",
     whaleExplainBody: "VoteBroker analysiert Abstimmungsmuster etablierter Kuratoren und identifiziert Autoren, die regelmäßig von mehreren unabhängigen Kuratoren unterstützt werden.",
   },
 
@@ -1279,6 +1281,8 @@ const translations = {
     landingOssTitle: "Open Source",
     landingOssText: "VoteBroker is fully open source. No vendor lock-in, no black box. The entire stack — API, frontend, blockchain integration — is open.",
     landingOssCta: "View code on GitHub",
+    landingHowLabel:   "Workflow",
+    landingHowSub:     "VoteBroker connects community signals, your voting history, and automated strategy recommendations into a clear curation workflow.",
     whaleExplainBody: "VoteBroker analyzes voting patterns of established curators and identifies authors who are regularly supported by multiple independent curators.",
   },
 

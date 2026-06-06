@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import {
-  ArrowRight, BarChart3, BookOpen, CheckCircle2, Github,
-  ShieldCheck, TrendingUp, Users, Zap,
+  ArrowRight, BarChart2, BarChart3, BookOpen, CheckCircle2, Dna as DnaIcon,
+  Github, Lightbulb, Settings, ShieldCheck, TrendingUp, Users, UsersRound, Zap,
 } from "lucide-react";
 import { createTranslator, locales, type Locale } from "../i18n";
 
@@ -215,6 +215,100 @@ function Zoomable({ src, alt, style }: { src: string; alt: string; style?: React
   );
 }
 
+// ── Landing Workflow Section ──────────────────────────────────────────────────
+
+const LANDING_STEPS = [
+  { num: 1, Icon: UsersRound, titleKey: "stepCommunity" as const,  descKey: "stepCommunityDesc" as const,  color: "#a78bfa", iconBg: "rgba(124,58,237,0.13)",  border: "rgba(167,139,250,0.3)"  },
+  { num: 2, Icon: DnaIcon,    titleKey: "stepDna"       as const,  descKey: "stepDnaDesc"       as const,  color: "#60a5fa", iconBg: "rgba(37,99,235,0.13)",    border: "rgba(147,197,253,0.3)"  },
+  { num: 3, Icon: Settings,   titleKey: "stepStrategy"  as const,  descKey: "stepStrategyDesc"  as const,  color: "#4ade80", iconBg: "rgba(22,163,74,0.13)",    border: "rgba(134,239,172,0.3)"  },
+  { num: 4, Icon: BarChart2,  titleKey: "stepDashboard" as const,  descKey: "stepDashboardDesc" as const,  color: "#fbbf24", iconBg: "rgba(217,119,6,0.13)",    border: "rgba(252,211,77,0.3)"   },
+] as const;
+
+function LandingWorkflowSection({ t }: { t: ReturnType<typeof createTranslator> }) {
+  return (
+    <div style={{ borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
+      <section style={{ maxWidth: "1040px", margin: "0 auto", padding: "4.5rem 2rem" }}>
+
+        <SectionLabel>{t("landingHowLabel")}</SectionLabel>
+        <h2 style={{ fontSize: "clamp(1.5rem,3.5vw,2.2rem)", fontWeight: 800, color: C.text, margin: "0 0 0.5rem", letterSpacing: "-0.5px" }}>
+          {t("secWorkflowGuide")}
+        </h2>
+        <p style={{ color: C.muted, fontSize: "1rem", maxWidth: "640px", lineHeight: 1.75, margin: "0 0 3rem" }}>
+          {t("landingHowSub")}
+        </p>
+
+        {/* Step cards */}
+        <div style={{ display: "flex", alignItems: "stretch", gap: "0.75rem", flexWrap: "wrap" as const, marginBottom: "2rem" }}>
+          {LANDING_STEPS.map((step, i) => (
+            <React.Fragment key={step.num}>
+              {i > 0 && (
+                <div style={{ display: "flex", alignItems: "center" }}>
+                  <ArrowRight size={30} strokeWidth={2.5} color={C.dim} />
+                </div>
+              )}
+              <div style={{
+                flex: step.num === 4 ? "1.2" : "1",
+                minWidth: "190px",
+                background: C.bg1,
+                border: `1px solid ${C.border}`,
+                borderRadius: "14px",
+                padding: "1.75rem 1.5rem",
+                display: "flex",
+                flexDirection: "column" as const,
+                gap: "1rem",
+              }}>
+                {/* Icon + badge */}
+                <div style={{ position: "relative", width: "fit-content" }}>
+                  <div style={{
+                    width: "76px", height: "76px", borderRadius: "14px",
+                    background: step.iconBg, border: `1.5px solid ${step.border}`,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    <step.Icon size={38} color={step.color} strokeWidth={1.7} />
+                  </div>
+                  <div style={{
+                    position: "absolute", top: "-10px", left: "-10px",
+                    width: "26px", height: "26px", borderRadius: "50%",
+                    background: step.color,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: "0.72rem", fontWeight: 800, color: "#0d1117",
+                    boxShadow: `0 0 0 3px ${C.bg1}`,
+                  }}>
+                    {step.num}
+                  </div>
+                </div>
+
+                {/* Text */}
+                <div>
+                  <div style={{ fontSize: "1rem", fontWeight: 700, color: C.text, marginBottom: "0.4rem" }}>
+                    {t(step.titleKey)}
+                  </div>
+                  <p style={{ margin: 0, fontSize: "0.86rem", color: C.muted, lineHeight: 1.7 }}>
+                    {t(step.descKey)}
+                  </p>
+                </div>
+              </div>
+            </React.Fragment>
+          ))}
+        </div>
+
+        {/* Tip panel */}
+        <div style={{
+          background: "rgba(202,138,4,0.07)", border: "1px solid rgba(202,138,4,0.22)",
+          borderRadius: "10px", padding: "1rem 1.25rem",
+          display: "flex", alignItems: "flex-start", gap: "0.75rem",
+        }}>
+          <Lightbulb size={18} color={C.yellow} style={{ flexShrink: 0, marginTop: "2px" }} />
+          <p style={{ margin: 0, fontSize: "0.86rem", color: C.muted, lineHeight: 1.65 }}>
+            {t("workflowTipText")}
+          </p>
+        </div>
+
+      </section>
+    </div>
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export function LandingPage() {
@@ -351,6 +445,9 @@ export function LandingPage() {
           <FeatureCard icon={<BookOpen    size={20} color={C.yellow} />} accent={C.yellow} title={t("landingFeat6Title")} body={t("landingFeat6Text")} />
         </div>
       </section>
+
+      {/* ── So funktioniert VoteBroker ── */}
+      <LandingWorkflowSection t={t} />
 
       {/* ── Screenshots ── */}
       <div style={{ background: C.bg1, borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
