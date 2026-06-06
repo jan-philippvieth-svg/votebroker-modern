@@ -2,7 +2,7 @@
 // Extracted from App.tsx — DNA analysis, strategy editing, vote planning UI
 
 import React, { useState, useEffect } from "react";
-import { Search, Dna as DnaIcon, UsersRound, Settings, BarChart2, ArrowRight } from "lucide-react";
+import { Search, Dna as DnaIcon, UsersRound, Settings, BarChart2, ArrowRight, Lightbulb } from "lucide-react";
 import { createTranslator, type Locale, type TranslationKey } from "../i18n";
 import type {
   CurationProfile,
@@ -110,37 +110,51 @@ function WorkflowBar({ onNavigate, t }: {
   t: ReturnType<typeof createTranslator>;
 }) {
   const labels = [
-    { title: t("stepCommunity"), desc: t("stepCommunityDesc") },
-    { title: t("stepDna"),       desc: t("stepDnaDesc")       },
-    { title: t("stepStrategy"),  desc: t("stepStrategyDesc")  },
-    { title: t("stepDashboard"), desc: t("stepDashboardDesc") },
+    { title: t("stepCommunity"), desc: t("stepCommunityDesc"), flex: 1   },
+    { title: t("stepDna"),       desc: t("stepDnaDesc"),       flex: 1   },
+    { title: t("stepStrategy"),  desc: t("stepStrategyDesc"),  flex: 1   },
+    { title: t("stepDashboard"), desc: t("stepDashboardDesc"), flex: 1.2 }, // #4 longer title gets more room
   ];
+
+  const handleEnter = (e: React.MouseEvent<HTMLButtonElement>, color: string) => {
+    const el = e.currentTarget;
+    el.style.background = `${color}10`;
+    el.style.boxShadow = `0 3px 10px ${color}22`;
+    el.style.outline = `1.5px solid ${color}35`;
+  };
+  const handleLeave = (e: React.MouseEvent<HTMLButtonElement>) => {
+    const el = e.currentTarget;
+    el.style.background = "none";
+    el.style.boxShadow = "none";
+    el.style.outline = "none";
+  };
 
   return (
     <div style={{
-      display: "flex", alignItems: "stretch",
+      display: "flex", alignItems: "stretch", flexWrap: "wrap" as const,
       background: "#ffffff",
       borderRadius: "16px",
       border: "1px solid #e0d4fc",
       boxShadow: "0 2px 12px rgba(124,58,237,0.06)",
       overflow: "hidden",
     }}>
-      {/* Steps */}
-      <div style={{ flex: 1, display: "flex", alignItems: "center", padding: "1.25rem 1rem", gap: "0" }}>
+      {/* Steps — flex-wrap so they stack on narrow screens */}
+      <div style={{ flex: 1, minWidth: "320px", display: "flex", alignItems: "center", padding: "1.25rem 0.75rem", gap: "0", flexWrap: "wrap" as const }}>
         {JOURNEY_STEPS.map((step, i) => (
           <React.Fragment key={step.num}>
             <button
               type="button"
               onClick={() => onNavigate(step.tab)}
               style={{
-                flex: 1, display: "flex", alignItems: "center", gap: "0.9rem",
-                padding: "0.6rem 0.7rem",
-                background: "none", border: "none", cursor: "pointer",
-                borderRadius: "12px", textAlign: "left" as const,
-                transition: "background 0.15s",
+                flex: labels[i].flex, minWidth: "130px",
+                display: "flex", alignItems: "center", gap: "0.9rem",
+                padding: "0.6rem 0.65rem",
+                background: "none", border: "none", outline: "none",
+                cursor: "pointer", borderRadius: "12px",
+                textAlign: "left" as const,
               }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${step.color}08`; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "none"; }}
+              onMouseEnter={e => handleEnter(e, step.color)}
+              onMouseLeave={handleLeave}
             >
               {/* Numbered icon box */}
               <div style={{ position: "relative", flexShrink: 0 }}>
@@ -174,23 +188,32 @@ function WorkflowBar({ onNavigate, t }: {
                 </div>
               </div>
             </button>
+            {/* Arrow — hidden when steps wrap to next line (via flex: 0 shrink) */}
             {i < 3 && (
-              <div style={{ flexShrink: 0, color: "#c5d3da", display: "flex", alignItems: "center", padding: "0 0.15rem" }}>
-                <ArrowRight size={20} strokeWidth={1.5} />
+              <div style={{ flexShrink: 0, color: "#78909c", display: "flex", alignItems: "center", padding: "0 0.1rem" }}>
+                <ArrowRight size={30} strokeWidth={2} />
               </div>
             )}
           </React.Fragment>
         ))}
       </div>
 
-      {/* Divider + Tip panel */}
-      <div style={{ display: "flex", alignItems: "stretch" }}>
+      {/* Tip panel — full width on mobile (minWidth: 100%), sidebar on desktop */}
+      <div style={{ display: "flex", alignItems: "stretch", minWidth: "160px", flex: "0 0 auto" }}>
         <div style={{ width: "1px", background: "#e8eef2" }} />
-        <div style={{ width: "160px", padding: "1.25rem 1rem", display: "flex", flexDirection: "column" as const, justifyContent: "center", gap: "0.4rem" }}>
-          <div style={{ color: "#7c3aed", fontSize: "0.62rem", fontWeight: 800, textTransform: "uppercase" as const, letterSpacing: "0.9px" }}>
-            {t("secWorkflowGuide")}
+        <div style={{
+          width: "175px",
+          padding: "1.25rem 1rem",
+          background: "#fffdf0",
+          display: "flex", flexDirection: "column" as const, justifyContent: "center", gap: "0.5rem",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+            <Lightbulb size={16} color="#ca8a04" strokeWidth={2} />
+            <span style={{ color: "#92400e", fontSize: "0.78rem", fontWeight: 800, letterSpacing: "0.3px" }}>
+              Tipp
+            </span>
           </div>
-          <p style={{ color: "#607078", fontSize: "0.72rem", margin: 0, lineHeight: 1.5 }}>
+          <p style={{ color: "#78350f", fontSize: "0.73rem", margin: 0, lineHeight: 1.55 }}>
             {t("workflowTipText")}
           </p>
         </div>
