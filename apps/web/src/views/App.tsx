@@ -1,3 +1,35 @@
+// ── Steem Keychain type declaration ──────────────────────────────────────────
+declare global {
+  interface Window {
+    steem_keychain?: {
+      requestHandshake: (callback: () => void) => void;
+      requestAddAccountAuthority: (
+        username: string,
+        authorizedUsername: string,
+        role: "Posting" | "Active" | "Memo",
+        weight: number,
+        callback: (response: { success: boolean; error?: string; message?: string }) => void
+      ) => void;
+      requestVote: (
+        username: string,
+        permlink: string,
+        author: string,
+        weight: number,
+        callback: (response: { success: boolean; result?: { id: string }; error?: string; message?: string }) => void,
+        rpc?: string
+      ) => void;
+      requestSignBuffer: (
+        username: string | null,
+        message: string,
+        method: "Posting" | "Active" | "Memo",
+        callback: (response: { success: boolean; result?: string; error?: string; message?: string }) => void,
+        rpc?: string | null,
+        title?: string | null
+      ) => void;
+    };
+  }
+}
+
 import { AdminDashboard, isAdmin } from "./AdminDashboard";
 import { UserDashboard, type RecentVote } from "./UserDashboard";
 import {
@@ -187,6 +219,7 @@ export function App() {
   const [consentLoading, setConsentLoading] = useState<ConsentType | null>(null);
   const [hasAuthority, setHasAuthority] = useState<boolean | null>(null);
   const [authorityGrantUrl, setAuthorityGrantUrl] = useState("");
+  const [keychainAvailable, setKeychainAvailable] = useState<boolean | null>(null);
   const [accountSnapshot, setAccountSnapshot] = useState<SteemAccountSnapshot | null>(null);
   const [snapshotLoading, setSnapshotLoading] = useState(false);
   const [curationProfile, setCurationProfile] = useState<CurationProfile | null>(null);
@@ -220,6 +253,19 @@ export function App() {
     getConsentCatalog()
       .then(setConsentCatalog)
       .catch((err) => setConsentError(err instanceof Error ? err.message : "Consent catalog could not be loaded"));
+  }, []);
+
+  // ── Steem Keychain detection (once on mount) ────────────────────────────
+  useEffect(() => {
+    if (typeof window.steem_keychain === "undefined") {
+      setKeychainAvailable(false);
+      return;
+    }
+    const timeout = setTimeout(() => setKeychainAvailable(false), 2000);
+    window.steem_keychain.requestHandshake(() => {
+      clearTimeout(timeout);
+      setKeychainAvailable(true);
+    });
   }, []);
 
   // Validate stored session against the server on startup
@@ -354,6 +400,14 @@ export function App() {
       .then(snap => { setAccountSnapshot(snap); setUsername(snap.username); setSnapshotRefreshedAt(new Date()); })
       .catch(() => {})
       .finally(() => setSnapshotLoading(false));
+  }
+
+  function refreshAuthority() {
+    if (!session) return;
+    setHasAuthority(null);
+    checkPostingAuthority(session.user.username)
+      .then(setHasAuthority)
+      .catch(() => setHasAuthority(false));
   }
 
   // Immediately refresh snapshot when switching to dashboard tab, then poll every 60s
@@ -819,7 +873,20 @@ export function App() {
             <span style={{ color: "#607078", fontSize: "0.82rem" }}>@{session.user.username}</span>
           )}
           {hasAuthority === false && (
-            <a href={authorityGrantUrl} style={{ color: "#f0883e", fontSize: "0.78rem", textDecoration: "none", border: "1px solid #f0883e", padding: "0.15rem 0.5rem", borderRadius: "4px" }}>
+            keychainAvailable
+              ? <button
+                  type="button"
+                  onClick={() => {
+                    window.steem_keychain!.requestAddAccountAuthority(
+                      session.user.username, "votebroker", "Posting", 1,
+                      (resp) => { if (resp.success) refreshAuthority(); }
+                    );
+                  }}
+                  style={{ background: "none", cursor: "pointer", color: "#f0883e", fontSize: "0.78rem", textDecoration: "none", border: "1px solid #f0883e", padding: "0.15rem 0.5rem", borderRadius: "4px" }}
+                >
+                  ⚡ {t("consentGrantAuthority")}
+                </button>
+              : <a href={authorityGrantUrl} style={{ color: "#f0883e", fontSize: "0.78rem", textDecoration: "none", border: "1px solid #f0883e", padding: "0.15rem 0.5rem", borderRadius: "4px" }}>
               ⚠ {t("consentGrantAuthority")}
             </a>
           )}
@@ -985,7 +1052,14 @@ export function App() {
             onLocaleChange={changeLocale} onTimezoneChange={setTimezone}
             t={t}
           />
-          <AuthorityPanel grantUrl={authorityGrantUrl} hasAuthority={hasAuthority} session={session} locale={locale} />
+          <AuthorityPanel
+            grantUrl={authorityGrantUrl}
+            hasAuthority={hasAuthority}
+            session={session}
+            locale={locale}
+            keychainAvailable={keychainAvailable}
+            onKeychainGrant={refreshAuthority}
+          />
           <ConsentPanel
             catalog={consentCatalog}
             consentError={consentError}
@@ -3608,9 +3682,36 @@ function AuthorityPanel(props: {
   hasAuthority: boolean | null;
   session: AuthSession | null;
   locale?: import("../i18n").Locale;
+  keychainAvailable?: boolean | null;
+  onKeychainGrant?: () => void;
 }) {
   const t = createTranslator(props.locale ?? "de");
+  const [keychainPending, setKeychainPending] = useState(false);
+  const [keychainError, setKeychainError] = useState<string | null>(null);
+
   if (!props.session) return null;
+
+  const handleKeychainGrant = () => {
+    if (!props.session || !window.steem_keychain) return;
+    setKeychainPending(true);
+    setKeychainError(null);
+    window.steem_keychain.requestAddAccountAuthority(
+      props.session.user.username,
+      "votebroker",
+      "Posting",
+      1,
+      (resp) => {
+        setKeychainPending(false);
+        if (resp.success) {
+          props.onKeychainGrant?.();
+        } else {
+          setKeychainError(resp.error ?? resp.message ?? "Keychain error");
+        }
+      }
+    );
+  };
+
+  const useKeychain = props.keychainAvailable === true;
 
   return (
     <section className="auth-bar">
@@ -3619,24 +3720,45 @@ function AuthorityPanel(props: {
         <strong>
           {props.hasAuthority === null && t("authorityChecking")}
           {props.hasAuthority === true && t("authorityGranted")}
-          {props.hasAuthority === false && t("authorityMissing")}
+          {props.hasAuthority === false && (keychainPending ? t("authorityKeychainPending") : t("authorityMissing"))}
         </strong>
-        {props.hasAuthority === false && (
+        {props.hasAuthority === false && !keychainPending && (
           <small style={{ display: "block", marginTop: "0.25rem", color: "#888", fontSize: "0.78rem" }}>
             {t("authorityNote")}
+            {useKeychain && (
+              <span style={{ marginLeft: "0.5rem", color: "#16a34a" }}>✓ {t("authorityActiveKeyHint")}</span>
+            )}
+          </small>
+        )}
+        {keychainError && (
+          <small style={{ display: "block", marginTop: "0.25rem", color: "#dc2626", fontSize: "0.78rem" }}>
+            {t("authorityKeychainError").replace("{{error}}", keychainError)}
           </small>
         )}
       </div>
-      {props.hasAuthority === false && props.grantUrl && (
-        <a className="secondary-button" href={props.grantUrl}>
-          <ShieldCheck size={16} />
-          {t("consentGrantAuthority")}
-        </a>
+      {props.hasAuthority === false && (
+        useKeychain
+          ? <button
+              type="button"
+              onClick={handleKeychainGrant}
+              disabled={keychainPending}
+              className="secondary-button"
+              style={{ opacity: keychainPending ? 0.6 : 1, cursor: keychainPending ? "wait" : "pointer" }}
+            >
+              <ShieldCheck size={16} />
+              {keychainPending ? t("authorityKeychainPending") : t("authorityGrantKeychain")}
+            </button>
+          : props.grantUrl && (
+              <a className="secondary-button" href={props.grantUrl}>
+                <ShieldCheck size={16} />
+                {t("authorityGrantSteemlogin")}
+              </a>
+            )
       )}
       {props.hasAuthority === true && (
         <div className="status-pill">
           <CheckCircle2 size={16} />
-          Aktiv
+          {t("authorityGranted").includes("✓") ? "Aktiv" : t("authorityGranted")}
         </div>
       )}
     </section>
