@@ -2,7 +2,7 @@
 // Extracted from App.tsx — DNA analysis, strategy editing, vote planning UI
 
 import React, { useState, useEffect } from "react";
-import { Search, Dna as DnaIcon, UsersRound, Settings, BarChart2 } from "lucide-react";
+import { Search, Dna as DnaIcon, UsersRound, Settings, BarChart2, ArrowRight } from "lucide-react";
 import { createTranslator, type Locale, type TranslationKey } from "../i18n";
 import type {
   CurationProfile,
@@ -93,40 +93,108 @@ function InlineStrategyEditor(props: {
   );
 }
 
-// ── Workflow Bar ─────────────────────────────────────────────────────────────
-// Compact 4-step process visualization, max ~90px tall.
-// Shows how VoteBroker works without dominating the analytics below.
+// ── Workflow Journey ──────────────────────────────────────────────────────────
+// Visual 4-step journey card showing how VoteBroker works.
+// Each step: numbered icon box (60×60) + title + description.
+// Arrow connectors + tip panel on the right.
+
+const JOURNEY_STEPS = [
+  { num: 1, Icon: UsersRound, tab: "community" as const, color: "#7c3aed", iconBg: "linear-gradient(135deg, #f5f0ff 0%, #ede9fe 100%)", border: "#c4b5fd" },
+  { num: 2, Icon: DnaIcon,    tab: "dna"       as const, color: "#2563eb", iconBg: "linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)", border: "#93c5fd" },
+  { num: 3, Icon: Settings,   tab: "dna"       as const, color: "#16a34a", iconBg: "linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)", border: "#86efac" },
+  { num: 4, Icon: BarChart2,  tab: "dashboard" as const, color: "#d97706", iconBg: "linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)", border: "#fcd34d" },
+] as const;
 
 function WorkflowBar({ onNavigate, t }: {
   onNavigate: (tab: "community" | "dna" | "dashboard") => void;
   t: ReturnType<typeof createTranslator>;
 }) {
-  const steps = [
-    { Icon: UsersRound, title: t("stepCommunity"), desc: t("stepCommunityDesc"), tab: "community" as const, color: "#7c3aed" },
-    { Icon: DnaIcon,    title: t("stepDna"),       desc: t("stepDnaDesc"),       tab: "dna"       as const, color: "#2563eb" },
-    { Icon: Settings,   title: t("stepStrategy"),  desc: t("stepStrategyDesc"),  tab: "dna"       as const, color: "#16a34a" },
-    { Icon: BarChart2,  title: t("stepDashboard"), desc: t("stepDashboardDesc"), tab: "dashboard" as const, color: "#d97706" },
+  const labels = [
+    { title: t("stepCommunity"), desc: t("stepCommunityDesc") },
+    { title: t("stepDna"),       desc: t("stepDnaDesc")       },
+    { title: t("stepStrategy"),  desc: t("stepStrategyDesc")  },
+    { title: t("stepDashboard"), desc: t("stepDashboardDesc") },
   ];
+
   return (
-    <div style={{ display:"grid", gridTemplateColumns:"1fr auto 1fr auto 1fr auto 1fr", alignItems:"center", background:"#fafbfc", borderRadius:"12px", border:"1px solid #e8eef2" }}>
-      {steps.map((step, i) => (
-        <React.Fragment key={step.title}>
-          <button
-            type="button"
-            onClick={() => onNavigate(step.tab)}
-            style={{ display:"flex", alignItems:"center", gap:"0.6rem", padding:"0.65rem 0.85rem", background:"none", border:"none", cursor:"pointer", borderRadius:"10px", textAlign:"left" as const, minWidth:0 }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background=`${step.color}08`; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background="none"; }}
-          >
-            <step.Icon size={16} color={step.color} strokeWidth={1.75} style={{ flexShrink:0 }} />
-            <div style={{ minWidth:0 }}>
-              <div style={{ color:step.color, fontWeight:700, fontSize:"0.78rem", lineHeight:1.2, whiteSpace:"nowrap" as const, overflow:"hidden", textOverflow:"ellipsis" }}>{step.title}</div>
-              <div style={{ color:"#607078", fontSize:"0.67rem", marginTop:"2px", lineHeight:1.3, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" as const, overflow:"hidden" }}>{step.desc}</div>
-            </div>
-          </button>
-          {i < 3 && <span style={{ color:"#c5d3da", fontSize:"0.9rem", userSelect:"none" as const }}>›</span>}
-        </React.Fragment>
-      ))}
+    <div style={{
+      display: "flex", alignItems: "stretch",
+      background: "#ffffff",
+      borderRadius: "16px",
+      border: "1px solid #e0d4fc",
+      boxShadow: "0 2px 12px rgba(124,58,237,0.06)",
+      overflow: "hidden",
+    }}>
+      {/* Steps */}
+      <div style={{ flex: 1, display: "flex", alignItems: "center", padding: "1.25rem 1rem", gap: "0" }}>
+        {JOURNEY_STEPS.map((step, i) => (
+          <React.Fragment key={step.num}>
+            <button
+              type="button"
+              onClick={() => onNavigate(step.tab)}
+              style={{
+                flex: 1, display: "flex", alignItems: "center", gap: "0.9rem",
+                padding: "0.6rem 0.7rem",
+                background: "none", border: "none", cursor: "pointer",
+                borderRadius: "12px", textAlign: "left" as const,
+                transition: "background 0.15s",
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${step.color}08`; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "none"; }}
+            >
+              {/* Numbered icon box */}
+              <div style={{ position: "relative", flexShrink: 0 }}>
+                <div style={{
+                  width: "60px", height: "60px",
+                  background: step.iconBg,
+                  border: `1.5px solid ${step.border}`,
+                  borderRadius: "14px",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  <step.Icon size={28} color={step.color} strokeWidth={1.5} />
+                </div>
+                <div style={{
+                  position: "absolute", top: "-7px", right: "-7px",
+                  width: "20px", height: "20px",
+                  background: step.color, borderRadius: "50%",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: "0.6rem", fontWeight: 900, color: "#fff",
+                  boxShadow: `0 1px 5px ${step.color}50`,
+                }}>
+                  {step.num}
+                </div>
+              </div>
+              {/* Text */}
+              <div style={{ minWidth: 0 }}>
+                <div style={{ color: step.color, fontWeight: 800, fontSize: "0.87rem", lineHeight: 1.2, marginBottom: "5px" }}>
+                  {labels[i].title}
+                </div>
+                <div style={{ color: "#607078", fontSize: "0.72rem", lineHeight: 1.4 }}>
+                  {labels[i].desc}
+                </div>
+              </div>
+            </button>
+            {i < 3 && (
+              <div style={{ flexShrink: 0, color: "#c5d3da", display: "flex", alignItems: "center", padding: "0 0.15rem" }}>
+                <ArrowRight size={20} strokeWidth={1.5} />
+              </div>
+            )}
+          </React.Fragment>
+        ))}
+      </div>
+
+      {/* Divider + Tip panel */}
+      <div style={{ display: "flex", alignItems: "stretch" }}>
+        <div style={{ width: "1px", background: "#e8eef2" }} />
+        <div style={{ width: "160px", padding: "1.25rem 1rem", display: "flex", flexDirection: "column" as const, justifyContent: "center", gap: "0.4rem" }}>
+          <div style={{ color: "#7c3aed", fontSize: "0.62rem", fontWeight: 800, textTransform: "uppercase" as const, letterSpacing: "0.9px" }}>
+            {t("secWorkflowGuide")}
+          </div>
+          <p style={{ color: "#607078", fontSize: "0.72rem", margin: 0, lineHeight: 1.5 }}>
+            {t("workflowTipText")}
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
