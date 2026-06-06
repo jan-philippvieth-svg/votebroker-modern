@@ -1,6 +1,7 @@
 import { analyzeCurationHistory } from "@votebroker/domain";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { zodToJsonSchema } from "zod-to-json-schema";
 import { fetchVoteHistory } from "../chain/voteHistory.js";
 import { fetchRecentPostsWithVotes, fetchRecentPostsDebug, type PostOpportunity } from "../chain/recentPosts.js";
 import { getSession } from "../auth/sessionStore.js";
@@ -366,7 +367,9 @@ async function fetchAllPosts(authors: string[], voter: string): Promise<Map<stri
 
 export async function registerCurationRoutes(app: FastifyInstance): Promise<void> {
 
-  app.get("/api/curation/dna", async (request, reply) => {
+  app.get("/api/curation/dna", {
+    schema: { tags: ["Curation"], summary: "Curation-DNA eines Accounts analysieren", querystring: zodToJsonSchema(dnaQuerySchema) }
+  }, async (request, reply) => {
     const query = dnaQuerySchema.safeParse(request.query);
     if (!query.success) {
       return reply.code(400).send({ error: "invalid_request", detail: query.error.flatten() });
@@ -384,7 +387,9 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
     }
   });
 
-  app.post("/api/curation/opportunities", async (request, reply) => {
+  app.post("/api/curation/opportunities", {
+    schema: { tags: ["Curation"], summary: "Vote-Opportunities für Autoren-Liste abrufen", body: zodToJsonSchema(opportunitiesSchema), security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
     const body = opportunitiesSchema.safeParse(request.body);
     if (!body.success) {
       return reply.code(400).send({ error: "invalid_request", detail: body.error.flatten() });
@@ -438,7 +443,9 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
   });
 
   // Debug endpoint — shows every post and why it was accepted or rejected
-  app.post("/api/curation/opportunities/debug", async (request, reply) => {
+  app.post("/api/curation/opportunities/debug", {
+    schema: { tags: ["Curation"], summary: "Opportunities mit Debug-Infos (intern)", body: zodToJsonSchema(opportunitiesSchema) }
+  }, async (request, reply) => {
     const body = opportunitiesSchema.safeParse(request.body);
     if (!body.success) {
       return reply.code(400).send({ error: "invalid_request" });
@@ -470,7 +477,9 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
 
   // ── POST /api/curation/generate ───────────────────────────────────────────
   // Generates an intelligent, ordered vote plan from strategy rules + live posts
-  app.post("/api/curation/generate", async (request, reply) => {
+  app.post("/api/curation/generate", {
+    schema: { tags: ["Curation"], summary: "Vote-Plan generieren", body: zodToJsonSchema(generateSchema), security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
     const body = generateSchema.safeParse(request.body);
     if (!body.success) {
       return reply.code(400).send({ error: "invalid_request", detail: body.error.flatten() });
@@ -535,7 +544,9 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
   // ── POST /api/me/votebroker-earnings/rebuild — rebuild cache from chain ──────
   // The vb_vote_outcomes table is a cache. This rebuilds it from get_account_history.
   // Safe to run at any time — upserts, never deletes matched data.
-  app.post("/api/me/votebroker-earnings/rebuild", async (request, reply) => {
+  app.post("/api/me/votebroker-earnings/rebuild", {
+    schema: { tags: ["Account"], summary: "VoteBroker-Earnings-Cache aus Chain neu aufbauen", security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
     const token   = (request.headers as Record<string, string>)["session"];
     const session = token ? getSession(token) : null;
     if (!session) return reply.code(401).send({ error: "unauthorized" });
@@ -558,7 +569,9 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
   // ── POST /api/me/vote-outcomes/rebuild — populate vb_global_vote_outcomes ────
   // Accepts either user session OR operator token (for cron jobs).
   // With operator token: rebuilds for all users that have audit_events.
-  app.post("/api/me/vote-outcomes/rebuild", async (request, reply) => {
+  app.post("/api/me/vote-outcomes/rebuild", {
+    schema: { tags: ["Account"], summary: "Globale Vote-Outcomes neu aufbauen", security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
     const opToken = (request.headers as Record<string, string>)["x-operator-token"];
     const isOperator = opToken && opToken === operatorConfig.token && !!operatorConfig.token;
 
@@ -601,7 +614,9 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
   });
 
   // ── GET /api/me/vote-outcomes/summary — timing analytics summary ─────────────
-  app.get("/api/me/vote-outcomes/summary", async (request, reply) => {
+  app.get("/api/me/vote-outcomes/summary", {
+    schema: { tags: ["Account"], summary: "Vote-Outcomes Timing-Statistik", security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
     const token   = (request.headers as Record<string, string>)["session"];
     const session = token ? getSession(token) : null;
     if (!session) return reply.code(401).send({ error: "unauthorized" });
@@ -615,7 +630,9 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
   });
 
   // ── GET /api/me/votebroker-earnings — VoteBroker-attributed curation ────────
-  app.get("/api/me/votebroker-earnings", async (request, reply) => {
+  app.get("/api/me/votebroker-earnings", {
+    schema: { tags: ["Account"], summary: "VoteBroker-zugerechnete Curation-Earnings", security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
     const token   = (request.headers as Record<string, string>)["session"];
     const session = token ? getSession(token) : null;
     if (!session) return reply.code(401).send({ error: "unauthorized" });
@@ -635,7 +652,9 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
   // ── GET /api/me/growth — curator growth time series ──────────────────────
   // Returns daily vote + author data derived from audit_events.
   // No USD impact: historical SP/price not stored — won't fake it.
-  app.get("/api/me/growth", async (request, reply) => {
+  app.get("/api/me/growth", {
+    schema: { tags: ["Account"], summary: "Curator-Wachstums-Zeitreihe", security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
     const token   = (request.headers as Record<string, string>)["session"];
     const session = token ? getSession(token) : null;
     if (!session) return reply.code(401).send({ error: "unauthorized" });

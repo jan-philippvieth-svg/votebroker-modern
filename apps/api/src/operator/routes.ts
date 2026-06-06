@@ -10,7 +10,9 @@ function readHeader(value: string | string[] | undefined): string {
 }
 
 export async function registerOperatorRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/api/operator/overview", async (request, reply) => {
+  app.get("/api/operator/overview", {
+    schema: { tags: ["Operator"], summary: "Operator-Übersicht (token-geschützt)" }
+  }, async (request, reply) => {
     if (!operatorConfig.token) {
       return reply.code(503).send({
         error: "operator_dashboard_not_configured",
@@ -29,7 +31,9 @@ export async function registerOperatorRoutes(app: FastifyInstance): Promise<void
     });
   });
 
-  app.post("/api/operator/ensure-fee-post", async (request, reply) => {
+  app.post("/api/operator/ensure-fee-post", {
+    schema: { tags: ["Operator"], summary: "Täglichen Fee-Post sicherstellen (token-geschützt)" }
+  }, async (request, reply) => {
     if (!operatorConfig.token) {
       return reply.code(503).send({ error: "operator_dashboard_not_configured" });
     }

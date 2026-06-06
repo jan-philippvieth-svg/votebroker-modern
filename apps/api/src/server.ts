@@ -1,4 +1,6 @@
 import cors from "@fastify/cors";
+import swagger from "@fastify/swagger";
+import swaggerUi from "@fastify/swagger-ui";
 import Fastify from "fastify";
 import { registerAuthRoutes } from "./auth/routes.js";
 import { registerConsentRoutes } from "./consent/routes.js";
@@ -21,6 +23,30 @@ const app = Fastify({
 
 await app.register(cors, {
   origin: true
+});
+
+await app.register(swagger, {
+  openapi: {
+    info: {
+      title: "VoteBroker API",
+      description: "VoteBroker Curation Management API",
+      version: "0.1.0",
+    },
+    components: {
+      securitySchemes: {
+        sessionToken: {
+          type: "apiKey",
+          in: "header",
+          name: "session",
+        },
+      },
+    },
+  },
+});
+
+await app.register(swaggerUi, {
+  routePrefix: "/api/docs",
+  uiConfig: { docExpansion: "list" },
 });
 await registerAuthRoutes(app);
 await registerConsentRoutes(app);

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { zodToJsonSchema } from "zod-to-json-schema";
 import { getSession } from "../auth/sessionStore.js";
 import { deleteStrategy, loadStrategy, saveStrategy } from "./strategyStore.js";
 
@@ -7,10 +8,16 @@ function getSessionHeader(value: string | string[] | undefined): string | undefi
   return Array.isArray(value) ? value[0] : value;
 }
 
+const saveStrategySchema = z.object({
+  rules: z.array(z.record(z.unknown())).max(200)
+});
+
 export async function registerStrategyRoutes(app: FastifyInstance): Promise<void> {
 
   // GET /api/strategy — load user's persisted strategy
-  app.get("/api/strategy", async (request, reply) => {
+  app.get("/api/strategy", {
+    schema: { tags: ["Strategy"], summary: "Gespeicherte Strategie laden", security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
     const session = getSession(getSessionHeader(request.headers.session));
     if (!session) {
       return reply.code(401).send({ error: "authorized_session_required" });
@@ -20,15 +27,15 @@ export async function registerStrategyRoutes(app: FastifyInstance): Promise<void
   });
 
   // POST /api/strategy — save user's strategy
-  app.post("/api/strategy", async (request, reply) => {
+  app.post("/api/strategy", {
+    schema: { tags: ["Strategy"], summary: "Strategie speichern", body: zodToJsonSchema(saveStrategySchema), security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
     const session = getSession(getSessionHeader(request.headers.session));
     if (!session) {
       return reply.code(401).send({ error: "authorized_session_required" });
     }
 
-    const body = z.object({
-      rules: z.array(z.record(z.unknown())).max(200)
-    }).safeParse(request.body);
+    const body = saveStrategySchema.safeParse(request.body);
 
     if (!body.success) {
       return reply.code(400).send({ error: "invalid_request", detail: body.error.flatten() });
@@ -39,7 +46,9 @@ export async function registerStrategyRoutes(app: FastifyInstance): Promise<void
   });
 
   // DELETE /api/strategy — clear user's strategy
-  app.delete("/api/strategy", async (request, reply) => {
+  app.delete("/api/strategy", {
+    schema: { tags: ["Strategy"], summary: "Strategie löschen", security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
     const session = getSession(getSessionHeader(request.headers.session));
     if (!session) {
       return reply.code(401).send({ error: "authorized_session_required" });

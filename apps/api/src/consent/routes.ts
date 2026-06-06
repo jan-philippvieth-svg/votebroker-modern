@@ -1,6 +1,7 @@
 import type { ConsentType } from "@votebroker/domain";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { zodToJsonSchema } from "zod-to-json-schema";
 import { getSession } from "../auth/sessionStore.js";
 import { consentCatalog, getConsentState, grantConsent, revokeConsent } from "./consentStore.js";
 
@@ -10,11 +11,15 @@ const consentRequestSchema = z.object({
 });
 
 export async function registerConsentRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/api/consents/catalog", async () => ({
+  app.get("/api/consents/catalog", {
+    schema: { tags: ["Consents"], summary: "Consent-Katalog abrufen" }
+  }, async () => ({
     consents: Object.values(consentCatalog)
   }));
 
-  app.get("/api/consents", async (request, reply) => {
+  app.get("/api/consents", {
+    schema: { tags: ["Consents"], summary: "Eigene Consents abrufen", security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
     const session = getSession(getSessionHeader(request.headers.session));
     if (!session) {
       return reply.code(401).send({ error: "unauthorized" });
@@ -23,7 +28,9 @@ export async function registerConsentRoutes(app: FastifyInstance): Promise<void>
     return getConsentState(session.user.username);
   });
 
-  app.post("/api/consents/grant", async (request, reply) => {
+  app.post("/api/consents/grant", {
+    schema: { tags: ["Consents"], summary: "Consent erteilen", body: zodToJsonSchema(consentRequestSchema), security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
     const session = getSession(getSessionHeader(request.headers.session));
     if (!session) {
       return reply.code(401).send({ error: "unauthorized" });
@@ -41,7 +48,9 @@ export async function registerConsentRoutes(app: FastifyInstance): Promise<void>
     };
   });
 
-  app.post("/api/consents/revoke", async (request, reply) => {
+  app.post("/api/consents/revoke", {
+    schema: { tags: ["Consents"], summary: "Consent widerrufen", body: zodToJsonSchema(consentRequestSchema), security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
     const session = getSession(getSessionHeader(request.headers.session));
     if (!session) {
       return reply.code(401).send({ error: "unauthorized" });

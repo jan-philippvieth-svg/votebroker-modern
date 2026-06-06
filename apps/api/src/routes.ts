@@ -4,6 +4,7 @@ import {
 } from "@votebroker/domain";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { zodToJsonSchema } from "zod-to-json-schema";
 import { writeAuditEvent } from "./audit/auditLog.js";
 import { getSession } from "./auth/sessionStore.js";
 import { broadcastSteemConnectVote } from "./auth/steemConnect.js";
@@ -71,7 +72,9 @@ const PUBLIC_IMAGES_DIR = (() => {
 const PUBLIC_IMG_RE = /^[a-z0-9_-]+\.png$/;
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/health", async () => ({
+  app.get("/health", {
+    schema: { tags: ["System"], summary: "Health-Check" }
+  }, async () => ({
     status: "ok",
     service: "votebroker-api"
   }));
@@ -80,7 +83,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   // Only serves from PUBLIC_IMAGES_DIR (/app/data/public-screenshots/).
   // Files must be explicitly copied there — no admin/session screenshots.
   // Filename is whitelisted: [a-z0-9_-]+.(png|jpg|webp), no path components.
-  app.get("/api/public/screenshots/:file", async (request, reply) => {
+  app.get("/api/public/screenshots/:file", {
+    schema: { tags: ["Assets"], summary: "Öffentliche Landing-Page-Screenshots" }
+  }, async (request, reply) => {
     const { file } = request.params as { file: string };
     if (!PUBLIC_IMG_RE.test(file)) return reply.code(400).send({ error: "invalid_filename" });
     const filePath = pathResolve(PUBLIC_IMAGES_DIR, file);
@@ -100,7 +105,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   // Two variants:
   //   /api/screenshots/snap-20260602/01_find_votes_annotated.png  ← devlog snapshot
   //   /api/screenshots/01_find_votes_annotated.png                ← current (product post)
-  app.get("/api/screenshots/:snap/:filename", async (request, reply) => {
+  app.get("/api/screenshots/:snap/:filename", {
+    schema: { tags: ["Assets"], summary: "Screenshot eines bestimmten Snapshots" }
+  }, async (request, reply) => {
     const { snap, filename } = request.params as { snap: string; filename: string };
     if (!/^snap-[\d]+$/.test(snap))        return reply.code(400).send("invalid snap");
     if (!/^[\w\-]+\.png$/.test(filename))  return reply.code(400).send("invalid file");
@@ -112,7 +119,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     return reply.send(createReadStream(filePath));
   });
 
-  app.get("/api/screenshots/:filename", async (request, reply) => {
+  app.get("/api/screenshots/:filename", {
+    schema: { tags: ["Assets"], summary: "Aktueller Screenshot (latest)" }
+  }, async (request, reply) => {
     const { filename } = request.params as { filename: string };
     if (!/^[\w\-]+\.png$/.test(filename)) return reply.code(400).send("invalid");
     const annotated = pathResolve(PUBLIC_SCREENSHOTS_DIR, "annotated", filename);
@@ -125,7 +134,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ── GET /api/devlog/published-features — clusters already communicated ─────
-  app.get("/api/devlog/published-features", async (request, reply) => {
+  app.get("/api/devlog/published-features", {
+    schema: { tags: ["Devlog"], summary: "Bereits kommunizierte Feature-Cluster (operator)" }
+  }, async (request, reply) => {
     const token = (request.headers["x-operator-token"] as string | undefined) ?? "";
     if (!token || token !== operatorConfig.token || !operatorConfig.token) {
       return reply.code(403).send({ error: "operator_token_required" });
@@ -145,7 +156,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ── GET /api/devlog/recent-stories — new stories for fee-report/short notices ─
-  app.get("/api/devlog/recent-stories", async (request, reply) => {
+  app.get("/api/devlog/recent-stories", {
+    schema: { tags: ["Devlog"], summary: "Neue Storys seit letztem Fee-Report (operator)" }
+  }, async (request, reply) => {
     const token = (request.headers["x-operator-token"] as string | undefined) ?? "";
     if (!token || token !== operatorConfig.token || !operatorConfig.token) {
       return reply.code(403).send({ error: "operator_token_required" });
@@ -167,7 +180,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ── POST /api/devlog/record-stories — records cluster-stories as communicated ─
-  app.post("/api/devlog/record-stories", async (request, reply) => {
+  app.post("/api/devlog/record-stories", {
+    schema: { tags: ["Devlog"], summary: "Storys als kommuniziert markieren (operator)" }
+  }, async (request, reply) => {
     const token = (request.headers["x-operator-token"] as string | undefined) ?? "";
     if (!token || token !== operatorConfig.token || !operatorConfig.token) {
       return reply.code(403).send({ error: "operator_token_required" });
@@ -201,7 +216,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ── POST /api/devlog/generate — operator-token auth (for CI/tools) ─────────
-  app.post("/api/devlog/generate", async (request, reply) => {
+  app.post("/api/devlog/generate", {
+    schema: { tags: ["Devlog"], summary: "Devlog-Entwurf generieren (operator)" }
+  }, async (request, reply) => {
     const token = (request.headers["x-operator-token"] as string | undefined) ?? "";
     if (!token || token !== operatorConfig.token || !operatorConfig.token) {
       return reply.code(403).send({ error: "operator_token_required" });
@@ -230,7 +247,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ── POST /api/promo/generate — International Promo Post Pipeline ─────────────
-  app.post("/api/promo/generate", async (request, reply) => {
+  app.post("/api/promo/generate", {
+    schema: { tags: ["Admin"], summary: "Internationalen Promo-Post generieren (operator/admin)" }
+  }, async (request, reply) => {
     // Accept operator token OR admin session
     const opToken = (request.headers["x-operator-token"] as string | undefined) ?? "";
     const sessionToken = getSessionHeader(request.headers["session"]);
@@ -266,7 +285,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.get("/api/account/snapshot", async (request, reply) => {
+  app.get("/api/account/snapshot", {
+    schema: { tags: ["Account"], summary: "Steem-Account-Snapshot (VP, SP, Vote-Wert)", security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
     const query = z.object({ username: z.string().min(1) }).safeParse(request.query);
     if (!query.success) {
       return reply.code(400).send({ error: "invalid_request", detail: "username is required" });
@@ -282,7 +303,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // Pending curation (7-day window) — authenticated, per-user
-  app.get("/api/account/pending-curation", async (request, reply) => {
+  app.get("/api/account/pending-curation", {
+    schema: { tags: ["Account"], summary: "Offene Curation-Rewards (7-Tage-Fenster)", security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
     const session = getSession(getSessionHeader(request.headers["session"]));
     if (!session) return reply.code(401).send({ error: "unauthorized" });
     const query = z.object({ steemPriceUsd: z.coerce.number().positive().optional() }).safeParse(request.query);
@@ -294,7 +317,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.post("/api/votes/quote", async (request, reply) => {
+  app.post("/api/votes/quote", {
+    schema: { tags: ["Votes"], summary: "Vote-Quote berechnen (Fee + Gewicht)", body: zodToJsonSchema(quoteSchema) }
+  }, async (request, reply) => {
     const input = quoteSchema.safeParse(request.body);
     if (!input.success) {
       return reply.code(400).send({ error: "invalid_request", detail: input.error.flatten() });
@@ -310,7 +335,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
-  app.post("/api/votes/execute", async (request, reply) => {
+  app.post("/api/votes/execute", {
+    schema: { tags: ["Votes"], summary: "Vote auf Chain broadcasten", body: zodToJsonSchema(executeVoteSchema), security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
     const session = getSession(getSessionHeader(request.headers.session));
     if (!session) {
       return reply.code(401).send({
@@ -521,7 +548,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ── Community Discovery — real data from strategy_rules + audit_events ────
-  app.get("/api/community/discovery", async (request, reply) => {
+  app.get("/api/community/discovery", {
+    schema: { tags: ["Community"], summary: "Community-Autoren-Discovery (cross-strategy)", security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
     const session = getSession(getSessionHeader(request.headers["session"]));
     if (!session) return reply.code(401).send({ error: "unauthorized" });
 
@@ -615,7 +644,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ── GET /api/community/whale-signals — read cached whale discovery ───────────
-  app.get("/api/community/whale-signals", async (request, reply) => {
+  app.get("/api/community/whale-signals", {
+    schema: { tags: ["Community"], summary: "Whale-Signal-Cache abrufen", security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
     const token   = (request.headers as Record<string, string>)["session"];
     const session = token ? getSession(token) : null;
     if (!session) return reply.code(401).send({ error: "unauthorized" });
@@ -642,7 +673,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ── POST /api/community/whale-signals/refresh — operator-triggered rebuild ───
-  app.post("/api/community/whale-signals/refresh", async (request, reply) => {
+  app.post("/api/community/whale-signals/refresh", {
+    schema: { tags: ["Community"], summary: "Whale-Signals neu aufbauen (operator)" }
+  }, async (request, reply) => {
     const opToken = (request.headers as Record<string, string>)["x-operator-token"];
     if (!opToken || opToken !== operatorConfig.token) {
       return reply.code(403).send({ error: "operator_token_required" });
@@ -662,7 +695,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.get("/api/community/overview", async (request, reply) => {
+  app.get("/api/community/overview", {
+    schema: { tags: ["Community"], summary: "Community-Pool-Übersicht" }
+  }, async (request, reply) => {
     const query = z.object({
       username: z.string().min(1).optional(),
       pool: z.string().min(1).optional()
@@ -679,7 +714,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     return summarizeCommunityPool({ account, pool, username });
   });
 
-  app.post("/api/fees/settle", async (request, reply) => {
+  app.post("/api/fees/settle", {
+    schema: { tags: ["Votes"], summary: "Fee-Rechnung begleichen (Fee-Post-Vote)", body: zodToJsonSchema(settleSchema), security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
     const session = getSession(getSessionHeader(request.headers.session));
     if (!session) {
       return reply.code(401).send({ error: "authorized_session_required" });
@@ -788,7 +825,9 @@ function getSessionHeader(value: string | string[] | undefined): string | undefi
 
 // ── Today's votes — for dashboard (persisted, survives tab switch / reload) ──
 export function registerTodayVotesRoute(app: FastifyInstance): void {
-  app.get("/api/votes/today", async (request, reply) => {
+  app.get("/api/votes/today", {
+    schema: { tags: ["Votes"], summary: "Heutige Votes gruppiert nach Runs", security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
     const session = getSession(getSessionHeader(request.headers["session"]));
     if (!session) return reply.code(401).send({ error: "unauthorized" });
 

@@ -420,17 +420,17 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.get("/api/admin/overview",      async () => getPlatformOverview());
-  app.get("/api/admin/users",         async () => getUserAnalytics());
-  app.get("/api/admin/health",        async () => getSystemHealth());
-  app.get("/api/admin/insights",      async () => getPlatformInsights());
-  app.get("/api/admin/notifications", async () => getNotifications());
-  app.get("/api/admin/kpis",          async () => getKpis());
-  app.get("/api/admin/analytics",     async () => getAnalytics());
-  app.get("/api/admin/broadcasts",    async () => ({ broadcasts: getRecentBroadcasts() }));
+  app.get("/api/admin/overview",      { schema: { tags: ["Admin"] } }, async () => getPlatformOverview());
+  app.get("/api/admin/users",         { schema: { tags: ["Admin"] } }, async () => getUserAnalytics());
+  app.get("/api/admin/health",        { schema: { tags: ["Admin"] } }, async () => getSystemHealth());
+  app.get("/api/admin/insights",      { schema: { tags: ["Admin"] } }, async () => getPlatformInsights());
+  app.get("/api/admin/notifications", { schema: { tags: ["Admin"] } }, async () => getNotifications());
+  app.get("/api/admin/kpis",          { schema: { tags: ["Admin"] } }, async () => getKpis());
+  app.get("/api/admin/analytics",     { schema: { tags: ["Admin"] } }, async () => getAnalytics());
+  app.get("/api/admin/broadcasts",    { schema: { tags: ["Admin"] } }, async () => ({ broadcasts: getRecentBroadcasts() }));
 
   // Manual fee post trigger — optional body: { date: "YYYY-MM-DD", forceUpdate: true }
-  app.post("/api/admin/fee-post/trigger", async (request, reply) => {
+  app.post("/api/admin/fee-post/trigger", { schema: { tags: ["Admin"], summary: "Fee-Post manuell triggern" } }, async (request, reply) => {
     try {
       const body  = (request.body ?? {}) as { date?: string; forceUpdate?: boolean };
       const dateStr = typeof body.date === "string" && body.date.length > 0 ? body.date : undefined;
@@ -441,7 +441,7 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // Full cockpit — one call loads everything for the dashboard
-  app.get("/api/admin/cockpit", async () => {
+  app.get("/api/admin/cockpit", { schema: { tags: ["Admin"], summary: "Vollständiges Admin-Cockpit (ein Call)" } }, async () => {
     const [steemNode] = await Promise.allSettled([checkSteemNode()]);
     const steemStatus = steemNode.status === "fulfilled" ? steemNode.value : { status: "down" as const, pingMs: -1 };
     return {
@@ -460,7 +460,7 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // Aggregate: legacy all call
-  app.get("/api/admin/all", async () => ({
+  app.get("/api/admin/all", { schema: { tags: ["Admin"], summary: "Alle Admin-Daten aggregiert (legacy)" } }, async () => ({
     overview:      getPlatformOverview(),
     health:        getSystemHealth(),
     users:         getUserAnalytics(),

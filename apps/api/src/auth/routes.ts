@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { zodToJsonSchema } from "zod-to-json-schema";
 import { grantConsent } from "../consent/consentStore.js";
 import { createSession, deleteSession, getSession } from "./sessionStore.js";
 import { consumeAuthState, createAuthState } from "./stateStore.js";
@@ -74,7 +75,9 @@ const callbackSchema = z.object({
 });
 
 export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/api/auth/steemconnect/url", async () => {
+  app.get("/api/auth/steemconnect/url", {
+    schema: { tags: ["Auth"], summary: "SteemConnect login URL erzeugen" }
+  }, async () => {
     const state = createAuthState();
     return {
       url: getSteemConnectLoginUrl(state),
@@ -82,11 +85,19 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
-  app.get("/api/auth/authority-grant-url", async () => ({
+  app.get("/api/auth/authority-grant-url", {
+    schema: { tags: ["Auth"], summary: "Posting-Authority-Grant-URL" }
+  }, async () => ({
     url: buildAuthorityGrantUrl()
   }));
 
-  app.post("/api/auth/steemconnect/callback", async (request, reply) => {
+  app.post("/api/auth/steemconnect/callback", {
+    schema: {
+      tags: ["Auth"],
+      summary: "SteemConnect OAuth-Callback abschließen",
+      body: zodToJsonSchema(callbackSchema),
+    }
+  }, async (request, reply) => {
     const input = callbackSchema.safeParse(request.body);
     if (!input.success) {
       return reply.code(400).send({ error: "invalid_request", detail: input.error.flatten() });
@@ -128,7 +139,9 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.get("/api/auth/me", async (request, reply) => {
+  app.get("/api/auth/me", {
+    schema: { tags: ["Auth"], summary: "Aktuelle Session prüfen", security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
     const session = getSession(getSessionHeader(request.headers.session));
     if (!session) {
       return reply.code(401).send({ error: "unauthorized" });
@@ -143,14 +156,18 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
-  app.post("/api/auth/signout", async (request) => {
+  app.post("/api/auth/signout", {
+    schema: { tags: ["Auth"], summary: "Session beenden", security: [{ sessionToken: [] }] }
+  }, async (request) => {
     deleteSession(getSessionHeader(request.headers.session));
     return { ok: true };
   });
 
   // ── Keychain Login — Phase 3 ─────────────────────────────────────────────
 
-  app.get("/api/auth/keychain/challenge", async () => {
+  app.get("/api/auth/keychain/challenge", {
+    schema: { tags: ["Auth"], summary: "Keychain-Login-Challenge erzeugen" }
+  }, async () => {
     return createKeychainChallenge();
   });
 
@@ -161,7 +178,13 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     publicKey: z.string().optional()  // returned by Keychain directly — faster than recovery
   });
 
-  app.post("/api/auth/keychain/verify", async (request, reply) => {
+  app.post("/api/auth/keychain/verify", {
+    schema: {
+      tags: ["Auth"],
+      summary: "Keychain-Signatur verifizieren und Session erstellen",
+      body: zodToJsonSchema(keychainVerifySchema),
+    }
+  }, async (request, reply) => {
     const input = keychainVerifySchema.safeParse(request.body);
     if (!input.success) {
       return reply.code(400).send({ error: "invalid_request", detail: input.error.flatten() });
