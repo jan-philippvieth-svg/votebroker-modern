@@ -302,6 +302,23 @@ function runMigrations(db: Database): void {
       if (!gvoCols.includes("post_net_votes"))             db.exec("ALTER TABLE vb_global_vote_outcomes ADD COLUMN post_net_votes INTEGER");
       if (!gvoCols.includes("post_author_reputation"))     db.exec("ALTER TABLE vb_global_vote_outcomes ADD COLUMN post_author_reputation REAL");
       if (!gvoCols.includes("post_final_payout_sbd"))      db.exec("ALTER TABLE vb_global_vote_outcomes ADD COLUMN post_final_payout_sbd REAL");
+      // Autopilot training data — VP split, vote value, community
+      if (!gvoCols.includes("vp_before_vote_bps"))  db.exec("ALTER TABLE vb_global_vote_outcomes ADD COLUMN vp_before_vote_bps INTEGER");
+      if (!gvoCols.includes("vp_after_vote_bps"))   db.exec("ALTER TABLE vb_global_vote_outcomes ADD COLUMN vp_after_vote_bps INTEGER");
+      if (!gvoCols.includes("vote_value_sbd"))       db.exec("ALTER TABLE vb_global_vote_outcomes ADD COLUMN vote_value_sbd REAL");
+      if (!gvoCols.includes("post_community"))       db.exec("ALTER TABLE vb_global_vote_outcomes ADD COLUMN post_community TEXT");
     }
+
+    // VP time-series for autopilot modeling — sampled every 15 min
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS vb_vp_snapshots (
+        username   TEXT NOT NULL,
+        sampled_at TEXT NOT NULL,
+        vp_bps     INTEGER NOT NULL,
+        sp_approx  REAL,
+        PRIMARY KEY (username, sampled_at)
+      );
+      CREATE INDEX IF NOT EXISTS idx_vp_snapshots_user ON vb_vp_snapshots(username, sampled_at);
+    `);
   }
 }

@@ -370,10 +370,12 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     // Use real Steem account data for policy checks — NOT the mockStore
     // (mockStore returns fullPowerVoteUsd=0 for unknown users, blocking legitimate votes)
     let liveFullPowerVoteUsd = 0;
+    let liveVpBeforeBps: number | null = null;
     let liveStatus: "active" | "warning" | "paused" | "payment_required" = "active";
     try {
       const liveSnap = await fetchSteemAccountSnapshot(session.user.username);
       liveFullPowerVoteUsd = liveSnap.fullPowerVoteUsd;
+      liveVpBeforeBps      = liveSnap.votingPowerBps ?? null;
     } catch {
       // Fall back to mockStore if Steem API unreachable
       const cached = getAccount(session.user.username);
@@ -407,11 +409,12 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       });
       import("./chain/globalVoteOutcomes.js").then(({ recordVoteAtBroadcast }) =>
         recordVoteAtBroadcast({
-          voter: session.user.username,
-          author: input.data.author,
-          permlink: input.data.permlink,
-          weightBps: input.data.weightBps,
+          voter:        session.user.username,
+          author:       input.data.author,
+          permlink:     input.data.permlink,
+          weightBps:    input.data.weightBps,
           transactionId,
+          vpBeforeBps:  liveVpBeforeBps,
         }).catch(() => {})
       ).catch(() => {});
       return { transactionId };
@@ -526,7 +529,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       detail: `broadcast accepted | txId=${transactionId}`
     });
 
-    // Capture copilot training data: VP, post state, competition — fire and forget
+    // Capture autopilot training data: VP before/after, vote value, community — fire and forget
     import("./chain/globalVoteOutcomes.js").then(({ recordVoteAtBroadcast }) =>
       recordVoteAtBroadcast({
         voter:         session.user.username,
@@ -534,6 +537,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
         permlink:      input.data.permlink,
         weightBps:     input.data.weightBps,
         transactionId: transactionId ?? null,
+        vpBeforeBps:   liveVpBeforeBps,
       }).catch(err => request.log.warn({ err }, "recordVoteAtBroadcast failed (non-critical)"))
     ).catch(() => {/* import failed — non-critical */});
 
