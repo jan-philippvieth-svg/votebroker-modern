@@ -820,7 +820,7 @@ export function App() {
           )}
           {hasAuthority === false && (
             <a href={authorityGrantUrl} style={{ color: "#f0883e", fontSize: "0.78rem", textDecoration: "none", border: "1px solid #f0883e", padding: "0.15rem 0.5rem", borderRadius: "4px" }}>
-              ⚠ Posting Authority erteilen
+              ⚠ {t("consentGrantAuthority")}
             </a>
           )}
         </div>
@@ -3630,7 +3630,7 @@ function AuthorityPanel(props: {
       {props.hasAuthority === false && props.grantUrl && (
         <a className="secondary-button" href={props.grantUrl}>
           <ShieldCheck size={16} />
-          Posting Authority erteilen
+          {t("consentGrantAuthority")}
         </a>
       )}
       {props.hasAuthority === true && (

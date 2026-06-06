@@ -48,6 +48,6 @@ export function buildAuthorityGrantUrl(): string {
   const authorizeRedirect = `/authorize/${config.clientId}?redirect_uri=${origin}/dashboard`;
   const url = new URL("/import", config.authHost);
   url.searchParams.set("redirect", authorizeRedirect);
-  url.searchParams.set("authority", "active");
+  url.searchParams.set("authority", "posting");
   return url.toString();
 }
