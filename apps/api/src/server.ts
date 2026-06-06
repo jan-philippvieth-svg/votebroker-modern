@@ -12,6 +12,7 @@ import { registerAdminRoutes } from "./admin/routes.js";
 import { startDailyFeePostScheduler, runDailyFeePost } from "./jobs/dailyFeePost.js";
 import { startDailyDevlogScheduler, generateDevlogDraft } from "./jobs/dailyDevlog.js";
 import { startVpSampler } from "./jobs/vpSampler.js";
+import { startPriceSampler } from "./jobs/priceSampler.js";
 import { registerContentRoutes } from "./admin/contentRoutes.js";
 import { registerStrategyRoutes } from "./strategy/routes.js";
 
@@ -73,3 +74,6 @@ startDailyDevlogScheduler(app.log as unknown as typeof console);
 
 // Start VP time-series sampler — samples VP for all active sessions every 15 min
 startVpSampler(app.log as unknown as typeof console);
+
+// Start daily price sampler — fetches STEEM/SBD USD prices from CoinGecko (fallback: Steem feed)
+startPriceSampler(app.log as unknown as typeof console);

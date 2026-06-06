@@ -320,5 +320,16 @@ function runMigrations(db: Database): void {
       );
       CREATE INDEX IF NOT EXISTS idx_vp_snapshots_user ON vb_vp_snapshots(username, sampled_at);
     `);
+
+    // Daily price history for autopilot backtesting (USD values per day)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS vb_price_history (
+        date_str   TEXT PRIMARY KEY,   -- YYYY-MM-DD
+        steem_usd  REAL,
+        sbd_usd    REAL,
+        source     TEXT,               -- 'coingecko' | 'steem_feed'
+        sampled_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
   }
 }
