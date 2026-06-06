@@ -1,3 +1,5 @@
+import { createTranslator, type Locale } from "./i18n";
+
 export interface VoteQuoteResponse {
   account: {
     username: string;
@@ -1268,4 +1270,42 @@ export async function generatePromoPost(sessionToken: string, locale: PromoLocal
     throw new Error(err.detail ?? err.error ?? `Promo generation failed (${res.status})`);
   }
   return res.json();
+}
+
+export function readSteemConnectCallback(): { code?: string; accessToken?: string; expiresIn?: number; state: string } | null {
+  const url = new URL(window.location.href);
+  const hash = new URLSearchParams(url.hash.startsWith("#") ? url.hash.slice(1) : url.hash);
+  const search = url.searchParams;
+  const state = search.get("state") ?? hash.get("state");
+  const code = search.get("code") ?? undefined;
+  const accessToken = search.get("access_token") ?? hash.get("access_token") ?? undefined;
+  const expiresRaw = search.get("expires_in") ?? hash.get("expires_in");
+  const expiresIn = expiresRaw ? Number(expiresRaw) : undefined;
+
+  if (!state || (!code && !accessToken)) {
+    return null;
+  }
+
+  return {
+    code,
+    accessToken,
+    expiresIn: Number.isFinite(expiresIn) ? expiresIn : undefined,
+    state
+  };
+}
+
+export function voteErrorMessage(err: unknown, locale?: Locale): { message: string; code: string; hint?: string } {
+  const t = createTranslator(locale ?? "de");
+  if (err instanceof VoteBroadcastError) {
+    const hints: Record<string, string> = {
+      session_expired:              "Bitte oben rechts abmelden und erneut mit SteemConnect einloggen.",
+      target_vote_consent_required: t("hintOpenSettings"),
+      missing_posting_authority:    t("hintGrantAuthority"),
+      missing_posting_wif:          "Serverseitiges Voting nicht verfügbar. Bitte Betreiber kontaktieren.",
+      account_paused:               t("hintAccountPaused"),
+      keychain_rejected:            "Keychain hat den Vote abgelehnt oder der Dialog wurde geschlossen.",
+    };
+    return { message: err.message, code: err.code, hint: hints[err.code] };
+  }
+  return { message: "Unbekannter Fehler. Bitte Browser-Konsole prüfen.", code: "unknown" };
 }

@@ -35,20 +35,7 @@ import { AdminDashboard, isAdmin } from "./AdminDashboard";
 import { UserDashboard, type RecentVote } from "./UserDashboard";
 import {
   AlertTriangle,
-  BadgeDollarSign,
-  BarChart3,
-  CheckCircle2,
-  ChevronDown,
-  Circle,
-  Clock3,
-  Gauge,
-  LineChart,
-  Network,
-  Send,
   ShieldCheck,
-  TrendingUp,
-  Users,
-  WalletCards
 } from "lucide-react";
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -70,6 +57,8 @@ import {
   getKeychainChallenge,
   verifyKeychainLogin,
   persistStrategy,
+  readSteemConnectCallback,
+  voteErrorMessage,
   type ConstraintReport,
   type VotePlanEntry,
   type VotePlanResponse,
@@ -113,93 +102,13 @@ import {
   AuthorityPanel,
 } from "./SettingsView";
 import {
-  AuthorCard,
   WhaleSignalSection,
   CommunityDiscoverySection,
-  SummaryCard,
 } from "./CommunityView";
 import {
   type VoteBatchResult,
-  type VoteTarget,
-  type LivePlanMetrics,
-  VotePlanSection,
-  OpenVoteOpportunities,
 } from "./VotePlanView";
 import { CurationDnaPanel } from "./DnaView";
-import {
-  VoteExecutionPanel,
-  PowerRecommendationResult,
-  BillingTransparency,
-  TimingResult,
-} from "./QuoteView";
-
-const statusLabel = {
-  active: "Aktiv",
-  warning: "Warnung",
-  paused: "Pausiert",
-  payment_required: "Freischaltung noetig"
-};
-
-const dashboardStats = {
-  totalCuratedUsd: 42.0,
-  activeVoteUsd: 18.75,
-  feeUsd: 1.26,
-  pendingFeesUsd: 0.08,
-  feeCoverage: 96,
-  votingPowerHealth: 78,
-  curationEfficiency: 33.3
-};
-
-const curationSeries = [
-  { day: "Mo", curated: 4.2, fees: 0.13, power: 86 },
-  { day: "Di", curated: 6.8, fees: 0.2, power: 82 },
-  { day: "Mi", curated: 5.4, fees: 0.16, power: 77 },
-  { day: "Do", curated: 8.2, fees: 0.25, power: 72 },
-  { day: "Fr", curated: 7.1, fees: 0.21, power: 80 },
-  { day: "Sa", curated: 5.9, fees: 0.18, power: 84 },
-  { day: "So", curated: 4.4, fees: 0.13, power: 78 }
-];
-
-const voteFlow = [
-  { label: "Active votes", value: "$18.75", color: "teal" },
-  { label: "Covered fees", value: "$1.18", color: "green" },
-  { label: "Pending fees", value: "$0.08", color: "yellow" },
-  { label: "Paused risk", value: "Low", color: "orange" }
-];
-
-const timingDelayOptions = [5, 10, 15, 20, 25, 30];
-
-// Parses Steemit / PeakD / Hive.blog URLs or @author/permlink into parts
-function parseSteemPost(input: string): { author: string; permlink: string } | null {
-  const s = input.trim();
-  if (!s) return null;
-  // URL: https://steemit.com/.../@author/permlink
-  try {
-    const url = new URL(s);
-    const m = url.pathname.match(/@([a-z0-9._-]{3,})\/([\w-]{3,})/);
-    if (m) return { author: m[1], permlink: m[2] };
-  } catch {}
-  // @author/permlink or author/permlink
-  const m2 = s.match(/^@?([a-z0-9._-]{3,})\/([\w-]{3,})$/);
-  if (m2) return { author: m2[1], permlink: m2[2] };
-  return null;
-}
-
-function voteErrorMessage(err: unknown, locale?: import("../i18n").Locale): { message: string; code: string; hint?: string } {
-  const t = createTranslator(locale ?? "de");
-  if (err instanceof VoteBroadcastError) {
-    const hints: Record<string, string> = {
-      session_expired:              "Bitte oben rechts abmelden und erneut mit SteemConnect einloggen.",
-      target_vote_consent_required: t("hintOpenSettings"),
-      missing_posting_authority:    t("hintGrantAuthority"),
-      missing_posting_wif:          "Serverseitiges Voting nicht verfügbar. Bitte Betreiber kontaktieren.",
-      account_paused:               t("hintAccountPaused"),
-      keychain_rejected:            "Keychain hat den Vote abgelehnt oder der Dialog wurde geschlossen.",
-    };
-    return { message: err.message, code: err.code, hint: hints[err.code] };
-  }
-  return { message: "Unbekannter Fehler. Bitte Browser-Konsole prüfen.", code: "unknown" };
-}
 
 export function App() {
   const [locale, setLocale] = useState<Locale>(() => (window.localStorage.getItem("votebroker.locale") as Locale | null) ?? "de");
@@ -1219,199 +1128,4 @@ export function App() {
   );
 }
 
-function readSteemConnectCallback(): { code?: string; accessToken?: string; expiresIn?: number; state: string } | null {
-  const url = new URL(window.location.href);
-  const hash = new URLSearchParams(url.hash.startsWith("#") ? url.hash.slice(1) : url.hash);
-  const search = url.searchParams;
-  const state = search.get("state") ?? hash.get("state");
-  const code = search.get("code") ?? undefined;
-  const accessToken = search.get("access_token") ?? hash.get("access_token") ?? undefined;
-  const expiresRaw = search.get("expires_in") ?? hash.get("expires_in");
-  const expiresIn = expiresRaw ? Number(expiresRaw) : undefined;
-
-  if (!state || (!code && !accessToken)) {
-    return null;
-  }
-
-  return {
-    code,
-    accessToken,
-    expiresIn: Number.isFinite(expiresIn) ? expiresIn : undefined,
-    state
-  };
-}
-
-function AccountSnapshotPanel(props: {
-  loading: boolean;
-  snapshot: SteemAccountSnapshot | null;
-  session: AuthSession | null;
-}) {
-  if (!props.session) return null;
-  if (props.loading) {
-    return (
-      <section className="auth-bar">
-        <div><span>Account-Daten</span><strong>Lade Steem-Daten...</strong></div>
-      </section>
-    );
-  }
-  if (!props.snapshot) return null;
-  const vp = (props.snapshot.votingPowerBps / 100).toFixed(1);
-  const sp = props.snapshot.steemPowerSp.toLocaleString("de-DE", { maximumFractionDigits: 0 });
-  return (
-    <section className="auth-bar" style={{ flexWrap: "wrap", gap: "0.75rem" }}>
-      <div>
-        <span>Steem Account — Live</span>
-        <strong>@{props.snapshot.username}</strong>
-      </div>
-      <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", fontSize: "0.85rem" }}>
-        <span><b>Voting Power:</b> {vp}%</span>
-        <span><b>Steem Power:</b> {sp} SP</span>
-        <span><b>100% Vote:</b> ~${props.snapshot.fullPowerVoteUsd.toFixed(3)}</span>
-        <span><b>Aktueller Vote:</b> ~${props.snapshot.currentVoteUsd.toFixed(3)}</span>
-        <span style={{ color: "#888" }}>STEEM {props.snapshot.sbdPerSteem.toFixed(4)} SBD (Chain-Median)</span>
-      </div>
-    </section>
-  );
-}
-
-function Metric(props: { label: string; value: string }) {
-  return (
-    <div className="metric">
-      <span>{props.label}</span>
-      <strong>{props.value}</strong>
-    </div>
-  );
-}
-
-function Dashboard(props: { communityError: string | null; overview: CommunityPoolOverview | null; snapshot: SteemAccountSnapshot | null }) {
-  const maxCurated = Math.max(...curationSeries.map((entry) => entry.curated));
-  const trendPoints = curationSeries
-    .map((entry, index) => {
-      const x = (index / (curationSeries.length - 1)) * 100;
-      const y = 100 - (entry.power / 100) * 86;
-      return `${x},${y}`;
-    })
-    .join(" ");
-
-  return (
-    <section className="dashboard">
-      <div className="summary-grid">
-        <SummaryCard
-          icon={<TrendingUp size={19} />}
-          label="Total Curated Value [Demo]"
-          value={`$${dashboardStats.totalCuratedUsd.toFixed(2)}`}
-          detail="Wert, der durch Votes bewegt wurde"
-        />
-        <SummaryCard
-          icon={<WalletCards size={19} />}
-          label="Active Vote Value [Demo]"
-          value={`$${dashboardStats.activeVoteUsd.toFixed(2)}`}
-          detail="aktuell geplante Curation"
-        />
-        <SummaryCard
-          icon={<ShieldCheck size={19} />}
-          label="Fee Coverage [Demo]"
-          value={`${dashboardStats.feeCoverage}%`}
-          detail={`$${(dashboardStats.feeUsd - dashboardStats.pendingFeesUsd).toFixed(2)} gedeckt`}
-        />
-        <SummaryCard
-          icon={<BadgeDollarSign size={19} />}
-          label="Pending Fees [Demo]"
-          value={`$${dashboardStats.pendingFeesUsd.toFixed(2)}`}
-          detail={`$${dashboardStats.feeUsd.toFixed(2)} total bei 3%`}
-        />
-        <SummaryCard
-          icon={<Gauge size={19} />}
-          label="Voting Power"
-          value={props.snapshot
-            ? `${(props.snapshot.votingPowerBps / 100).toFixed(1)}%`
-            : `${dashboardStats.votingPowerHealth}% [Demo]`}
-          detail={props.snapshot
-            ? `${props.snapshot.steemPowerSp.toFixed(0)} SP — ca. $${props.snapshot.currentVoteUsd.toFixed(3)} aktuell`
-            : "stark genug fuer Auto-Fee-Votes"}
-        />
-        <SummaryCard
-          icon={<LineChart size={19} />}
-          label="Curation Efficiency [Demo]"
-          value={`${dashboardStats.curationEfficiency.toFixed(1)}x`}
-          detail="$42.00 Nutzen zu $1.26 Gebuehr"
-        />
-      </div>
-
-      <div className="analytics-grid">
-        <section className="panel analytics-panel">
-          <div className="panel-title compact-title">
-            <BarChart3 size={20} />
-            <h2>Curation Value vs. Fees</h2>
-          </div>
-          <div className="bar-chart" aria-label="Curation value compared with fee value">
-            {curationSeries.map((entry) => (
-              <div className="bar-column" key={entry.day}>
-                <div className="bar-stack">
-                  <span
-                    className="bar curated"
-                    style={{ height: `${Math.max(16, (entry.curated / maxCurated) * 100)}%` }}
-                    title={`Curated $${entry.curated}`}
-                  />
-                  <span
-                    className="bar fee"
-                    style={{ height: `${Math.max(8, (entry.fees / maxCurated) * 100)}%` }}
-                    title={`Fees $${entry.fees}`}
-                  />
-                </div>
-                <strong>{entry.day}</strong>
-              </div>
-            ))}
-          </div>
-          <div className="chart-legend">
-            <span><i className="legend curated" /> Curation</span>
-            <span><i className="legend fee" /> Fee vote</span>
-          </div>
-        </section>
-
-        <section className="panel analytics-panel">
-          <div className="panel-title compact-title">
-            <LineChart size={20} />
-            <h2>Voting Power Verlauf</h2>
-          </div>
-          <div className="line-chart">
-            <svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="Voting power trend">
-              <polyline points={trendPoints} />
-            </svg>
-            <div className="line-chart-overlay">
-              <span>{dashboardStats.votingPowerHealth}%</span>
-              <strong>Voting Power Health</strong>
-            </div>
-          </div>
-          <div className="flow-list">
-            {voteFlow.map((item) => (
-              <div className="flow-row" key={item.label}>
-                <span className={`flow-dot ${item.color}`} />
-                <span>{item.label}</span>
-                <strong>{item.value}</strong>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="panel coverage-panel">
-          <div>
-            <div className="panel-title compact-title">
-              <ShieldCheck size={20} />
-              <h2>Fee Coverage</h2>
-            </div>
-            <p className="coverage-copy">
-              Der Gebuehrenpost deckt fast alle offenen Rechnungen automatisch ab. Nur Accounts mit dauerhaft schwacher
-              Voting Power landen in Warnung oder Pause.
-            </p>
-          </div>
-          <div className="coverage-meter" style={{ "--coverage": `${dashboardStats.feeCoverage}%` } as React.CSSProperties}>
-            <span>{dashboardStats.feeCoverage}%</span>
-          </div>
-        </section>
-      </div>
-
-    </section>
-  );
-}
 
