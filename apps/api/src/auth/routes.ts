@@ -29,7 +29,12 @@ function consumeKeychainChallenge(nonce: string): boolean {
   return true;
 }
 
-async function verifyKeychainSignature(username: string, nonce: string, signature: string): Promise<boolean> {
+async function verifyKeychainSignature(
+  username: string,
+  nonce: string,
+  signature: string,
+  publicKey?: string
+): Promise<boolean> {
   try {
     const { Signature } = await import("dsteem");
     const client = createSteemClient();
@@ -37,6 +42,17 @@ async function verifyKeychainSignature(username: string, nonce: string, signatur
     if (!account) return false;
 
     const postingKeys: string[] = account.posting.key_auths.map(([key]) => String(key));
+
+    // Primary: Keychain returns publicKey directly — just check it's in posting.key_auths
+    if (publicKey && postingKeys.includes(publicKey)) {
+      // Also verify the signature is valid for this key (prevents spoofing)
+      const hash = createHash("sha256").update(nonce).digest();
+      const sig = Signature.fromString(signature);
+      const recoveredKey = sig.recover(hash).toString();
+      return recoveredKey === publicKey;
+    }
+
+    // Fallback: recover public key from signature and check against posting.key_auths
     const hash = createHash("sha256").update(nonce).digest();
     const sig = Signature.fromString(signature);
     const recoveredKey = sig.recover(hash).toString();
@@ -139,9 +155,10 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   });
 
   const keychainVerifySchema = z.object({
-    username: z.string().min(1).max(64),
-    nonce:    z.string().min(64).max(64),
-    signature: z.string().min(1)
+    username:  z.string().min(1).max(64),
+    nonce:     z.string().min(64).max(64),
+    signature: z.string().min(1),
+    publicKey: z.string().optional()  // returned by Keychain directly — faster than recovery
   });
 
   app.post("/api/auth/keychain/verify", async (request, reply) => {
@@ -150,13 +167,13 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: "invalid_request", detail: input.error.flatten() });
     }
 
-    const { username, nonce, signature } = input.data;
+    const { username, nonce, signature, publicKey } = input.data;
 
     if (!consumeKeychainChallenge(nonce)) {
       return reply.code(403).send({ error: "invalid_or_expired_challenge" });
     }
 
-    const valid = await verifyKeychainSignature(username, nonce, signature);
+    const valid = await verifyKeychainSignature(username, nonce, signature, publicKey);
     if (!valid) {
       return reply.code(401).send({ error: "invalid_signature" });
     }

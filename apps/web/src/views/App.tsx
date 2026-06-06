@@ -1,28 +1,29 @@
 // ── Steem Keychain type declaration ──────────────────────────────────────────
+type KeychainResponse = { success: boolean; result?: string; error?: string; message?: string; publicKey?: string };
+type KeychainBroadcastResponse = { success: boolean; result?: { id: string }; error?: string; message?: string };
+
 declare global {
   interface Window {
     steem_keychain?: {
       requestHandshake: (callback: () => void) => void;
+      requestBroadcast: (
+        username: string,
+        operations: unknown[],
+        authority: "Posting" | "Active",
+        callback: (response: KeychainBroadcastResponse) => void
+      ) => void;
       requestAddAccountAuthority: (
         username: string,
         authorizedUsername: string,
         role: "Posting" | "Active" | "Memo",
         weight: number,
-        callback: (response: { success: boolean; error?: string; message?: string }) => void
-      ) => void;
-      requestVote: (
-        username: string,
-        permlink: string,
-        author: string,
-        weight: number,
-        callback: (response: { success: boolean; result?: { id: string }; error?: string; message?: string }) => void,
-        rpc?: string
+        callback: (response: KeychainResponse) => void
       ) => void;
       requestSignBuffer: (
         username: string | null,
         message: string,
         method: "Posting" | "Active" | "Memo",
-        callback: (response: { success: boolean; result?: string; error?: string; message?: string }) => void,
+        callback: (response: KeychainResponse) => void,
         rpc?: string | null,
         title?: string | null
       ) => void;
@@ -261,12 +262,14 @@ export function App() {
 
   // ── Steem Keychain detection (once on mount) ────────────────────────────
   useEffect(() => {
-    if (typeof window.steem_keychain === "undefined") {
+    const kc = window.steem_keychain;
+    // Require requestBroadcast to exist — filters out outdated versions (steempro pattern)
+    if (!kc || typeof kc !== "object" || typeof kc.requestBroadcast !== "function") {
       setKeychainAvailable(false);
       return;
     }
     const timeout = setTimeout(() => setKeychainAvailable(false), 2000);
-    window.steem_keychain.requestHandshake(() => {
+    kc.requestHandshake(() => {
       clearTimeout(timeout);
       setKeychainAvailable(true);
     });
@@ -556,21 +559,25 @@ export function App() {
     if (!session) throw new VoteBroadcastError("session_expired", "Session abgelaufen.");
 
     if (keychainAvailable && window.steem_keychain) {
+      const voteOp = ["vote", {
+        voter:    session.user.username,
+        author:   target.author,
+        permlink: target.permlink,
+        weight:   target.weightBps
+      }];
       return new Promise((resolve, reject) => {
-        window.steem_keychain!.requestVote(
+        window.steem_keychain!.requestBroadcast(
           session!.user.username,
-          target.permlink,
-          target.author,
-          target.weightBps,
-          async (response) => {
+          [voteOp],
+          "Posting",
+          (response) => {
             if (!response.success) {
-              const msg = response.error ?? response.message ?? "Keychain hat den Vote abgelehnt.";
-              // "User cancelled" is not an error worth retrying — propagate as-is
-              reject(new VoteBroadcastError("keychain_rejected", msg));
+              reject(new VoteBroadcastError("keychain_rejected",
+                response.error ?? response.message ?? "Keychain hat den Vote abgelehnt."));
               return;
             }
             const txId = response.result?.id ?? "keychain_tx";
-            // Audit log via backend — fire and forget; failure doesn't fail the vote
+            // Audit log via backend — fire and forget
             executeVote(session!.token, {
               author: target.author, permlink: target.permlink,
               weightBps: target.weightBps, broadcastMode: "keychain", transactionId: txId
@@ -722,20 +729,22 @@ export function App() {
     setAuthError(null);
     try {
       const { nonce } = await getKeychainChallenge();
-      const signature = await new Promise<string>((resolve, reject) => {
+      const { signature, publicKey } = await new Promise<{ signature: string; publicKey: string }>((resolve, reject) => {
         window.steem_keychain!.requestSignBuffer(
           username,
           nonce,
           "Posting",
           (resp) => {
-            if (resp.success && resp.result) resolve(resp.result);
-            else reject(new Error(resp.error ?? resp.message ?? "Keychain signing abgebrochen."));
+            if (resp.success && resp.result)
+              resolve({ signature: resp.result, publicKey: resp.publicKey ?? "" });
+            else
+              reject(new Error(resp.error ?? resp.message ?? "Keychain signing abgebrochen."));
           },
           null,
           "VoteBroker Login"
         );
       });
-      const nextSession = await verifyKeychainLogin({ username, nonce, signature });
+      const nextSession = await verifyKeychainLogin({ username, nonce, signature, publicKey });
       setSession(nextSession);
       setUsername(nextSession.user.username);
       window.localStorage.setItem("votebroker.session", JSON.stringify(nextSession));

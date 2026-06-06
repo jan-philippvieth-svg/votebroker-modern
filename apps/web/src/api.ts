@@ -258,6 +258,7 @@ export async function verifyKeychainLogin(payload: {
   username: string;
   nonce: string;
   signature: string;
+  publicKey?: string;
 }): Promise<AuthSession> {
   const res = await fetch(`${API_BASE}/api/auth/keychain/verify`, {
     method: "POST",
