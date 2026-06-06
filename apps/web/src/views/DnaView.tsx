@@ -239,6 +239,7 @@ export function CurationDnaPanel(props: {
   onLoadOpportunities: () => void;
   onExecuteVotes: (targets: Array<{ author: string; permlink: string; weightBps: number }>) => Promise<VoteBatchResult>;
   onExecuteSingle: (target: { author: string; permlink: string; weightBps: number }) => Promise<{ transactionId: string }>;
+  onPlanExecuted?: () => void;
   votePlan: VotePlanResponse | null;
   planLoading: boolean;
   planError: string | null;
@@ -631,6 +632,7 @@ export function CurationDnaPanel(props: {
                 sbdPerSteem={props.accountSnapshot?.sbdPerSteem}
                 onGenerate={props.onGenerateVotes}
                 onExecuteSingle={props.onExecuteSingle}
+                onPlanExecuted={props.onPlanExecuted}
                 onMetricsChange={setLiveMetrics}
                 additionalCandidates={additionalCandidates}
                 locale={props.locale}

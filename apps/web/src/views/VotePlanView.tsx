@@ -145,6 +145,7 @@ export function VotePlanSection(props: {
   sbdPerSteem?: number;    // SBD/STEEM — for SP conversion: expectedVoteUsd / sbdPerSteem ≈ SP
   onGenerate: () => void;
   onExecuteSingle: (target: { author: string; permlink: string; weightBps: number }) => Promise<{ transactionId: string }>;
+  onPlanExecuted?: () => void;
   onMetricsChange?: (m: LivePlanMetrics) => void;
   additionalCandidates?: VotePlanEntry[];
   locale?: import("../i18n").Locale;
@@ -345,6 +346,7 @@ export function VotePlanSection(props: {
       if (i < entries.length - 1 && !aborted) await new Promise(r => setTimeout(r, 1500));
     }
     setPhase("done");
+    props.onPlanExecuted?.();
   }
 
   return (

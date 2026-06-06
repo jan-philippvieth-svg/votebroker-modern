@@ -1040,6 +1040,7 @@ export function App() {
             onLoadOpportunities={loadOpportunities}
             onExecuteVotes={executeStrategyVotes}
             onExecuteSingle={executeSingleVote}
+            onPlanExecuted={() => setVotePlan(null)}
             votePlan={votePlan}
             planLoading={planLoading}
             planError={planError}
