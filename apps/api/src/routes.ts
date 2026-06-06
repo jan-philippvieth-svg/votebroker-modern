@@ -47,7 +47,8 @@ const executeVoteSchema = z.object({
   author: z.string().min(1),
   permlink: z.string().min(1),
   weightBps: z.number().int().min(1).max(10_000),
-  broadcastMode: z.enum(["server", "token"]).optional()
+  broadcastMode: z.enum(["server", "token", "keychain"]).optional(),
+  transactionId: z.string().optional()  // provided by client when broadcastMode === "keychain"
 });
 
 // Screenshots dir (same logic as contentRoutes.ts)
@@ -364,7 +365,30 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     });
 
     let transactionId: string;
-    if (broadcastMode === "token") {
+    if (broadcastMode === "keychain") {
+      // Vote was already signed and broadcast by Steem Keychain on the client.
+      // Backend only logs the audit event — no server-side broadcast, no authority check.
+      transactionId = input.data.transactionId ?? "keychain_client";
+      writeAuditEvent({
+        type: "vote_broadcast_success",
+        username: session.user.username,
+        author: input.data.author,
+        permlink: input.data.permlink,
+        weightBps: input.data.weightBps,
+        transactionId,
+        detail: `keychain_signed | txId=${transactionId}`
+      });
+      import("./chain/globalVoteOutcomes.js").then(({ recordVoteAtBroadcast }) =>
+        recordVoteAtBroadcast({
+          voter: session.user.username,
+          author: input.data.author,
+          permlink: input.data.permlink,
+          weightBps: input.data.weightBps,
+          transactionId,
+        }).catch(() => {})
+      ).catch(() => {});
+      return { transactionId };
+    } else if (broadcastMode === "token") {
       if (!broadcastConfig.manualTokenFallback) {
         return reply.code(403).send({ error: "manual_token_fallback_disabled" });
       }

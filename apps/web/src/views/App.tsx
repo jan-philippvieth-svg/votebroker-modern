@@ -170,6 +170,7 @@ function voteErrorMessage(err: unknown, locale?: import("../i18n").Locale): { me
       missing_posting_authority:    t("hintGrantAuthority"),
       missing_posting_wif:          "Serverseitiges Voting nicht verfügbar. Bitte Betreiber kontaktieren.",
       account_paused:               t("hintAccountPaused"),
+      keychain_rejected:            "Keychain hat den Vote abgelehnt oder der Dialog wurde geschlossen.",
     };
     return { message: err.message, code: err.code, hint: hints[err.code] };
   }
@@ -547,6 +548,43 @@ export function App() {
     }
   }
 
+  // ── Single vote: Keychain if available, server as fallback ─────────────────
+  async function doVote(target: { author: string; permlink: string; weightBps: number }): Promise<{ transactionId: string }> {
+    if (!session) throw new VoteBroadcastError("session_expired", "Session abgelaufen.");
+
+    if (keychainAvailable && window.steem_keychain) {
+      return new Promise((resolve, reject) => {
+        window.steem_keychain!.requestVote(
+          session!.user.username,
+          target.permlink,
+          target.author,
+          target.weightBps,
+          async (response) => {
+            if (!response.success) {
+              const msg = response.error ?? response.message ?? "Keychain hat den Vote abgelehnt.";
+              // "User cancelled" is not an error worth retrying — propagate as-is
+              reject(new VoteBroadcastError("keychain_rejected", msg));
+              return;
+            }
+            const txId = response.result?.id ?? "keychain_tx";
+            // Audit log via backend — fire and forget; failure doesn't fail the vote
+            executeVote(session!.token, {
+              author: target.author, permlink: target.permlink,
+              weightBps: target.weightBps, broadcastMode: "keychain", transactionId: txId
+            }).catch(() => {});
+            resolve({ transactionId: txId });
+          }
+        );
+      });
+    }
+
+    // Fallback: server-side vote
+    const res = await executeVote(session.token, {
+      author: target.author, permlink: target.permlink, weightBps: target.weightBps
+    });
+    return { transactionId: res.transactionId };
+  }
+
   async function executeStrategyVotes(
     targets: Array<{ author: string; permlink: string; weightBps: number }>
   ): Promise<VoteBatchResult> {
@@ -556,9 +594,7 @@ export function App() {
 
     for (const target of targets) {
       try {
-        const res = await executeVote(session.token, {
-          author: target.author, permlink: target.permlink, weightBps: target.weightBps
-        });
+        const res = await doVote(target);
         ok++;
         results.push({ author: target.author, permlink: target.permlink, status: "success", transactionId: res.transactionId });
         const key = `${target.author}/${target.permlink}`;
@@ -606,8 +642,7 @@ export function App() {
 
   // Direct single-vote executor — throws on any failure, returns real transactionId
   async function executeSingleVote(target: { author: string; permlink: string; weightBps: number }): Promise<{ transactionId: string }> {
-    if (!session) throw new VoteBroadcastError("session_expired", "Session abgelaufen. Bitte erneut einloggen.");
-    const result = await executeVote(session.token, target); // throws VoteBroadcastError on failure
+    const result = await doVote(target); // Keychain if available, server fallback
     // Track in dashboard recent votes
     setRecentVotes(prev => [{
       author:    target.author,

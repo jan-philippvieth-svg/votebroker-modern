@@ -339,6 +339,8 @@ export async function executeVote(token: string, payload: {
   author: string;
   permlink: string;
   weightBps: number;
+  broadcastMode?: "server" | "token" | "keychain";
+  transactionId?: string;
 }): Promise<VoteExecutionResponse> {
   const response = await fetch(`${API_BASE}/api/votes/execute`, {
     method: "POST",
