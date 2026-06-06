@@ -37,6 +37,16 @@ Beide Korrekturen wurden in allen 14 Locales (DE, EN, ES, KO, ZH, RU, PT, PCM, I
 **Screenshot-Pipeline — Container-Sync gefixt**
 `capture_landing.py` schrieb die erzeugten Screenshots bisher auf den Host-Pfad des Docker-Volumes — der API-Container sieht diesen Pfad jedoch nicht, weil das Volume direkt auf `/dev/vda1` liegt. Das Script endet jetzt automatisch mit einem `docker cp`-Schritt, der alle aufgenommenen PNGs direkt in den Container synchronisiert.
 
+**Login — Keychain und SteemLogin immer sichtbar**
+Bisher wurde die Keychain-Option im Login nur angezeigt, wenn die Extension innerhalb von 2 Sekunden nach dem Seitenstart erkannt wurde. Wer die Extension frisch installiert hatte oder dessen Browser die Injection verzögerte, sah ausschließlich den SteemLogin-Button — ohne Hinweis auf die Alternative.
+
+Ab sofort zeigt der Login-Screen immer beide Wege:
+
+- **Steem Keychain**: Benutzername eingeben, Button klicken — der Posting-Key verlässt den Browser nie
+- **SteemLogin**: OAuth-Redirect für alle anderen
+
+Der Detektionsstatus wird als Hinweis unterhalb des Keychain-Buttons angezeigt: grün wenn die Extension erkannt wurde, amber mit Installationshinweis wenn nicht. Klickt jemand auf den Keychain-Button ohne installierte Extension, erscheint eine klare Fehlermeldung statt stillem Abbruch.
+
 ---
 
 ## Community-Aktivität

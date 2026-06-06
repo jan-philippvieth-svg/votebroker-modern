@@ -666,4 +666,63 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
 
     return getGrowthData(session.user.username, period);
   });
+
+  // ── GET /api/me/daily-history — last N days, votes + authors + weight ──────
+  app.get("/api/me/daily-history", {
+    schema: { tags: ["Account"], summary: "Tages-Verlauf (Votes, Autoren, Gewicht)", security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
+    const token   = (request.headers as Record<string, string>)["session"];
+    const session = token ? getSession(token) : null;
+    if (!session) return reply.code(401).send({ error: "unauthorized" });
+
+    const rawDays = parseInt((request.query as Record<string, string>)["days"] ?? "7", 10);
+    const days    = Math.min(Math.max(rawDays, 1), 30);
+
+    const db = getDb();
+    const since = days - 1;
+
+    const rows = db.prepare(`
+      SELECT
+        DATE(created_at)         AS day,
+        COUNT(*)                 AS votes,
+        COUNT(DISTINCT author)   AS unique_authors,
+        COALESCE(SUM(ABS(weight_bps)), 0) AS total_weight_bps
+      FROM audit_events
+      WHERE type = 'vote_broadcast_success'
+        AND username = ?
+        AND DATE(created_at) >= DATE('now', '-' || ? || ' days')
+      GROUP BY day
+      ORDER BY day DESC
+    `).all(session.user.username, since) as Array<{
+      day: string; votes: number; unique_authors: number; total_weight_bps: number;
+    }>;
+
+    const totals = db.prepare(`
+      SELECT
+        COUNT(*)                 AS total_votes,
+        COUNT(DISTINCT author)   AS total_unique_authors,
+        COALESCE(SUM(ABS(weight_bps)), 0) AS total_weight_bps
+      FROM audit_events
+      WHERE type = 'vote_broadcast_success'
+        AND username = ?
+        AND DATE(created_at) >= DATE('now', '-' || ? || ' days')
+    `).get(session.user.username, since) as {
+      total_votes: number; total_unique_authors: number; total_weight_bps: number;
+    };
+
+    const bestDay    = rows.reduce((a, b) => b.votes > a.votes ? b : a, rows[0] ?? null);
+    const weakestDay = rows.filter(r => r.votes > 0)
+                           .reduce((a, b) => b.votes < a.votes ? b : a, rows.filter(r => r.votes > 0)[0] ?? null);
+
+    return {
+      days: rows,
+      summary: {
+        totalVotes:        totals?.total_votes          ?? 0,
+        totalUniqueAuthors: totals?.total_unique_authors ?? 0,
+        totalWeightBps:    totals?.total_weight_bps     ?? 0,
+        bestDay:           bestDay  ? { day: bestDay.day,    votes: bestDay.votes }    : null,
+        weakestDay:        weakestDay ? { day: weakestDay.day, votes: weakestDay.votes } : null,
+      },
+    };
+  });
 }

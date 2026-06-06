@@ -654,7 +654,11 @@ export function App() {
 
   async function connectKeychain() {
     const username = keychainUsername.replace(/^@/, "").toLowerCase().trim();
-    if (!username || !window.steem_keychain) return;
+    if (!username) return;
+    if (!window.steem_keychain) {
+      setAuthError(t("loginKeychainNotInstalled"));
+      return;
+    }
     setAuthLoading(true);
     setAuthError(null);
     try {
@@ -845,48 +849,52 @@ export function App() {
             </div>
           )}
 
-          {/* CTA — Keychain if available, SteemLogin as fallback */}
-          {keychainAvailable && (
-            <div style={{ marginBottom: "0.75rem" }}>
-              <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
-                <input
-                  type="text"
-                  placeholder={t("loginUsernamePlaceholder")}
-                  value={keychainUsername}
-                  onChange={e => setKeychainUsername(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && connectKeychain()}
-                  disabled={authLoading}
-                  style={{ flex: 1, background: "#f8fbfc", border: "1px solid #dde8ed", borderRadius: "8px", color: "#17202a", fontSize: "0.95rem", padding: "0.75rem 1rem" }}
-                />
-                <button
-                  className="secondary-button"
-                  disabled={authLoading || !keychainUsername.trim()}
-                  type="button"
-                  onClick={connectKeychain}
-                  style={{ padding: "0.75rem 1.25rem", fontSize: "0.95rem", fontWeight: 700, borderRadius: "8px", whiteSpace: "nowrap" }}
-                >
-                  <ShieldCheck size={18} />
-                  {authLoading ? t("loginKeychainSigning") : t("loginWithKeychain")}
-                </button>
-              </div>
-              <p style={{ color: "#16a34a", fontSize: "0.73rem", margin: 0, textAlign: "center" }}>
-                ✓ {t("loginKeychainHint")}
-              </p>
+          {/* Keychain login — always visible */}
+          <div style={{ marginBottom: "0.75rem" }}>
+            <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
+              <input
+                type="text"
+                placeholder={t("loginUsernamePlaceholder")}
+                value={keychainUsername}
+                onChange={e => setKeychainUsername(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && connectKeychain()}
+                disabled={authLoading}
+                style={{ flex: 1, background: "#f8fbfc", border: "1px solid #dde8ed", borderRadius: "8px", color: "#17202a", fontSize: "0.95rem", padding: "0.75rem 1rem" }}
+              />
+              <button
+                className="secondary-button"
+                disabled={authLoading || !keychainUsername.trim()}
+                type="button"
+                onClick={connectKeychain}
+                style={{ padding: "0.75rem 1.25rem", fontSize: "0.95rem", fontWeight: 700, borderRadius: "8px", whiteSpace: "nowrap" }}
+              >
+                <ShieldCheck size={18} />
+                {authLoading ? t("loginKeychainSigning") : t("loginWithKeychain")}
+              </button>
             </div>
-          )}
+            <p style={{
+              fontSize: "0.73rem", margin: 0, textAlign: "center",
+              color: keychainAvailable === true ? "#16a34a" : keychainAvailable === false ? "#c77a14" : "#8fa4b0"
+            }}>
+              {keychainAvailable === true
+                ? `✓ ${t("loginKeychainHint")}`
+                : keychainAvailable === false
+                  ? `⚠ ${t("loginKeychainNotInstalled")}`
+                  : "…"
+              }
+            </p>
+          </div>
 
-          {keychainAvailable && (
-            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", margin: "0.75rem 0" }}>
-              <hr style={{ flex: 1, border: "none", borderTop: "1px solid #dde8ed" }} />
-              <span style={{ color: "#8fa4b0", fontSize: "0.75rem" }}>{t("loginOrSeparator")}</span>
-              <hr style={{ flex: 1, border: "none", borderTop: "1px solid #dde8ed" }} />
-            </div>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", margin: "0.75rem 0" }}>
+            <hr style={{ flex: 1, border: "none", borderTop: "1px solid #dde8ed" }} />
+            <span style={{ color: "#8fa4b0", fontSize: "0.75rem" }}>{t("loginOrSeparator")}</span>
+            <hr style={{ flex: 1, border: "none", borderTop: "1px solid #dde8ed" }} />
+          </div>
 
           <button
             className="secondary-button"
             disabled={authLoading}
-            style={{ width: "100%", justifyContent: "center", padding: "0.85rem 1.5rem", fontSize: keychainAvailable ? "0.9rem" : "1rem", fontWeight: 700, borderRadius: "8px", opacity: keychainAvailable ? 0.8 : 1 }}
+            style={{ width: "100%", justifyContent: "center", padding: "0.85rem 1.5rem", fontSize: "0.9rem", fontWeight: 700, borderRadius: "8px", opacity: 0.8 }}
             type="button"
             onClick={connectSteem}
           >

@@ -924,6 +924,34 @@ export async function fetchTodayStats(token: string): Promise<TodayStats> {
   return res.json();
 }
 
+export interface DailyHistoryPoint {
+  day:              string;   // "YYYY-MM-DD"
+  votes:            number;
+  unique_authors:   number;
+  total_weight_bps: number;
+}
+
+export interface DailyHistorySummary {
+  totalVotes:         number;
+  totalUniqueAuthors: number;
+  totalWeightBps:     number;
+  bestDay:    { day: string; votes: number } | null;
+  weakestDay: { day: string; votes: number } | null;
+}
+
+export interface DailyHistoryResult {
+  days:    DailyHistoryPoint[];
+  summary: DailyHistorySummary;
+}
+
+export async function fetchDailyHistory(token: string, days = 7): Promise<DailyHistoryResult> {
+  const res = await fetch(`${API_BASE}/api/me/daily-history?days=${days}`, {
+    headers: { session: token },
+  });
+  if (!res.ok) throw new Error("Daily history konnte nicht geladen werden.");
+  return res.json() as Promise<DailyHistoryResult>;
+}
+
 // ── Cockpit types ─────────────────────────────────────────────────────────────
 
 export interface AdminKpis {

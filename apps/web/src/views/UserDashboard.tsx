@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Users, Dna, Target, type LucideIcon } from "lucide-react";
 import type {
-  AuthSession, CurationProfile, DailyEarnings, GrowthData,
-  OpportunitiesMeta, PendingCuration, PendingDebugPost, PostOpportunity,
-  SteemAccountSnapshot, TodayStats, VBEarningsResult, VotePlanResponse,
+  AuthSession, CurationProfile, DailyEarnings, DailyHistoryPoint, DailyHistoryResult,
+  DailyHistorySummary, GrowthData, OpportunitiesMeta, PendingCuration, PendingDebugPost,
+  PostOpportunity, SteemAccountSnapshot, TodayStats, VBEarningsResult, VotePlanResponse,
 } from "../api";
 import { fetchVBEarnings } from "../api";
-import { fetchGrowthData, fetchPendingCuration, fetchTodayStats } from "../api";
+import { fetchDailyHistory, fetchGrowthData, fetchPendingCuration, fetchTodayStats } from "../api";
 import { createTranslator, type Locale, type TranslationKey } from "../i18n";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -755,10 +755,11 @@ function PendingDebugPanel({ data, t }: { data: PendingCuration; t: ReturnType<t
   );
 }
 
-function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, pendingLoading, lifetimeEarnings, t }: {
+function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, pendingLoading, dailyHistory, dailyHistoryLoading, lifetimeEarnings, t }: {
   snapshot: SteemAccountSnapshot|null;
   todayStats: TodayStats|null; todayLoading: boolean;
   pendingCuration: PendingCuration|null; pendingLoading: boolean;
+  dailyHistory: DailyHistoryResult|null; dailyHistoryLoading: boolean;
   lifetimeEarnings: VBEarningsResult|null;
   t: ReturnType<typeof createTranslator>;
 }) {
@@ -788,12 +789,6 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
   );
 
   const Divider = () => <div style={{ borderTop:`1px solid ${C.border}`, margin:"0.5rem 0" }}/>;
-
-  const nextPayout = pendingCuration?.nextPayout;
-  const nextPayoutLabel = nextPayout ? (() => {
-    const h = (new Date(nextPayout.cashoutTime + "Z").getTime() - Date.now()) / 3_600_000;
-    return h < 24 ? `in ${h.toFixed(0)}h` : `in ${(h/24).toFixed(1)}d`;
-  })() : null;
 
   return (
     <div data-testid="dashboard-kpi-section" style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"1rem" }}>
@@ -826,48 +821,88 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
         )}
       </div>
 
-      {/* ── Pending 7 Tage ── orange = offen / wartet auf Auszahlung */}
+      {/* ── 7-Tage-Historie ── blau/neutral = Verlauf */}
       <div style={{
         ...card,
-        borderTop:`4px solid ${C.warn}`,
-        background:"linear-gradient(160deg,#fffbeb 0%,#ffffff 55%)",
+        borderTop:`4px solid ${C.info}`,
+        background:"linear-gradient(160deg,#f0f9ff 0%,#ffffff 55%)",
       }}>
-        <p style={{ ...lbl, margin:"0 0 0.85rem", color:C.warn }}>{t("cardExpCurationTitle")}</p>
-        {pendingLoading ? (
+        <p style={{ ...lbl, margin:"0 0 0.85rem", color:C.info }}>{t("cardHistoryTitle")}</p>
+        {dailyHistoryLoading ? (
           <div style={{ color:C.dim, fontSize:"0.88rem" }}>Lädt…</div>
-        ) : !pendingCuration || pendingCuration.pendingUsd <= 0 ? (
-          <div style={{ color:C.dim, fontSize:"0.88rem" }}>Keine offenen Curations</div>
-        ) : (
-          <>
-            <Hero
-              val={fmtUsd(pendingCuration.pendingUsd)}
-              unit=""
-              col={C.ok}
-              sub={`${pendingCuration.pendingSp.toFixed(3)} STEEM`}
-            />
-            <Row size="0.9rem" label={t("cardOpenPosts")} value={String(pendingCuration.postCount)}/>
-            <Row size="0.9rem" label={t("cardVotes7d")}  value={String(pendingCuration.voteCount)}/>
-            {nextPayout && nextPayoutLabel && (
-              <>
-                <Divider/>
-                <div style={{ background:C.warn+"10", borderRadius:"8px", padding:"0.45rem 0.65rem", border:`1px solid ${C.warn}25` }}>
-                  <div style={{ color:C.muted, fontSize:"0.72rem", fontWeight:600, marginBottom:"0.15rem" }}>{t("cardNextPayout")}</div>
-                  <div style={{ color:C.warn, fontWeight:900, fontSize:"1rem" }}>{nextPayoutLabel}</div>
-                  <div style={{ color:C.dim, fontSize:"0.78rem" }}>≈ {nextPayout.estimatedSp.toFixed(3)} STEEM · {fmtUsd(nextPayout.estimatedUsd)}</div>
-                </div>
-              </>
-            )}
-            {pendingCuration.computedAt && (
-              <div style={{ color:C.faint, fontSize:"0.73rem", marginTop:"0.6rem" }}>
-                {t("cardDataAt")}: {new Date(pendingCuration.computedAt).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})} {t("cardUhr")}
-                {pendingCuration.sbdPerSteemUsed && (
-                  <span> · {pendingCuration.sbdPerSteemUsed.toFixed(4)} SBD/STEEM</span>
-                )}
+        ) : !dailyHistory || dailyHistory.days.length === 0 ? (
+          <div style={{ color:C.dim, fontSize:"0.88rem" }}>{t("emptyNoVotesToday")}</div>
+        ) : (() => {
+          const { days: pts, summary: sum } = dailyHistory;
+          const today = new Date().toISOString().slice(0, 10);
+          const totalCur = (sum.totalWeightBps / 10000) * voteUsd * 0.25;
+          const avgCurPerVote = sum.totalVotes > 0 ? totalCur / sum.totalVotes : 0;
+          return (
+            <>
+              <div style={{ overflowX:"auto" }}>
+                <table style={{ borderCollapse:"collapse", width:"100%", fontSize:"0.8rem" }}>
+                  <thead>
+                    <tr style={{ borderBottom:`1px solid ${C.border}` }}>
+                      <th style={{ textAlign:"left",  padding:"0.15rem 0.4rem 0.35rem", color:C.muted, fontWeight:600 }}>{t("cardHistoryDay")}</th>
+                      <th style={{ textAlign:"right", padding:"0.15rem 0.4rem 0.35rem", color:C.muted, fontWeight:600 }}>{t("cardHistoryVotes")}</th>
+                      <th style={{ textAlign:"right", padding:"0.15rem 0.4rem 0.35rem", color:C.muted, fontWeight:600 }}>{t("cardHistoryAuthors")}</th>
+                      <th style={{ textAlign:"right", padding:"0.15rem 0.4rem 0.35rem", color:C.muted, fontWeight:600 }}>{t("cardHistoryCuration")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pts.map((d, i) => {
+                      const estCur  = (d.total_weight_bps / 10000) * voteUsd * 0.25;
+                      const isToday = d.day === today;
+                      const label   = isToday ? t("cardHistoryToday") : d.day.slice(5);
+                      const isBest  = sum.bestDay?.day === d.day && pts.filter(p => p.votes > 0).length > 1;
+                      return (
+                        <tr key={d.day} style={{
+                          borderTop: i > 0 ? `1px solid ${C.border}` : undefined,
+                          background: isToday ? C.info + "08" : undefined,
+                        }}>
+                          <td style={{ padding:"0.22rem 0.4rem", color: isToday ? C.info : C.dim, fontWeight: isToday ? 700 : 400 }}>
+                            {label}{isBest ? <span style={{ color:C.ok, fontSize:"0.68rem", marginLeft:"0.3rem" }}>↑</span> : null}
+                          </td>
+                          <td style={{ padding:"0.22rem 0.4rem", textAlign:"right", color:C.text, fontVariantNumeric:"tabular-nums" }}>{d.votes}</td>
+                          <td style={{ padding:"0.22rem 0.4rem", textAlign:"right", color:C.text, fontVariantNumeric:"tabular-nums" }}>{d.unique_authors}</td>
+                          <td style={{ padding:"0.22rem 0.4rem", textAlign:"right", color:C.ok, fontVariantNumeric:"tabular-nums", fontWeight:600 }}>
+                            {estCur > 0 ? `≈${fmtUsd(estCur)}` : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-            )}
-            {pendingCuration.debug && <PendingDebugPanel data={pendingCuration} t={t} />}
-          </>
-        )}
+
+              {/* ── Aggregatzeile ── */}
+              <div style={{ marginTop:"0.65rem", borderTop:`2px solid ${C.border}`, paddingTop:"0.55rem" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:"0.3rem" }}>
+                  <span style={{ color:C.muted, fontSize:"0.72rem", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.04em" }}>{t("cardHistoryTotal")}</span>
+                  {avgCurPerVote > 0 && (
+                    <span style={{ color:C.purple, fontSize:"0.73rem", fontWeight:600 }}>
+                      Ø {fmtUsd(avgCurPerVote)} / Vote
+                    </span>
+                  )}
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"0.3rem 0.5rem" }}>
+                  <div style={{ textAlign:"center", background:C.info+"0d", borderRadius:"6px", padding:"0.3rem 0.2rem" }}>
+                    <div style={{ color:C.info, fontSize:"1.2rem", fontWeight:900, lineHeight:1 }}>{sum.totalVotes}</div>
+                    <div style={{ color:C.muted, fontSize:"0.65rem", marginTop:"0.1rem" }}>{t("cardHistoryVotes")}</div>
+                  </div>
+                  <div style={{ textAlign:"center", background:C.text+"08", borderRadius:"6px", padding:"0.3rem 0.2rem" }}>
+                    <div style={{ color:C.text, fontSize:"1.2rem", fontWeight:900, lineHeight:1 }}>{sum.totalUniqueAuthors}</div>
+                    <div style={{ color:C.muted, fontSize:"0.65rem", marginTop:"0.1rem" }}>{t("cardHistoryAuthors")}</div>
+                  </div>
+                  <div style={{ textAlign:"center", background:C.ok+"0d", borderRadius:"6px", padding:"0.3rem 0.2rem" }}>
+                    <div style={{ color:C.ok, fontSize:"1.2rem", fontWeight:900, lineHeight:1 }}>{totalCur > 0 ? `≈${fmtUsd(totalCur)}` : "—"}</div>
+                    <div style={{ color:C.muted, fontSize:"0.65rem", marginTop:"0.1rem" }}>{t("cardHistoryCuration")}</div>
+                  </div>
+                </div>
+              </div>
+            </>
+          );
+        })()}
       </div>
 
       {/* ── VoteBroker Lifetime ── */}
@@ -918,6 +953,7 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
                     {t("cardAttributionSince")} {since}
                   </div>
                 )}
+                {pendingCuration?.debug && <PendingDebugPanel data={pendingCuration} t={t} />}
               </>
             )}
           </div>
@@ -1712,6 +1748,9 @@ export function UserDashboard(props: {
   const [pendingCuration,  setPendingCuration]  =useState<PendingCuration|null>(null);
   const [pendingLoading,   setPendingLoading]   =useState(true);
 
+  const [dailyHistory,      setDailyHistory]      =useState<DailyHistoryResult|null>(null);
+  const [dailyHistoryLoading, setDailyHistoryLoading] =useState(true);
+
   // Lifetime VoteBroker earnings — fetched once, not period-dependent
   const [lifetimeEarnings, setLifetimeEarnings] =useState<VBEarningsResult|null>(null);
 
@@ -1727,6 +1766,12 @@ export function UserDashboard(props: {
       .then(setPendingCuration).catch(()=>setPendingCuration(null)).finally(()=>setPendingLoading(false));
   };
 
+  const loadDailyHistory = () => {
+    setDailyHistoryLoading(true);
+    fetchDailyHistory(props.session.token, 7)
+      .then(setDailyHistory).catch(()=>setDailyHistory(null)).finally(()=>setDailyHistoryLoading(false));
+  };
+
   useEffect(()=>{
     setGrowthLoading(true);
     fetchGrowthData(props.session.token,growthPeriod)
@@ -1736,6 +1781,7 @@ export function UserDashboard(props: {
   useEffect(()=>{
     loadTodayStats();
     loadPendingCuration();
+    loadDailyHistory();
     // Lifetime fetch — "all" period, run once
     fetchVBEarnings(props.session.token, "all")
       .then(setLifetimeEarnings).catch(()=>{});
@@ -1751,6 +1797,7 @@ export function UserDashboard(props: {
     if (voteExecCount === 0) return;
     loadTodayStats();
     loadPendingCuration();
+    loadDailyHistory();
     const t = setTimeout(() => {
       fetchVBEarnings(props.session.token, "all")
         .then(setLifetimeEarnings).catch(()=>{});
@@ -1797,6 +1844,7 @@ export function UserDashboard(props: {
         snapshot={snapshot}
         todayStats={todayStats} todayLoading={todayLoading}
         pendingCuration={pendingCuration} pendingLoading={pendingLoading}
+        dailyHistory={dailyHistory} dailyHistoryLoading={dailyHistoryLoading}
         lifetimeEarnings={lifetimeEarnings}
         t={t}
       />
