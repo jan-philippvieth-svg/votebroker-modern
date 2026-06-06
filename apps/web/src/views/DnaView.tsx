@@ -2,7 +2,7 @@
 // Extracted from App.tsx — DNA analysis, strategy editing, vote planning UI
 
 import React, { useState, useEffect } from "react";
-import { Search, Dna as DnaIcon } from "lucide-react";
+import { Search, Dna as DnaIcon, UsersRound, Settings, BarChart2 } from "lucide-react";
 import { createTranslator, type Locale, type TranslationKey } from "../i18n";
 import type {
   CurationProfile,
@@ -89,6 +89,44 @@ function InlineStrategyEditor(props: {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Workflow Bar ─────────────────────────────────────────────────────────────
+// Compact 4-step process visualization, max ~90px tall.
+// Shows how VoteBroker works without dominating the analytics below.
+
+function WorkflowBar({ onNavigate, t }: {
+  onNavigate: (tab: "community" | "dna" | "dashboard") => void;
+  t: ReturnType<typeof createTranslator>;
+}) {
+  const steps = [
+    { Icon: UsersRound, title: t("stepCommunity"), desc: t("stepCommunityDesc"), tab: "community" as const, color: "#7c3aed" },
+    { Icon: DnaIcon,    title: t("stepDna"),       desc: t("stepDnaDesc"),       tab: "dna"       as const, color: "#2563eb" },
+    { Icon: Settings,   title: t("stepStrategy"),  desc: t("stepStrategyDesc"),  tab: "dna"       as const, color: "#16a34a" },
+    { Icon: BarChart2,  title: t("stepDashboard"), desc: t("stepDashboardDesc"), tab: "dashboard" as const, color: "#d97706" },
+  ];
+  return (
+    <div style={{ display:"grid", gridTemplateColumns:"1fr auto 1fr auto 1fr auto 1fr", alignItems:"center", background:"#fafbfc", borderRadius:"12px", border:"1px solid #e8eef2" }}>
+      {steps.map((step, i) => (
+        <React.Fragment key={step.title}>
+          <button
+            type="button"
+            onClick={() => onNavigate(step.tab)}
+            style={{ display:"flex", alignItems:"center", gap:"0.6rem", padding:"0.65rem 0.85rem", background:"none", border:"none", cursor:"pointer", borderRadius:"10px", textAlign:"left" as const, minWidth:0 }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background=`${step.color}08`; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background="none"; }}
+          >
+            <step.Icon size={16} color={step.color} strokeWidth={1.75} style={{ flexShrink:0 }} />
+            <div style={{ minWidth:0 }}>
+              <div style={{ color:step.color, fontWeight:700, fontSize:"0.78rem", lineHeight:1.2, whiteSpace:"nowrap" as const, overflow:"hidden", textOverflow:"ellipsis" }}>{step.title}</div>
+              <div style={{ color:"#607078", fontSize:"0.67rem", marginTop:"2px", lineHeight:1.3, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" as const, overflow:"hidden" }}>{step.desc}</div>
+            </div>
+          </button>
+          {i < 3 && <span style={{ color:"#c5d3da", fontSize:"0.9rem", userSelect:"none" as const }}>›</span>}
+        </React.Fragment>
+      ))}
     </div>
   );
 }
@@ -200,9 +238,10 @@ export function CurationDnaPanel(props: {
 
   if (!props.profile || props.profile.votesAnalyzed === 0) {
     return (
-      <div style={{ maxWidth: "860px", margin: "0 auto" }}>
+      <div style={{ maxWidth: "860px", margin: "0 auto", display: "flex", flexDirection: "column" as const, gap: "1.25rem" }}>
+        {props.onNavigate && <WorkflowBar onNavigate={tab => props.onNavigate!(tab as "community" | "dna" | "dashboard" | "billing" | "admin")} t={t} />}
         {/* Kein Daten-Hinweis */}
-        <div style={{ background: "linear-gradient(135deg, #f0f9ff 0%, #f8fbfc 100%)", border: "1px solid #bae6fd", borderRadius: "12px", padding: "1.5rem", marginBottom: "1.5rem", display: "flex", alignItems: "flex-start", gap: "1rem" }}>
+        <div style={{ background: "linear-gradient(135deg, #f0f9ff 0%, #f8fbfc 100%)", border: "1px solid #bae6fd", borderRadius: "12px", padding: "1.5rem", display: "flex", alignItems: "flex-start", gap: "1rem" }}>
           <DnaIcon size={24} color="#0369a1" strokeWidth={1.5} style={{ flexShrink: 0, marginTop: "2px" }} />
           <div>
             <strong style={{ color: "#0369a1", fontSize: "1rem", display: "block", marginBottom: "0.4rem" }}>
@@ -327,6 +366,9 @@ export function CurationDnaPanel(props: {
 
   return (
     <section style={{ padding: "1.5rem 2rem", display: "flex", flexDirection: "column" as const, gap: "1.25rem" }}>
+
+      {/* ── 0. Prozessvisualisierung ── */}
+      {props.onNavigate && <WorkflowBar onNavigate={tab => props.onNavigate!(tab as "community" | "dna" | "dashboard" | "billing" | "admin")} t={t} />}
 
       {/* ── 1. Analyse-Zusammenfassung ── */}
       <div style={{ display: "flex", alignItems: "center", gap: "1.5rem", padding: "1rem 1.25rem", background: "linear-gradient(135deg, #f5f0ff 0%, #ffffff 60%, #edfbf9 100%)", borderRadius: "12px", border: "1px solid #e0d4fc", flexWrap: "wrap" as const }}>
