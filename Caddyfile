@@ -9,6 +9,9 @@ votebroker.org, www.votebroker.org {
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
 	}
 
+	@docs_noslash path /api/docs
+	redir @docs_noslash /api/docs/ 301
+
 	handle /api/* {
 		reverse_proxy api:3000
 	}
