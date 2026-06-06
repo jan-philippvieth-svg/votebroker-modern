@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { OnboardingFlow } from "./OnboardingFlow";
+import { Users, Dna, Target, type LucideIcon } from "lucide-react";
 import type {
   AuthSession, CurationProfile, DailyEarnings, GrowthData,
   OpportunitiesMeta, PendingCuration, PendingDebugPost, PostOpportunity,
@@ -331,6 +331,46 @@ function CommunityGrowthChart({ growth, growthLoading, growthPeriod, setGrowthPe
   );
 }
 
+
+// ── Contextual Hints ─────────────────────────────────────────────────────────
+// Small action chips, rendered only when a setup step is missing.
+// When all conditions are met the component returns null — zero space taken.
+
+function ContextualHints({ hasCommunity, hasDna, hasStrategy, onTabChange, t }: {
+  hasCommunity: boolean;
+  hasDna: boolean;
+  hasStrategy: boolean;
+  onTabChange: (tab: "dna" | "dashboard" | "community" | "billing") => void;
+  t: ReturnType<typeof createTranslator>;
+}) {
+  const hints: Array<{ icon: LucideIcon; label: string; tab: "community" | "dna"; color: string }> = [];
+  if (!hasCommunity) hints.push({ icon: Users,  label: t("stepCommunity"), tab: "community", color: C.purple });
+  if (!hasDna)       hints.push({ icon: Dna,    label: t("stepDna"),       tab: "dna",       color: C.info   });
+  if (!hasStrategy)  hints.push({ icon: Target, label: t("stepStrategy"),  tab: "dna",       color: C.ok     });
+  if (hints.length === 0) return null;
+  return (
+    <div style={{ display:"flex", gap:"0.5rem", flexWrap:"wrap" as const }}>
+      {hints.map(h => {
+        const Icon = h.icon;
+        return (
+          <button key={h.label} type="button" onClick={() => onTabChange(h.tab)}
+            style={{
+              display:"flex", alignItems:"center", gap:"0.4rem",
+              padding:"0.35rem 0.8rem",
+              background:`${h.color}10`, border:`1px solid ${h.color}30`,
+              borderRadius:"20px", color:h.color,
+              cursor:"pointer", fontSize:"0.78rem", fontWeight:700,
+              transition:"background 0.12s",
+            }}
+          >
+            <Icon size={12} strokeWidth={2} />
+            {h.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 // ── Relationships Panel ───────────────────────────────────────────────────────
 
@@ -1567,7 +1607,7 @@ function AuthorGrid({ rules, openOpps, snapshot, dnaMap, onTabChange, t }: {
 }) {
   if (rules.length===0) return (
     <div style={{ ...card, textAlign:"center", padding:"2rem" }}>
-      <div style={{ fontSize:"2rem", marginBottom:"0.6rem" }}>🧬</div>
+      <div style={{ display:"flex", justifyContent:"center", marginBottom:"0.6rem" }}><Dna size={28} color={C.info} strokeWidth={1.5} /></div>
       <p style={{ color:C.text, fontSize:"0.88rem", margin:"0 0 0.85rem", fontWeight:600 }}>{t("emptyAuthors")}</p>
       <button type="button" onClick={()=>onTabChange("dna")} style={{ background:C.info+"15", border:`1px solid ${C.info}40`, borderRadius:"8px", color:C.info, cursor:"pointer", fontSize:"0.82rem", padding:"0.45rem 1rem", fontWeight:700 }}>{t("btnAnalyzeDna")}</button>
     </div>
@@ -1727,7 +1767,7 @@ export function UserDashboard(props: {
         ? <CommunityHero profile={curationProfile} growth={growthData} todayStats={todayStats} snapshot={snapshot} t={t}/>
         : (
           <div style={{ ...card, display:"flex", alignItems:"center", gap:"0.85rem", padding:"1.1rem 1.5rem" }}>
-            <span style={{ fontSize:"1.6rem" }}>🧬</span>
+            <Dna size={22} color={C.info} strokeWidth={1.5} style={{ flexShrink:0 }} />
             <span style={{ color:C.muted, fontSize:"0.88rem", flex:1, lineHeight:1.5 }}>{t("emptyDnaHint")}</span>
             <button type="button" onClick={()=>props.onTabChange("dna")} style={{ background:C.info+"15", border:`1px solid ${C.info}40`, borderRadius:"8px", color:C.info, cursor:"pointer", fontSize:"0.82rem", padding:"0.45rem 1rem", fontWeight:700, flexShrink:0 }}>{t("btnAnalyzeDna")}</button>
           </div>
@@ -1769,12 +1809,17 @@ export function UserDashboard(props: {
         </div>
       )}
 
-      {/* 3+4. Workflow Guide | Beziehungen | Aktivität */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"1.5rem", alignItems:"start" }}>
-        <div style={card}>
-          <p style={lbl}>{t("secWorkflowGuide")}</p>
-          <OnboardingFlow onTabChange={props.onTabChange} t={t}/>
-        </div>
+      {/* Adaptive Guidance — only rendered when a setup step is missing */}
+      <ContextualHints
+        hasCommunity={totalAuthors > 0}
+        hasDna={curationProfile !== null}
+        hasStrategy={strategyRules !== null}
+        onTabChange={props.onTabChange}
+        t={t}
+      />
+
+      {/* 3+4. Beziehungen | Aktivität */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"1.5rem", alignItems:"start" }}>
         <div style={card}>
           <p style={lbl}>{t("secRelationships")}</p>
           {dnaAuthors.length>0

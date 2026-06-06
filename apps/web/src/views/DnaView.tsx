@@ -21,7 +21,6 @@ import {
   computeDynamicWeights,
   generateStrategyFromProfile,
 } from "./strategyTypes";
-import { OnboardingFlow } from "./OnboardingFlow";
 import {
   type VoteBatchResult,
   type VoteTarget,
@@ -202,15 +201,6 @@ export function CurationDnaPanel(props: {
   if (!props.profile || props.profile.votesAnalyzed === 0) {
     return (
       <div style={{ maxWidth: "860px", margin: "0 auto" }}>
-        {/* Workflow-Guide */}
-        <div style={{ background: "#ffffff", border: "1px solid #e0d4fc", borderRadius: "16px", padding: "1.5rem", marginBottom: "1.5rem" }}>
-          <p style={{ color: "#607078", fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.8px", margin: "0 0 1rem" }}>
-            {t("secWorkflowGuide")}
-          </p>
-          {props.onNavigate && (
-            <OnboardingFlow onTabChange={tab => props.onNavigate!(tab as "community" | "dna" | "dashboard" | "billing" | "admin")} t={t} />
-          )}
-        </div>
         {/* Kein Daten-Hinweis */}
         <div style={{ background: "linear-gradient(135deg, #f0f9ff 0%, #f8fbfc 100%)", border: "1px solid #bae6fd", borderRadius: "12px", padding: "1.5rem", marginBottom: "1.5rem", display: "flex", alignItems: "flex-start", gap: "1rem" }}>
           <DnaIcon size={24} color="#0369a1" strokeWidth={1.5} style={{ flexShrink: 0, marginTop: "2px" }} />
@@ -337,16 +327,6 @@ export function CurationDnaPanel(props: {
 
   return (
     <section style={{ padding: "1.5rem 2rem", display: "flex", flexDirection: "column" as const, gap: "1.25rem" }}>
-
-      {/* ── 0. Workflow-Guide ── */}
-      {props.onNavigate && (
-        <div style={{ background: "#ffffff", border: "1px solid #e0d4fc", borderRadius: "16px", padding: "1.25rem 1.5rem" }}>
-          <p style={{ color: "#8fa4b0", fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.8px", margin: "0 0 0.85rem" }}>
-            {t("secWorkflowGuide")}
-          </p>
-          <OnboardingFlow onTabChange={tab => props.onNavigate!(tab as "community" | "dna" | "dashboard" | "billing" | "admin")} t={t} />
-        </div>
-      )}
 
       {/* ── 1. Analyse-Zusammenfassung ── */}
       <div style={{ display: "flex", alignItems: "center", gap: "1.5rem", padding: "1rem 1.25rem", background: "linear-gradient(135deg, #f5f0ff 0%, #ffffff 60%, #edfbf9 100%)", borderRadius: "12px", border: "1px solid #e0d4fc", flexWrap: "wrap" as const }}>
