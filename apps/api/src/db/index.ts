@@ -214,20 +214,63 @@ function initSchema(db: Database): void {
     -- Raw vote-level detail for timing enrichment (populated during whale scan)
     -- Enrichment pass fetches get_content per permlink and computes vote_delay_min
     CREATE TABLE IF NOT EXISTS vb_whale_vote_details (
-      whale            TEXT NOT NULL,
-      author           TEXT NOT NULL,
-      permlink         TEXT NOT NULL,
-      voted_at         TEXT NOT NULL,
-      vote_weight_bps  INTEGER,
-      vote_delay_min   REAL,          -- NULL until enriched via get_content
-      post_created_at  TEXT,          -- NULL until enriched
-      enriched_at      TEXT,          -- NULL until enriched
+      whale                TEXT NOT NULL,
+      author               TEXT NOT NULL,
+      permlink             TEXT NOT NULL,
+      voted_at             TEXT NOT NULL,
+      vote_weight_bps      INTEGER,
+      vote_delay_min       REAL,       -- NULL until enriched via get_content
+      post_created_at      TEXT,       -- NULL until enriched
+      total_payout_sbd     REAL,       -- NULL until enriched (total_payout_value)
+      curator_payout_sbd   REAL,       -- NULL until enriched (curator_payout_value)
+      pending_payout_sbd   REAL,       -- NULL until enriched (pending if not paid out yet)
+      post_community       TEXT,       -- NULL until enriched (category / parent_permlink)
+      enriched_at          TEXT,       -- NULL until enriched
       PRIMARY KEY (whale, author, permlink)
     );
     CREATE INDEX IF NOT EXISTS idx_whale_details_enrichment
       ON vb_whale_vote_details(whale, author) WHERE enriched_at IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_whale_details_voted_at
+      ON vb_whale_vote_details(whale, voted_at DESC);
     CREATE INDEX IF NOT EXISTS idx_whale_signals_author ON vb_whale_author_signals(author);
     CREATE INDEX IF NOT EXISTS idx_whale_signals_whale  ON vb_whale_author_signals(whale);
+
+    -- Signal Layer — computed nightly from enriched whale data
+    -- These tables are the foundation for DNA author suggestions and Autopilot decisions.
+    CREATE TABLE IF NOT EXISTS vb_signal_author (
+      author              TEXT PRIMARY KEY,
+      -- Payout quality (from enriched whale_vote_details)
+      avg_payout_sbd      REAL,
+      median_payout_sbd   REAL,
+      p75_payout_sbd      REAL,
+      avg_curator_sbd     REAL,
+      -- Whale activity
+      whale_count         INTEGER,       -- distinct whales voting this author
+      whale_follow_rate   REAL,          -- fraction of posts with ≥1 whale vote (0-1)
+      top_whales          TEXT,          -- JSON array of top 3 whale names
+      -- Optimal vote timing (when do whales arrive?)
+      p25_delay_min       REAL,
+      p50_delay_min       REAL,
+      p75_delay_min       REAL,
+      optimal_window      TEXT,          -- "5-30min" | "30-120min" | "2-6h" | "6h+" | "variabel"
+      -- Meta
+      sample_posts        INTEGER,
+      data_days           INTEGER,       -- days of data this was computed from
+      computed_at         TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_signal_author_whale_rate ON vb_signal_author(whale_follow_rate DESC);
+    CREATE INDEX IF NOT EXISTS idx_signal_author_payout     ON vb_signal_author(avg_payout_sbd DESC);
+
+    CREATE TABLE IF NOT EXISTS vb_signal_community (
+      community           TEXT PRIMARY KEY,
+      avg_payout_sbd      REAL,
+      median_payout_sbd   REAL,
+      avg_curator_sbd     REAL,
+      whale_activity      REAL,          -- avg distinct whales per post
+      posts_sampled       INTEGER,
+      computed_at         TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_signal_community_payout ON vb_signal_community(avg_payout_sbd DESC);
 
     -- Global vote outcome analytics index.
     -- Source of truth: Steem blockchain. This table is a reconstructable cache.
@@ -294,6 +337,15 @@ function runMigrations(db: Database): void {
       if (!outcomesCols.includes("reward_trx_id"))   db.exec("ALTER TABLE vb_vote_outcomes ADD COLUMN reward_trx_id TEXT");
       if (!outcomesCols.includes("reward_block_num")) db.exec("ALTER TABLE vb_vote_outcomes ADD COLUMN reward_block_num INTEGER");
     }
+    // vb_whale_vote_details: enrichment payout columns (added for Signal Layer)
+    const wvdCols = (db.prepare("PRAGMA table_info(vb_whale_vote_details)").all() as Array<{name:string}>).map(c=>c.name);
+    if (wvdCols.length > 0) {
+      if (!wvdCols.includes("total_payout_sbd"))   db.exec("ALTER TABLE vb_whale_vote_details ADD COLUMN total_payout_sbd REAL");
+      if (!wvdCols.includes("curator_payout_sbd")) db.exec("ALTER TABLE vb_whale_vote_details ADD COLUMN curator_payout_sbd REAL");
+      if (!wvdCols.includes("pending_payout_sbd")) db.exec("ALTER TABLE vb_whale_vote_details ADD COLUMN pending_payout_sbd REAL");
+      if (!wvdCols.includes("post_community"))     db.exec("ALTER TABLE vb_whale_vote_details ADD COLUMN post_community TEXT");
+    }
+
     // vb_global_vote_outcomes: post-context columns for copilot training data
     const gvoCols = (db.prepare("PRAGMA table_info(vb_global_vote_outcomes)").all() as Array<{name:string}>).map(c=>c.name);
     if (gvoCols.length > 0) {

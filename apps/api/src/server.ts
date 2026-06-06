@@ -13,6 +13,9 @@ import { startDailyFeePostScheduler, runDailyFeePost } from "./jobs/dailyFeePost
 import { startDailyDevlogScheduler, generateDevlogDraft } from "./jobs/dailyDevlog.js";
 import { startVpSampler } from "./jobs/vpSampler.js";
 import { startPriceSampler } from "./jobs/priceSampler.js";
+import { startWhaleEnrichment } from "./jobs/whaleEnrichment.js";
+import { startSignalCompute } from "./jobs/signalCompute.js";
+import { scanWhaleHistory } from "./chain/whaleHistoryScanner.js";
 import { registerContentRoutes } from "./admin/contentRoutes.js";
 import { registerStrategyRoutes } from "./strategy/routes.js";
 
@@ -77,3 +80,10 @@ startVpSampler(app.log as unknown as typeof console);
 
 // Start daily price sampler — fetches STEEM/SBD USD prices from CoinGecko (fallback: Steem feed)
 startPriceSampler(app.log as unknown as typeof console);
+
+// Signal Layer: historical whale scan → enrichment → nightly signal compute
+// Scan runs in background (rate-limited, can take minutes); non-blocking
+const log = app.log as unknown as typeof console;
+scanWhaleHistory(log).catch(e => log.warn("[WhaleHistory] startup scan error:", e));
+startWhaleEnrichment(log);
+startSignalCompute(log);

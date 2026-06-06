@@ -467,4 +467,86 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
     insights:      getPlatformInsights(),
     notifications: getNotifications()
   }));
+
+  // ── Signal Layer admin endpoints ────────────────────────────────────────────
+
+  app.get("/api/admin/signal-status", { schema: { tags: ["Admin"], summary: "Signal Layer Datenstatus" } }, async (request, reply) => {
+    if (!requireAdmin(request)) return reply.code(403).send({ error: "forbidden" });
+    const db = getDb();
+    const wvd = db.prepare(`
+      SELECT
+        COUNT(*)                                              AS total,
+        SUM(CASE WHEN enriched_at IS NOT NULL THEN 1 ELSE 0 END) AS enriched,
+        SUM(CASE WHEN enriched_at IS NULL     THEN 1 ELSE 0 END) AS pending,
+        MIN(voted_at) AS oldest_vote,
+        MAX(voted_at) AS newest_vote
+      FROM vb_whale_vote_details
+    `).get() as { total: number; enriched: number; pending: number; oldest_vote: string; newest_vote: string };
+
+    const authors    = (db.prepare("SELECT COUNT(*) AS n FROM vb_signal_author").get()    as { n: number })?.n ?? 0;
+    const communities = (db.prepare("SELECT COUNT(*) AS n FROM vb_signal_community").get() as { n: number })?.n ?? 0;
+    const lastComputed = (db.prepare("SELECT MAX(computed_at) AS v FROM vb_signal_author").get() as { v: string | null })?.v;
+
+    return {
+      whale_vote_details: {
+        total:       wvd.total,
+        enriched:    wvd.enriched,
+        pending:     wvd.pending,
+        oldest_vote: wvd.oldest_vote,
+        newest_vote: wvd.newest_vote,
+        enrichment_rate: wvd.total > 0 ? Math.round((wvd.enriched / wvd.total) * 1000) / 10 : 0,
+      },
+      signals: {
+        authors,
+        communities,
+        last_computed: lastComputed ?? null,
+      },
+    };
+  });
+
+  app.post("/api/admin/signal-scan", { schema: { tags: ["Admin"], summary: "Whale History Scan + Enrichment + Signal Compute triggern" } }, async (request, reply) => {
+    if (!requireAdmin(request)) return reply.code(403).send({ error: "forbidden" });
+
+    // Fire-and-forget — returns immediately, jobs run in background
+    import("../chain/whaleHistoryScanner.js").then(({ scanWhaleHistory }) =>
+      scanWhaleHistory(console).catch(e => console.warn("[WhaleHistory] triggered scan error:", e))
+    ).catch(() => {});
+
+    import("../jobs/whaleEnrichment.js").then(({ runWhaleEnrichment }) =>
+      runWhaleEnrichment(500, console).catch(e => console.warn("[WhaleEnrich] triggered error:", e))
+    ).catch(() => {});
+
+    import("../jobs/signalCompute.js").then(({ runSignalCompute }) =>
+      runSignalCompute(console).catch(e => console.warn("[SignalCompute] triggered error:", e))
+    ).catch(() => {});
+
+    return { status: "started", message: "Whale scan + enrichment + signal compute running in background" };
+  });
+
+  app.get("/api/admin/signal-authors", { schema: { tags: ["Admin"], summary: "Top Autoren nach Signal Layer Score" } }, async (request, reply) => {
+    if (!requireAdmin(request)) return reply.code(403).send({ error: "forbidden" });
+    const db  = getDb();
+    const rows = db.prepare(`
+      SELECT author, whale_count, whale_follow_rate, avg_payout_sbd, median_payout_sbd,
+             p25_delay_min, p50_delay_min, p75_delay_min, optimal_window,
+             sample_posts, top_whales, computed_at
+      FROM vb_signal_author
+      ORDER BY whale_count DESC, avg_payout_sbd DESC
+      LIMIT 100
+    `).all();
+    return { authors: rows };
+  });
+
+  app.get("/api/admin/signal-communities", { schema: { tags: ["Admin"], summary: "Communities nach Signal Layer Score" } }, async (request, reply) => {
+    if (!requireAdmin(request)) return reply.code(403).send({ error: "forbidden" });
+    const db   = getDb();
+    const rows = db.prepare(`
+      SELECT community, avg_payout_sbd, median_payout_sbd, avg_curator_sbd,
+             whale_activity, posts_sampled, computed_at
+      FROM vb_signal_community
+      ORDER BY avg_payout_sbd DESC
+      LIMIT 100
+    `).all();
+    return { communities: rows };
+  });
 }
