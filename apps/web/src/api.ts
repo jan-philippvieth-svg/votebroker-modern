@@ -248,6 +248,32 @@ export async function signOut(token: string): Promise<void> {
   });
 }
 
+export async function getKeychainChallenge(): Promise<{ nonce: string; expiresAt: number }> {
+  const res = await fetch(`${API_BASE}/api/auth/keychain/challenge`);
+  if (!res.ok) throw new Error("Challenge konnte nicht angefordert werden.");
+  return res.json();
+}
+
+export async function verifyKeychainLogin(payload: {
+  username: string;
+  nonce: string;
+  signature: string;
+}): Promise<AuthSession> {
+  const res = await fetch(`${API_BASE}/api/auth/keychain/verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const code = (body as { error?: string }).error ?? "keychain_auth_failed";
+    if (code === "invalid_signature") throw new Error("Signatur ungültig — falsches Konto oder Key?");
+    if (code === "invalid_or_expired_challenge") throw new Error("Challenge abgelaufen. Bitte erneut versuchen.");
+    throw new Error("Keychain-Login fehlgeschlagen.");
+  }
+  return res.json();
+}
+
 export async function getConsentCatalog(): Promise<ConsentRecord[]> {
   const response = await fetch(`${API_BASE}/api/consents/catalog`);
   if (!response.ok) {

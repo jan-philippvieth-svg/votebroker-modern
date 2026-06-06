@@ -66,6 +66,8 @@ import {
   getPersistedStrategy,
   getVoteOpportunities,
   getSteemConnectUrl,
+  getKeychainChallenge,
+  verifyKeychainLogin,
   persistStrategy,
   type ConstraintReport,
   type VotePlanEntry,
@@ -221,6 +223,7 @@ export function App() {
   const [hasAuthority, setHasAuthority] = useState<boolean | null>(null);
   const [authorityGrantUrl, setAuthorityGrantUrl] = useState("");
   const [keychainAvailable, setKeychainAvailable] = useState<boolean | null>(null);
+  const [keychainUsername, setKeychainUsername] = useState("");
   const [accountSnapshot, setAccountSnapshot] = useState<SteemAccountSnapshot | null>(null);
   const [snapshotLoading, setSnapshotLoading] = useState(false);
   const [curationProfile, setCurationProfile] = useState<CurationProfile | null>(null);
@@ -712,6 +715,37 @@ export function App() {
     }
   }
 
+  async function connectKeychain() {
+    const username = keychainUsername.replace(/^@/, "").toLowerCase().trim();
+    if (!username || !window.steem_keychain) return;
+    setAuthLoading(true);
+    setAuthError(null);
+    try {
+      const { nonce } = await getKeychainChallenge();
+      const signature = await new Promise<string>((resolve, reject) => {
+        window.steem_keychain!.requestSignBuffer(
+          username,
+          nonce,
+          "Posting",
+          (resp) => {
+            if (resp.success && resp.result) resolve(resp.result);
+            else reject(new Error(resp.error ?? resp.message ?? "Keychain signing abgebrochen."));
+          },
+          null,
+          "VoteBroker Login"
+        );
+      });
+      const nextSession = await verifyKeychainLogin({ username, nonce, signature });
+      setSession(nextSession);
+      setUsername(nextSession.user.username);
+      window.localStorage.setItem("votebroker.session", JSON.stringify(nextSession));
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : "Keychain-Login fehlgeschlagen.");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
   async function disconnect() {
     if (session) {
       await signOut(session.token);
@@ -872,20 +906,57 @@ export function App() {
             </div>
           )}
 
-          {/* CTA */}
+          {/* CTA — Keychain if available, SteemLogin as fallback */}
+          {keychainAvailable && (
+            <div style={{ marginBottom: "0.75rem" }}>
+              <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                <input
+                  type="text"
+                  placeholder={t("loginUsernamePlaceholder")}
+                  value={keychainUsername}
+                  onChange={e => setKeychainUsername(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && connectKeychain()}
+                  disabled={authLoading}
+                  style={{ flex: 1, background: "#f8fbfc", border: "1px solid #dde8ed", borderRadius: "8px", color: "#17202a", fontSize: "0.95rem", padding: "0.75rem 1rem" }}
+                />
+                <button
+                  className="secondary-button"
+                  disabled={authLoading || !keychainUsername.trim()}
+                  type="button"
+                  onClick={connectKeychain}
+                  style={{ padding: "0.75rem 1.25rem", fontSize: "0.95rem", fontWeight: 700, borderRadius: "8px", whiteSpace: "nowrap" }}
+                >
+                  <ShieldCheck size={18} />
+                  {authLoading ? t("loginKeychainSigning") : t("loginWithKeychain")}
+                </button>
+              </div>
+              <p style={{ color: "#16a34a", fontSize: "0.73rem", margin: 0, textAlign: "center" }}>
+                ✓ {t("loginKeychainHint")}
+              </p>
+            </div>
+          )}
+
+          {keychainAvailable && (
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", margin: "0.75rem 0" }}>
+              <hr style={{ flex: 1, border: "none", borderTop: "1px solid #dde8ed" }} />
+              <span style={{ color: "#8fa4b0", fontSize: "0.75rem" }}>{t("loginOrSeparator")}</span>
+              <hr style={{ flex: 1, border: "none", borderTop: "1px solid #dde8ed" }} />
+            </div>
+          )}
+
           <button
             className="secondary-button"
             disabled={authLoading}
-            style={{ width: "100%", justifyContent: "center", padding: "0.85rem 1.5rem", fontSize: "1rem", fontWeight: 700, borderRadius: "8px" }}
+            style={{ width: "100%", justifyContent: "center", padding: "0.85rem 1.5rem", fontSize: keychainAvailable ? "0.9rem" : "1rem", fontWeight: 700, borderRadius: "8px", opacity: keychainAvailable ? 0.8 : 1 }}
             type="button"
             onClick={connectSteem}
           >
             <ShieldCheck size={18} />
-            {authLoading ? t("connecting") : "Mit SteemLogin verbinden"}
+            {authLoading ? t("connecting") : t("loginWithSteemLogin")}
           </button>
 
           <p style={{ color: "#8fa4b0", fontSize: "0.73rem", marginTop: "0.85rem", textAlign: "center", lineHeight: 1.6 }}>
-            Login via SteemLogin (Posting Authority) · Kein Key-Speicher · Jederzeit widerrufbar
+            {t("loginSteemLoginHint")}
           </p>
         </div>
       </main>

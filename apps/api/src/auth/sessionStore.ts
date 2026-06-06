@@ -3,7 +3,7 @@ import { getDb } from "../db/index.js";
 
 export interface AuthUser {
   username: string;
-  provider: "steemconnect";
+  provider: "steemconnect" | "keychain";
   accessToken?: string;
 }
 

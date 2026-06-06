@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from "crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { grantConsent } from "../consent/consentStore.js";
@@ -5,6 +6,45 @@ import { createSession, deleteSession, getSession } from "./sessionStore.js";
 import { consumeAuthState, createAuthState } from "./stateStore.js";
 import { completeSteemConnectAccessToken, exchangeSteemConnectCode, getSteemConnectLoginUrl } from "./steemConnect.js";
 import { buildAuthorityGrantUrl } from "./steemConnectConfig.js";
+import { createSteemClient } from "../chain/steemBroadcaster.js";
+
+// ── Keychain challenge store (in-memory, TTL 5 min) ──────────────────────────
+const keychainChallenges = new Map<string, { nonce: string; expiresAt: number }>();
+
+function createKeychainChallenge(): { nonce: string; expiresAt: number } {
+  const nonce = randomBytes(32).toString("hex");
+  const expiresAt = Date.now() + 5 * 60 * 1000;
+  keychainChallenges.set(nonce, { nonce, expiresAt });
+  // Clean up expired challenges
+  for (const [key, val] of keychainChallenges) {
+    if (val.expiresAt < Date.now()) keychainChallenges.delete(key);
+  }
+  return { nonce, expiresAt };
+}
+
+function consumeKeychainChallenge(nonce: string): boolean {
+  const entry = keychainChallenges.get(nonce);
+  if (!entry || entry.expiresAt < Date.now()) return false;
+  keychainChallenges.delete(nonce);
+  return true;
+}
+
+async function verifyKeychainSignature(username: string, nonce: string, signature: string): Promise<boolean> {
+  try {
+    const { Signature } = await import("dsteem");
+    const client = createSteemClient();
+    const [account] = await client.database.getAccounts([username]);
+    if (!account) return false;
+
+    const postingKeys: string[] = account.posting.key_auths.map(([key]) => String(key));
+    const hash = createHash("sha256").update(nonce).digest();
+    const sig = Signature.fromString(signature);
+    const recoveredKey = sig.recover(hash).toString();
+    return postingKeys.includes(recoveredKey);
+  } catch {
+    return false;
+  }
+}
 
 const callbackSchema = z.object({
   code: z.string().min(1).optional(),
@@ -90,6 +130,45 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   app.post("/api/auth/signout", async (request) => {
     deleteSession(getSessionHeader(request.headers.session));
     return { ok: true };
+  });
+
+  // ── Keychain Login — Phase 3 ─────────────────────────────────────────────
+
+  app.get("/api/auth/keychain/challenge", async () => {
+    return createKeychainChallenge();
+  });
+
+  const keychainVerifySchema = z.object({
+    username: z.string().min(1).max(64),
+    nonce:    z.string().min(64).max(64),
+    signature: z.string().min(1)
+  });
+
+  app.post("/api/auth/keychain/verify", async (request, reply) => {
+    const input = keychainVerifySchema.safeParse(request.body);
+    if (!input.success) {
+      return reply.code(400).send({ error: "invalid_request", detail: input.error.flatten() });
+    }
+
+    const { username, nonce, signature } = input.data;
+
+    if (!consumeKeychainChallenge(nonce)) {
+      return reply.code(403).send({ error: "invalid_or_expired_challenge" });
+    }
+
+    const valid = await verifyKeychainSignature(username, nonce, signature);
+    if (!valid) {
+      return reply.code(401).send({ error: "invalid_signature" });
+    }
+
+    const session = createSession({ username, provider: "keychain" });
+    grantConsent(username, "login");
+
+    return {
+      token: session.token,
+      expiry: session.expiry,
+      user: { username: session.user.username, provider: session.user.provider }
+    };
   });
 }
 
