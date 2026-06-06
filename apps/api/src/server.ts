@@ -14,6 +14,7 @@ import { startDailyDevlogScheduler, generateDevlogDraft } from "./jobs/dailyDevl
 import { startVpSampler } from "./jobs/vpSampler.js";
 import { startPriceSampler } from "./jobs/priceSampler.js";
 import { startWhaleEnrichment } from "./jobs/whaleEnrichment.js";
+import { startPayoutSync } from "./jobs/payoutSync.js";
 import { startSignalCompute } from "./jobs/signalCompute.js";
 import { scanWhaleHistory } from "./chain/whaleHistoryScanner.js";
 import { registerContentRoutes } from "./admin/contentRoutes.js";
@@ -80,6 +81,9 @@ startVpSampler(app.log as unknown as typeof console);
 
 // Start daily price sampler — fetches STEEM/SBD USD prices from CoinGecko (fallback: Steem feed)
 startPriceSampler(app.log as unknown as typeof console);
+
+// Daily payout sync: rebuild curation rewards for all users + post final payout
+startPayoutSync(app.log as unknown as typeof console);
 
 // Signal Layer: historical whale scan → enrichment → nightly signal compute
 // Scan runs in background (rate-limited, can take minutes); non-blocking

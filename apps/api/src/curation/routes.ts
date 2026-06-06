@@ -725,4 +725,91 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
       },
     };
   });
+
+  // ── GET /api/me/vp-budget — VP spend vs regen analysis ───────────────────
+  app.get("/api/me/vp-budget", {
+    schema: { tags: ["Account"], summary: "VP-Budget: täglicher Verbrauch vs. Regen", security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
+    const token   = (request.headers as Record<string, string>)["session"];
+    const session = token ? getSession(token) : null;
+    if (!session) return reply.code(401).send({ error: "unauthorized" });
+
+    const db = getDb();
+    const username = session.user.username;
+
+    // Last 7 days of votes: daily weight sum
+    const dailyVotes = db.prepare(`
+      SELECT
+        DATE(created_at)              AS day,
+        COUNT(*)                      AS votes,
+        COALESCE(SUM(ABS(weight_bps)), 0) AS weight_bps
+      FROM audit_events
+      WHERE type = 'vote_broadcast_success'
+        AND username = ?
+        AND DATE(created_at) >= DATE('now', '-7 days')
+      GROUP BY day
+      ORDER BY day DESC
+    `).all(username) as Array<{ day: string; votes: number; weight_bps: number }>;
+
+    // Latest VP snapshot
+    const vpSnap = db.prepare(
+      "SELECT vp_bps FROM vb_vp_snapshots WHERE username = ? ORDER BY sampled_at DESC LIMIT 1"
+    ).get(username) as { vp_bps: number } | undefined;
+
+    // VP time-series: min vp_bps per day for last 7 days
+    const vpTrend = db.prepare(`
+      SELECT
+        DATE(sampled_at) AS day,
+        MIN(vp_bps)      AS min_vp_bps,
+        MAX(vp_bps)      AS max_vp_bps
+      FROM vb_vp_snapshots
+      WHERE username = ?
+        AND DATE(sampled_at) >= DATE('now', '-7 days')
+      GROUP BY day
+      ORDER BY day ASC
+    `).all(username) as Array<{ day: string; min_vp_bps: number; max_vp_bps: number }>;
+
+    // Compute averages over last 7 days
+    const activeDays = dailyVotes.length;
+    const totalVotes7d  = dailyVotes.reduce((s, r) => s + r.votes, 0);
+    const totalWeight7d = dailyVotes.reduce((s, r) => s + r.weight_bps, 0);
+
+    // VP cost per vote: weight_bps / 50 = cost in bps
+    // Daily spend in bps (averaged over active days, or 7 if 0 active)
+    const divisor          = Math.max(activeDays, 1);
+    const avgDailyVotes    = Math.round((totalVotes7d  / divisor) * 10) / 10;
+    const avgDailyWeightBps = Math.round(totalWeight7d / divisor);
+    const avgDailySpendBps  = Math.round(avgDailyWeightBps / 50); // VP cost in bps
+    const regenBps          = 2000; // 20%/day = 2000 bps
+    const netDailyBps       = regenBps - avgDailySpendBps;
+
+    // Avg weight per vote in bps (for sustainable votes calculation)
+    const avgWeightPerVoteBps = totalVotes7d > 0
+      ? Math.round(totalWeight7d / totalVotes7d)
+      : 5000; // fallback: assume 50%
+
+    // Sustainable votes/day = daily regen / cost per vote
+    // cost per vote = avgWeightPerVoteBps / 50
+    const sustainableVotesPerDay = avgWeightPerVoteBps > 0
+      ? Math.round((regenBps / (avgWeightPerVoteBps / 50)) * 10) / 10
+      : null;
+
+    const status: "recovering" | "stable" | "depleting" =
+      netDailyBps > 100  ? "recovering" :
+      netDailyBps < -100 ? "depleting"  : "stable";
+
+    return {
+      currentVpBps:         vpSnap?.vp_bps ?? null,
+      avgDailyVotes,
+      avgDailySpendBps,
+      avgDailyWeightBps,
+      regenBps,
+      netDailyBps,
+      sustainableVotesPerDay,
+      avgWeightPct:         Math.round(avgWeightPerVoteBps / 100),
+      status,
+      activeDaysIn7d:       activeDays,
+      vpTrend,
+    };
+  });
 }

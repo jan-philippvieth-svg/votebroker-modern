@@ -315,6 +315,18 @@ const translations = {
     cardHistoryToday:       "Heute",
     cardHistoryTotal:       "Gesamt 7 Tage",
 
+    // ── VP-Budget ──────────────────────────────────────────────────────────────
+    vpBudgetStatus_recovering: "VP steigt",
+    vpBudgetStatus_stable:     "Stabil",
+    vpBudgetStatus_depleting:  "VP sinkt",
+    vpBudgetSpend:             "Verbrauch",
+    vpBudgetRegen:             "Regen",
+    vpBudgetNet:               "Netto",
+    vpBudgetSustain:           "Nachhaltig",
+    vpBudgetDay:               "Tag",
+    vpBudgetVotesPerDay:       "Votes/Tag",
+    vpBudgetActive:            "aktive Tage",
+
     // ── Dashboard — Erwartete Curation (7 Tage, legacy keys kept for debug panel) ─
     cardExpCurationTitle:   "Erwartete Curation · 7 Tage",
     cardOpenPosts:          "Offene Posts",
@@ -958,6 +970,18 @@ const translations = {
     cardHistoryCuration:    "Curation",
     cardHistoryToday:       "Today",
     cardHistoryTotal:       "Total 7 Days",
+
+    // ── VP Budget ──────────────────────────────────────────────────────────────
+    vpBudgetStatus_recovering: "VP Rising",
+    vpBudgetStatus_stable:     "Stable",
+    vpBudgetStatus_depleting:  "VP Dropping",
+    vpBudgetSpend:             "Spend",
+    vpBudgetRegen:             "Regen",
+    vpBudgetNet:               "Net",
+    vpBudgetSustain:           "Sustainable",
+    vpBudgetDay:               "day",
+    vpBudgetVotesPerDay:       "votes/day",
+    vpBudgetActive:            "active days",
 
     // ── Dashboard — Expected Curation (7 days, legacy keys kept for debug panel) ─
     cardExpCurationTitle:   "Expected Curation · 7 Days",

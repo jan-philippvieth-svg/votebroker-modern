@@ -4,8 +4,9 @@ import type {
   AuthSession, CurationProfile, DailyEarnings, DailyHistoryPoint, DailyHistoryResult,
   DailyHistorySummary, GrowthData, OpportunitiesMeta, PendingCuration, PendingDebugPost,
   PostOpportunity, SteemAccountSnapshot, TodayStats, VBEarningsResult, VotePlanResponse,
+  VpBudget,
 } from "../api";
-import { fetchVBEarnings } from "../api";
+import { fetchVBEarnings, fetchVpBudget } from "../api";
 import { fetchDailyHistory, fetchGrowthData, fetchPendingCuration, fetchTodayStats } from "../api";
 import { createTranslator, type Locale, type TranslationKey } from "../i18n";
 
@@ -751,6 +752,65 @@ function PendingDebugPanel({ data, t }: { data: PendingCuration; t: ReturnType<t
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── VP Budget Row ─────────────────────────────────────────────────────────────
+
+function VpBudgetRow({ budget, t }: { budget: VpBudget | null; t: ReturnType<typeof createTranslator> }) {
+  if (!budget) return null;
+
+  const statusColor =
+    budget.status === "recovering" ? C.ok   :
+    budget.status === "depleting"  ? C.err  : C.info;
+  const statusIcon =
+    budget.status === "recovering" ? "↑" :
+    budget.status === "depleting"  ? "↓" : "↔";
+
+  const spendPct  = (budget.avgDailySpendBps  / 100).toFixed(1);
+  const regenPct  = (budget.regenBps          / 100).toFixed(0);
+  const netPct    = (Math.abs(budget.netDailyBps) / 100).toFixed(1);
+  const netSign   = budget.netDailyBps >= 0 ? "+" : "−";
+
+  return (
+    <div style={{
+      ...card,
+      display: "flex", alignItems: "center", gap: "1rem",
+      padding: "0.85rem 1.25rem", flexWrap: "wrap" as const,
+    }}>
+      {/* Status badge */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: "0.35rem",
+        background: statusColor + "15", border: `1px solid ${statusColor}35`,
+        borderRadius: "8px", padding: "0.3rem 0.7rem", flexShrink: 0,
+      }}>
+        <span style={{ color: statusColor, fontWeight: 800, fontSize: "0.95rem" }}>{statusIcon}</span>
+        <span style={{ color: statusColor, fontWeight: 700, fontSize: "0.75rem", textTransform: "uppercase" as const, letterSpacing: "0.5px" }}>
+          {t(`vpBudgetStatus_${budget.status}` as any)}
+        </span>
+      </div>
+
+      {/* Metrics */}
+      {[
+        { lbl: t("vpBudgetSpend"),   val: `${spendPct}% / ${t("vpBudgetDay")}`,  col: C.err  },
+        { lbl: t("vpBudgetRegen"),   val: `+${regenPct}% / ${t("vpBudgetDay")}`, col: C.ok   },
+        { lbl: t("vpBudgetNet"),     val: `${netSign}${netPct}% / ${t("vpBudgetDay")}`, col: statusColor },
+        { lbl: t("vpBudgetSustain"), val: budget.sustainableVotesPerDay !== null
+            ? `${budget.sustainableVotesPerDay} ${t("vpBudgetVotesPerDay")}`
+            : "—",
+          col: C.muted },
+      ].map((m, i) => (
+        <div key={i} style={{ display: "flex", flexDirection: "column" as const, alignItems: "center", flex: 1, minWidth: "80px" }}>
+          <span style={{ color: m.col, fontWeight: 800, fontSize: "0.9rem" }}>{m.val}</span>
+          <span style={{ color: C.faint, fontSize: "0.63rem", fontWeight: 600, textTransform: "uppercase" as const, letterSpacing: "0.5px", marginTop: "0.15rem" }}>{m.lbl}</span>
+        </div>
+      ))}
+
+      {/* Avg weight info */}
+      <div style={{ color: C.faint, fontSize: "0.72rem", marginLeft: "auto", whiteSpace: "nowrap" as const }}>
+        ⌀ {budget.avgWeightPct}% · {budget.activeDaysIn7d}d {t("vpBudgetActive")}
+      </div>
     </div>
   );
 }
@@ -1751,6 +1811,8 @@ export function UserDashboard(props: {
   const [dailyHistory,      setDailyHistory]      =useState<DailyHistoryResult|null>(null);
   const [dailyHistoryLoading, setDailyHistoryLoading] =useState(true);
 
+  const [vpBudget, setVpBudget] = useState<VpBudget|null>(null);
+
   // Lifetime VoteBroker earnings — fetched once, not period-dependent
   const [lifetimeEarnings, setLifetimeEarnings] =useState<VBEarningsResult|null>(null);
 
@@ -1785,6 +1847,8 @@ export function UserDashboard(props: {
     // Lifetime fetch — "all" period, run once
     fetchVBEarnings(props.session.token, "all")
       .then(setLifetimeEarnings).catch(()=>{});
+    fetchVpBudget(props.session.token)
+      .then(setVpBudget).catch(()=>{});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[props.session.token]);
 
@@ -1839,7 +1903,10 @@ export function UserDashboard(props: {
         onTabChange={props.onTabChange} t={t}
       />
 
-      {/* 4. Curation Timeline: Heute | Pending 7d | 30 Tage */}
+      {/* 4. VP-Budget: täglicher Verbrauch vs. Regen */}
+      <VpBudgetRow budget={vpBudget} t={t} />
+
+      {/* 5. Curation Timeline: Heute | 7-Tage | Lifetime */}
       <CurationTriple
         snapshot={snapshot}
         todayStats={todayStats} todayLoading={todayLoading}

@@ -1241,6 +1241,26 @@ export async function fetchVBEarnings(
   return res.json();
 }
 
+export interface VpBudget {
+  currentVpBps:          number | null;
+  avgDailyVotes:         number;
+  avgDailySpendBps:      number;
+  avgDailyWeightBps:     number;
+  regenBps:              number;
+  netDailyBps:           number;
+  sustainableVotesPerDay: number | null;
+  avgWeightPct:          number;
+  status:                "recovering" | "stable" | "depleting";
+  activeDaysIn7d:        number;
+  vpTrend:               Array<{ day: string; min_vp_bps: number; max_vp_bps: number }>;
+}
+
+export async function fetchVpBudget(token: string): Promise<VpBudget> {
+  const res = await fetch(`${API_BASE}/api/me/vp-budget`, { headers: { session: token } });
+  if (!res.ok) throw new Error("VP-Budget konnte nicht geladen werden.");
+  return res.json();
+}
+
 export async function fixScreenshotUrls(token: string, filename: string): Promise<{ ok: boolean; changed: boolean; replacements: number; hint: string }> {
   const res = await fetch(`${API_BASE}/api/admin/content/fix-screenshot-urls`, {
     method: "POST",
