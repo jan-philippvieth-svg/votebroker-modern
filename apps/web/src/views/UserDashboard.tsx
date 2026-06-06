@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Users, Dna, Target, LayoutDashboard, type LucideIcon } from "lucide-react";
+import { OnboardingFlow } from "./OnboardingFlow";
 import type {
   AuthSession, CurationProfile, DailyEarnings, GrowthData,
   OpportunitiesMeta, PendingCuration, PendingDebugPost, PostOpportunity,
@@ -331,67 +331,6 @@ function CommunityGrowthChart({ growth, growthLoading, growthPeriod, setGrowthPe
   );
 }
 
-// ── Onboarding Flow ───────────────────────────────────────────────────────────
-
-const ONBOARDING_STEPS: Array<{
-  icon: LucideIcon;
-  titleKey: TranslationKey;
-  descKey: TranslationKey;
-  tab: "community" | "dna" | "dashboard";
-  color: string;
-}> = [
-  { icon: Users,           titleKey: "stepCommunity", descKey: "stepCommunityDesc", tab: "community", color: C.purple },
-  { icon: Dna,             titleKey: "stepDna",       descKey: "stepDnaDesc",       tab: "dna",       color: C.info   },
-  { icon: Target,          titleKey: "stepStrategy",  descKey: "stepStrategyDesc",  tab: "dna",       color: C.ok     },
-  { icon: LayoutDashboard, titleKey: "stepDashboard", descKey: "stepDashboardDesc", tab: "dashboard", color: C.warn   },
-];
-
-function OnboardingFlow({ onTabChange, t }: {
-  onTabChange: (tab: "community" | "dna" | "dashboard") => void;
-  t: ReturnType<typeof createTranslator>;
-}) {
-  return (
-    <div style={{ display:"flex", flexDirection:"column" as const, gap:"0.6rem" }}>
-      {ONBOARDING_STEPS.map((step, i) => {
-        const Icon = step.icon;
-        return (
-          <button
-            key={step.titleKey}
-            type="button"
-            onClick={() => onTabChange(step.tab)}
-            style={{
-              display:"flex", alignItems:"center", gap:"0.85rem",
-              padding:"0.75rem 1rem",
-              background:`${step.color}08`,
-              border:`1px solid ${step.color}28`,
-              borderRadius:"10px",
-              cursor:"pointer",
-              textAlign:"left" as const,
-              width:"100%",
-              transition:"background 0.15s, border-color 0.15s",
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background=`${step.color}14`; (e.currentTarget as HTMLButtonElement).style.borderColor=`${step.color}50`; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background=`${step.color}08`; (e.currentTarget as HTMLButtonElement).style.borderColor=`${step.color}28`; }}
-          >
-            <div style={{
-              width:"32px", height:"32px", borderRadius:"8px", flexShrink:0,
-              background:`${step.color}15`, border:`1px solid ${step.color}30`,
-              display:"flex", alignItems:"center", justifyContent:"center",
-            }}>
-              <span style={{ color:step.color, fontSize:"0.65rem", fontWeight:900, opacity:0.7 }}>{i+1}</span>
-            </div>
-            <Icon size={18} color={step.color} strokeWidth={1.75} />
-            <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ color:step.color, fontWeight:700, fontSize:"0.82rem", lineHeight:1.2 }}>{t(step.titleKey)}</div>
-              <div style={{ color:C.muted, fontSize:"0.7rem", marginTop:"2px", lineHeight:1.3 }}>{t(step.descKey)}</div>
-            </div>
-            <span style={{ color:step.color, fontSize:"0.75rem", opacity:0.6, flexShrink:0 }}>›</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 // ── Relationships Panel ───────────────────────────────────────────────────────
 

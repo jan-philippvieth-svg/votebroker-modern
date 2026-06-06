@@ -2,6 +2,7 @@
 // Extracted from App.tsx — DNA analysis, strategy editing, vote planning UI
 
 import React, { useState, useEffect } from "react";
+import { Search, Dna as DnaIcon } from "lucide-react";
 import { createTranslator, type Locale, type TranslationKey } from "../i18n";
 import type {
   CurationProfile,
@@ -17,10 +18,10 @@ import {
   type StrategyRule,
   categoryLabel,
   categoryColor,
-  dnaEmoji,
   computeDynamicWeights,
   generateStrategyFromProfile,
 } from "./strategyTypes";
+import { OnboardingFlow } from "./OnboardingFlow";
 import {
   type VoteBatchResult,
   type VoteTarget,
@@ -201,23 +202,33 @@ export function CurationDnaPanel(props: {
   if (!props.profile || props.profile.votesAnalyzed === 0) {
     return (
       <div style={{ maxWidth: "860px", margin: "0 auto" }}>
-        {/* Onboarding Start-Box */}
-        <div style={{ background: "linear-gradient(135deg, #f0f9ff 0%, #f8fbfc 100%)", border: "1px solid #bae6fd", borderRadius: "12px", padding: "1.5rem", marginBottom: "1.5rem" }}>
-          <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>👋</div>
-          <strong style={{ color: "#0369a1", fontSize: "1rem", display: "block", marginBottom: "0.4rem" }}>
-            Willkommen bei VoteBroker
-          </strong>
-          <p style={{ color: "#607078", fontSize: "0.85rem", margin: "0 0 1rem", lineHeight: 1.6 }}>
-            Noch keine Vote-Historie gefunden. Füge Autoren hinzu, die du regelmäßig unterstützen möchtest — VoteBroker erstellt daraus deine Strategie.
+        {/* Workflow-Guide */}
+        <div style={{ background: "#ffffff", border: "1px solid #e0d4fc", borderRadius: "16px", padding: "1.5rem", marginBottom: "1.5rem" }}>
+          <p style={{ color: "#607078", fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.8px", margin: "0 0 1rem" }}>
+            {t("secWorkflowGuide")}
           </p>
-          <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" as const }}>
+          {props.onNavigate && (
+            <OnboardingFlow onTabChange={tab => props.onNavigate!(tab as "community" | "dna" | "dashboard" | "billing" | "admin")} t={t} />
+          )}
+        </div>
+        {/* Kein Daten-Hinweis */}
+        <div style={{ background: "linear-gradient(135deg, #f0f9ff 0%, #f8fbfc 100%)", border: "1px solid #bae6fd", borderRadius: "12px", padding: "1.5rem", marginBottom: "1.5rem", display: "flex", alignItems: "flex-start", gap: "1rem" }}>
+          <DnaIcon size={24} color="#0369a1" strokeWidth={1.5} style={{ flexShrink: 0, marginTop: "2px" }} />
+          <div>
+            <strong style={{ color: "#0369a1", fontSize: "1rem", display: "block", marginBottom: "0.4rem" }}>
+              {t("stepDna")}
+            </strong>
+            <p style={{ color: "#607078", fontSize: "0.85rem", margin: "0 0 1rem", lineHeight: 1.6 }}>
+              Noch keine Vote-Historie gefunden. Füge Autoren hinzu, die du regelmäßig unterstützen möchtest — VoteBroker erstellt daraus deine Strategie.
+            </p>
             {props.onNavigate && (
               <button
                 type="button"
                 onClick={() => props.onNavigate!("community")}
-                style={{ background: "#0369a1", border: "none", borderRadius: "8px", color: "#fff", cursor: "pointer", fontSize: "0.85rem", fontWeight: 700, padding: "0.55rem 1.1rem" }}
+                style={{ background: "#0369a1", border: "none", borderRadius: "8px", color: "#fff", cursor: "pointer", fontSize: "0.85rem", fontWeight: 700, padding: "0.55rem 1.1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}
               >
-                🔍 Community-Tab: Autoren entdecken →
+                <Search size={14} />
+                {t("stepCommunity")} →
               </button>
             )}
           </div>
@@ -241,8 +252,6 @@ export function CurationDnaPanel(props: {
   const peakHours = p.peakHoursUtc ?? [];
   const maxBar = topAuthors.length > 0 ? Math.max(...topAuthors.map(a => a.voteCount)) : 1;
   const maxHour = peakHours.length > 0 ? Math.max(...peakHours.map(h => h.voteCount)) : 1;
-  const emoji = dnaEmoji[p.dnaLabel] ?? "⚪";
-
   const generateStrategy = () => props.onStrategyChange(generateStrategyFromProfile(p));
 
   const regenerate = () => {
@@ -329,25 +338,19 @@ export function CurationDnaPanel(props: {
   return (
     <section style={{ padding: "1.5rem 2rem", display: "flex", flexDirection: "column" as const, gap: "1.25rem" }}>
 
-      {/* ── 1. Hero ── */}
-      <div style={{ display: "flex", alignItems: "center", gap: "1rem", padding: "1rem 1.25rem", background: "linear-gradient(135deg, #f5f0ff 0%, #ffffff 60%, #edfbf9 100%)", borderRadius: "12px", border: "1px solid #e0d4fc", marginBottom: "1.25rem", flexWrap: "wrap" as const }}>
-        <span style={{ fontSize: "2rem", lineHeight: 1, flexShrink: 0 }}>{emoji}</span>
+      {/* ── 0. Workflow-Guide ── */}
+      {props.onNavigate && (
+        <div style={{ background: "#ffffff", border: "1px solid #e0d4fc", borderRadius: "16px", padding: "1.25rem 1.5rem" }}>
+          <p style={{ color: "#8fa4b0", fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.8px", margin: "0 0 0.85rem" }}>
+            {t("secWorkflowGuide")}
+          </p>
+          <OnboardingFlow onTabChange={tab => props.onNavigate!(tab as "community" | "dna" | "dashboard" | "billing" | "admin")} t={t} />
+        </div>
+      )}
+
+      {/* ── 1. Analyse-Zusammenfassung ── */}
+      <div style={{ display: "flex", alignItems: "center", gap: "1.5rem", padding: "1rem 1.25rem", background: "linear-gradient(135deg, #f5f0ff 0%, #ffffff 60%, #edfbf9 100%)", borderRadius: "12px", border: "1px solid #e0d4fc", flexWrap: "wrap" as const }}>
         <div style={{ flex: 1, minWidth: "200px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.15rem" }}>
-            <span style={{ color: "#7c3aed", fontWeight: 800, fontSize: "1rem" }}>
-                {(() => {
-                  const labelKeyMap: Record<string, TranslationKey> = {
-                    "Regular Curator": "dnaRegularCurator", "Broad Explorer": "dnaBroadExplorer",
-                    "Loyal Community Curator": "dnaLoyalCommunity", "Loyal Inner Circle": "dnaLoyalInner",
-                    "High-Frequency Curator": "dnaHighFreq", "Niche Specialist": "dnaNiche",
-                    "Self-Focused Voter": "dnaLabelSelfVoter", "Strategic Weight Voter": "dnaStrategicWeight",
-                  };
-                  const key = labelKeyMap[p.dnaLabel];
-                  return key ? t(key) : p.dnaLabel;
-                })()}
-              </span>
-            <span style={{ color: "#8fa4b0", fontSize: "0.72rem" }}>· {t("dnaCuratorType")}</span>
-          </div>
           <p style={{ color: "#607078", fontSize: "0.78rem", margin: 0, lineHeight: 1.45, maxWidth: "520px" }}>{translatedDesc}</p>
         </div>
         <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" as const }}>
@@ -363,13 +366,13 @@ export function CurationDnaPanel(props: {
       {/* ── 2. Handlungsempfehlung ── */}
       {!strategyRules ? (
         <div style={{ border: "1px dashed #2563eb44", borderRadius: "12px", padding: "1.75rem", background: "#f0f5ff", textAlign: "center" as const, marginBottom: "1.25rem" }}>
-          <div style={{ fontSize: "2rem", marginBottom: "0.6rem" }}>🧬</div>
-          <p style={{ color: "#17202a", fontSize: "0.95rem", fontWeight: 700, margin: "0 0 0.4rem" }}>Strategie noch nicht eingerichtet</p>
+          <DnaIcon size={28} color="#2563eb" strokeWidth={1.5} style={{ marginBottom: "0.6rem" }} />
+          <p style={{ color: "#17202a", fontSize: "0.95rem", fontWeight: 700, margin: "0 0 0.4rem" }}>{t("stepStrategy")}</p>
           <p style={{ color: "#607078", fontSize: "0.82rem", margin: "0 0 1rem", lineHeight: 1.55, maxWidth: "400px", marginLeft: "auto", marginRight: "auto" }}>
             VoteBroker analysiert deine Vote-Historie und generiert eine nachhaltige Curation-Strategie.
           </p>
           <button style={{ background: "#2563eb", border: "none", borderRadius: "8px", color: "#fff", cursor: "pointer", fontSize: "0.9rem", fontWeight: 700, padding: "0.65rem 1.4rem" }} type="button" onClick={generateStrategy}>
-            Strategie aus Vote-DNA generieren →
+            {t("stepStrategy")} →
           </button>
         </div>
       ) : (
@@ -430,7 +433,6 @@ export function CurationDnaPanel(props: {
               <>
                 {/* ── Botschaft ── */}
                 <div style={{ marginBottom: "1.5rem" }}>
-                  <p style={{ color: "#0369a1", fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "1.2px", margin: "0 0 0.3rem" }}>{t("dnaCuratorType")}</p>
                   <h3 style={{ color: "#0c4a6e", fontSize: "1.4rem", fontWeight: 900, margin: "0 0 0.5rem", letterSpacing: "-0.5px", display: "flex", alignItems: "center", gap: "0.5rem" }}>
                     <span>{msgIcon}</span> {msgTitle}
                   </h3>
