@@ -721,7 +721,7 @@ function PendingDebugPanel({ data, t }: { data: PendingCuration; t: ReturnType<t
                   <thead>
                     <tr style={{ background: C.border + "55" }}>
                       <th style={{ ...tdL, fontWeight: 600 }}>{t("debugColAuthor")}</th>
-                      <th style={{ ...tdR, fontWeight: 600, color: C.warn }}>Fällig in</th>
+                      <th style={{ ...tdR, fontWeight: 600, color: C.warn }}>{t("debugColDue")}</th>
                       <th style={{ ...tdR, fontWeight: 600 }}>{t("debugColPoolSbd")}</th>
                       <th style={{ ...tdR, fontWeight: 600 }}>{t("debugColWeight")}</th>
                       <th style={{ ...tdR, fontWeight: 600, color: C.ok }}>{t("debugColEstSteem")}</th>
@@ -733,7 +733,7 @@ function PendingDebugPanel({ data, t }: { data: PendingCuration; t: ReturnType<t
                       const msLeft = new Date(p.cashoutTime + "Z").getTime() - Date.now();
                       const h = Math.floor(msLeft / 3_600_000);
                       const m = Math.floor((msLeft % 3_600_000) / 60_000);
-                      const countdown = msLeft <= 0 ? "jetzt" : h > 0 ? `${h}h ${m}m` : `${m}m`;
+                      const countdown = msLeft <= 0 ? t("debugDueNow") : h > 0 ? `${h}h ${m}m` : `${m}m`;
                       return (
                       <tr key={i} style={{ borderTop: `1px solid ${C.border}` }}>
                         <td style={{ ...tdL, maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
