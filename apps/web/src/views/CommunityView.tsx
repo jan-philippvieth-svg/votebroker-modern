@@ -2,14 +2,14 @@
 // Extracted from App.tsx — community discovery and whale signals
 
 import React, { useState } from "react";
-import { createTranslator, type Locale } from "../i18n";
+import { createTranslator, type Locale, type TranslationKey } from "../i18n";
 import type {
   AuthorDiscoveryCard,
   CommunityDiscovery,
   WhaleSignalsData,
   WhaleSignalEntry,
 } from "../api";
-import { type StrategyCategory, categoryLabel, categoryColor } from "./strategyTypes";
+import { type StrategyCategory } from "./strategyTypes";
 
 // ── Community Discovery Section ───────────────────────────────────────────────
 
@@ -45,17 +45,32 @@ const catColor: Record<string, string> = {
   niedrig:        "#94a3b8",
 };
 
-export function AuthorCard({ card, onAdd }: {
+const CAT_KEY: Partial<Record<string, TranslationKey>> = {
+  immer_voten:    "catAlways",
+  lieblingsautor: "catFavorite",
+  bevorzugt:      "catPreferred",
+  normal:         "catNormal",
+  niedrig:        "catLow",
+};
+
+const PICKER_CATS: { value: StrategyCategory; tKey: TranslationKey }[] = [
+  { value: "lieblingsautor", tKey: "catFavorite" },
+  { value: "bevorzugt",      tKey: "catPreferred" },
+  { value: "normal",         tKey: "catNormal" },
+  { value: "niedrig",        tKey: "catLow" },
+];
+
+export function AuthorCard({ card, onAdd, t }: {
   card: AuthorDiscoveryCard;
   onAdd: (username: string, cat: StrategyCategory) => void;
+  t: ReturnType<typeof createTranslator>;
 }) {
   const [picking, setPicking] = useState(false);
-  const categories: { value: StrategyCategory; label: string }[] = [
-    { value: "lieblingsautor", label: "Lieblingsautor" },
-    { value: "bevorzugt",      label: "Bevorzugt" },
-    { value: "normal",         label: "Normal" },
-    { value: "niedrig",        label: "Niedrig" },
-  ];
+
+  const topLabel = CAT_KEY[card.topCategory] ? t(CAT_KEY[card.topCategory]!) : card.topCategory;
+
+  const cardReasons: string[] = [`${card.curatorCount} ${t("whaleColVoters")}`];
+  if (card.recentVotes > 0) cardReasons.push(`${card.recentVotes} ${t("communityReasonVotes")}`);
 
   return (
     <div style={cdCard}>
@@ -75,17 +90,17 @@ export function AuthorCard({ card, onAdd }: {
               background: (catColor[card.topCategory] ?? CD.dim) + "18",
               borderRadius: "4px", padding: "0.1rem 0.4rem",
             }}>
-              {card.topCategoryLabel}
+              {topLabel}
             </span>
           )}
         </div>
         <div style={{ fontSize: "0.72rem", color: CD.dim, whiteSpace: "nowrap" }}>
-          {card.curatorCount === 1 ? "1 Kurator" : `${card.curatorCount} Kuratoren`}
+          {card.curatorCount} {t("whaleColVoters")}
         </div>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "0.15rem" }}>
-        {card.reasons.map((r, i) => (
+        {cardReasons.map((r, i) => (
           <div key={i} style={{ display: "flex", alignItems: "center", gap: "0.3rem", fontSize: "0.75rem", color: CD.dim }}>
             <span style={{ color: CD.ok, fontWeight: 700 }}>·</span> {r}
           </div>
@@ -102,11 +117,11 @@ export function AuthorCard({ card, onAdd }: {
             fontSize: "0.72rem", fontWeight: 600, padding: "0.2rem 0.6rem",
           }}
         >
-          + Zur Strategie
+          {t("communityAddBtn")}
         </button>
       ) : (
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.3rem", marginTop: "0.25rem" }}>
-          {categories.map(c => (
+          {PICKER_CATS.map(c => (
             <button
               key={c.value}
               onClick={() => { onAdd(card.username, c.value); setPicking(false); }}
@@ -118,14 +133,14 @@ export function AuthorCard({ card, onAdd }: {
                 padding: "0.15rem 0.5rem",
               }}
             >
-              {c.label}
+              {t(c.tKey)}
             </button>
           ))}
           <button
             onClick={() => setPicking(false)}
             style={{ background: "none", border: "none", color: CD.faint, cursor: "pointer", fontSize: "0.68rem" }}
           >
-            Abbrechen
+            {t("communityCancel")}
           </button>
         </div>
       )}
@@ -433,7 +448,7 @@ export function CommunityDiscoverySection({ discovery, loading, onAddToStrategy,
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
                 {communityAuthors.map(c => (
-                  <AuthorCard key={c.username} card={c} onAdd={onAddToStrategy} />
+                  <AuthorCard key={c.username} card={c} onAdd={onAddToStrategy} t={t} />
                 ))}
               </div>
             )}
@@ -457,7 +472,7 @@ export function CommunityDiscoverySection({ discovery, loading, onAddToStrategy,
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
                 {discoveries.map(c => (
-                  <AuthorCard key={c.username} card={c} onAdd={onAddToStrategy} />
+                  <AuthorCard key={c.username} card={c} onAdd={onAddToStrategy} t={t} />
                 ))}
               </div>
             )}
