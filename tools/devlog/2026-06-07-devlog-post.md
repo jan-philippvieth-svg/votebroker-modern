@@ -9,29 +9,33 @@ status: draft
 
 ---
 
-## Eine strategische Weichenstellung
+## Von Vote-Executor zur Curation Intelligence Platform
 
-Wir hören eure Fragen — und sie drehen sich zunehmend um dasselbe Thema: Wie findet man auf Steem die Autoren, die es wirklich wert sind, unterstützt zu werden? Wie setzt man seine Voting Power sinnvoll ein, wenn man nicht täglich stundenlang die Community durchforstet?
+Viele von euch stellen die gleichen Fragen: Welche Autoren performen langfristig? Wann lohnt es sich zu voten? Wie setzt man seine Voting Power so ein, dass sie tatsächlich etwas bewirkt — und dabei auch sinnvoll arbeitet?
 
-Das ist keine Frage nach Gewinnmaximierung. Das ist die Kernfrage jeder ernsthaften Kuration: **Qualität finden, bevor alle anderen sie finden.**
+Das sind legitime Fragen. Wer Voting Power in die Hand nimmt, will sie gut einsetzen. Bessere Curation Rewards sind dabei kein schmutziges Ziel — sie sind ein Indikator dafür, dass die eigenen Entscheidungen funktionieren.
 
-VoteBroker war bisher ein Werkzeug, das Votes ausführt. Was es werden soll, ist ein Werkzeug, das beim Finden hilft — und das Ausführen dann strukturiert übernimmt. Der Weg dorthin führt durch eine saubere Datenbasis. Die bauen wir gerade.
+VoteBroker hat bisher Votes ausgeführt und strukturiert. Das bleibt ein Baustein. Aber wir entwickeln das Projekt gerade in eine andere Richtung: weg vom reinen Vote-Executor, hin zu einer **Curation Intelligence Platform**.
+
+Die Ausführung ist das Ende der Kette. Der eigentliche Wert entsteht früher — beim Verstehen. Welche Signale sagen langfristig erfolgreiche Kuration voraus? Welche Muster erkennen erfahrene Kuratoren, die andere übersehen? Was unterscheidet Autoren, die konsistent performen, von denen, die es nur kurzzeitig tun?
+
+Dieses Verständnis aufzubauen ist das Fundament für alles, was wir danach bauen wollen: Vote-DNA, Community Discovery, Timing Intelligence, Shadow Mode, und später einen CoPiloten, der aktiv Vorschläge macht, die auf echten Daten basieren.
 
 ---
 
-## Signal Layer — Die Datenbasis, die wir aufbauen
+## Signal Layer — Die Datenbasis, die wir gerade aufbauen
 
-Gute Empfehlungen entstehen nicht aus Bauchgefühl. Sie entstehen aus Mustern — und Muster brauchen Daten.
+Gute Entscheidungen brauchen gute Daten. Deshalb haben wir in den letzten Wochen damit begonnen, historische Blockchain-Aktivitäten systematisch auszuwerten.
 
-In den letzten Wochen haben wir damit begonnen, historische Blockchain-Aktivitäten systematisch auszuwerten. Konkret: Wir analysieren, welche Autoren auf Steem über längere Zeiträume hinweg von erfahrenen, aktiven Kuratoren konsistent beachtet werden. Wir schauen, welche Communities dabei regelmäßig im Mittelpunkt stehen. Und wir schauen auf das *Wann* — in welchen Zeitfenstern nach Veröffentlichung die Aufmerksamkeit typischerweise eintrifft.
+Unser Ziel dabei ist nicht kurzfristige Arbitrage oder das Ausnutzen einzelner Reward-Lücken. Unser Ziel ist es, die Signale zu verstehen, die langfristig erfolgreiche Kuration ausmachen. Wenn daraus bessere Curation Rewards entstehen, ist das kein Nebeneffekt — sondern ein Hinweis darauf, dass die zugrunde liegenden Signale funktionieren.
+
+Konkret: Wir analysieren, welche Autoren auf Steem über längere Zeiträume hinweg von erfahrenen, aktiven Kuratoren konsistent beachtet werden. Wir schauen, welche Communities dabei regelmäßig im Mittelpunkt stehen. Und wir schauen auf das *Wann* — in welchen Zeitfenstern nach Veröffentlichung die Aufmerksamkeit typischerweise eintrifft.
 
 Aus diesen Rohdaten berechnen wir täglich drei Typen von Signalen:
 
-- **Autor-Qualität** — Wie konsistent ist ein Autor? Wie oft erhält er Aufmerksamkeit von kuratierungserfahrenen Accounts? Wie entwickelt sich das über die Zeit?
-- **Community-Profil** — Welche Communities zeigen eine lebendige, engagierte Kuration? Wo ist die Qualitätsdichte am höchsten?
-- **Timing-Muster** — Zu welchen Zeitpunkten nach Veröffentlichung ist Engagement besonders aktiv?
-
-Was wir dabei bewusst *nicht* bauen, ist ein Arbitrage-System. Es geht nicht darum, einen Voting-Vorteil gegenüber anderen herauszuarbeiten. Es geht darum, Autoren zu finden, die gute Arbeit leisten und Unterstützung verdienen — und das früh genug zu erkennen, um sinnvoll Kuration beitragen zu können.
+- **Autor-Performance** — Wie konsistent performt ein Autor über Zeit? Wie oft wird er von erfahrenen Kuratoren früh beachtet? Wie entwickelt sich das?
+- **Community-Profil** — Welche Communities zeigen langfristig starke Kuration? Wo ist die Signaldichte am höchsten?
+- **Timing Intelligence** — Zu welchen Zeitpunkten nach Veröffentlichung findet typischerweise aktive, qualitätsorientierte Kuration statt?
 
 Die technische Grundlage dafür läuft seit einigen Tagen. Aktuell haben wir **223.000+ historische Datenpunkte** gesammelt und daraus bereits erste Signale für **144 Autoren** und **38 Communities** berechnet. Das wächst täglich.
 
@@ -64,10 +68,10 @@ Heute (2026-06-07):
 
 ## Was als Nächstes kommt
 
-- **Signal Layer → DNA-Vorschläge** — Autor-Qualität und Community-Profil direkt bei der Vorschlags-Anzeige sichtbar machen
-- **Shadow Mode** (frühestens Juli) — simuliert rückwirkend, welche Autoren der VoteBroker empfohlen hätte; braucht noch 3–4 Wochen weitere Datenakkumulation
+- **Signal Layer → DNA-Vorschläge** — Autor-Performance und Timing-Signale direkt bei der Vorschlags-Anzeige sichtbar machen
+- **Shadow Mode** (frühestens Juli) — simuliert rückwirkend, welche Entscheidungen der VoteBroker empfohlen hätte; braucht noch 3–4 Wochen weitere Datenakkumulation
 - **Community Spotlight** — bezahlte Sichtbarkeit für Autoren, strikt getrennt von organischen Qualitätssignalen
 
 ---
 
-*VoteBroker — Community Curation auf Steem · [votebroker.org](https://votebroker.org)*
+*VoteBroker — Curation Intelligence für Steem · [votebroker.org](https://votebroker.org)*
