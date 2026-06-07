@@ -690,7 +690,7 @@ function PendingDebugPanel({ data, t }: { data: PendingCuration; t: ReturnType<t
             </div>
             <div style={{ marginTop: "0.2rem" }}>
               {t("debugCalculatedWith")}&nbsp;<strong>{data.sbdPerSteemUsed.toFixed(4)} SBD/STEEM</strong>
-              &nbsp;·&nbsp;{t("debugSumPending")} <strong>{db.totalPayoutUsd.toFixed(4)} USD</strong>
+              &nbsp;·&nbsp;{t("debugSumPending")} <strong title="Summe pending_payout_value aller gecurateten Posts — nicht deine Curation-Einnahmen">{db.totalPayoutUsd.toFixed(2)} SBD</strong>
             </div>
           </div>
 
