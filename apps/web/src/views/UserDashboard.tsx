@@ -721,6 +721,7 @@ function PendingDebugPanel({ data, t }: { data: PendingCuration; t: ReturnType<t
                   <thead>
                     <tr style={{ background: C.border + "55" }}>
                       <th style={{ ...tdL, fontWeight: 600 }}>{t("debugColAuthor")}</th>
+                      <th style={{ ...tdR, fontWeight: 600, color: C.warn }}>Fällig in</th>
                       <th style={{ ...tdR, fontWeight: 600 }}>{t("debugColPoolSbd")}</th>
                       <th style={{ ...tdR, fontWeight: 600 }}>{t("debugColWeight")}</th>
                       <th style={{ ...tdR, fontWeight: 600, color: C.ok }}>{t("debugColEstSteem")}</th>
@@ -728,7 +729,12 @@ function PendingDebugPanel({ data, t }: { data: PendingCuration; t: ReturnType<t
                     </tr>
                   </thead>
                   <tbody>
-                    {db.top10.map((p: PendingDebugPost, i: number) => (
+                    {db.top10.map((p: PendingDebugPost, i: number) => {
+                      const msLeft = new Date(p.cashoutTime + "Z").getTime() - Date.now();
+                      const h = Math.floor(msLeft / 3_600_000);
+                      const m = Math.floor((msLeft % 3_600_000) / 60_000);
+                      const countdown = msLeft <= 0 ? "jetzt" : h > 0 ? `${h}h ${m}m` : `${m}m`;
+                      return (
                       <tr key={i} style={{ borderTop: `1px solid ${C.border}` }}>
                         <td style={{ ...tdL, maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           <a
@@ -739,12 +745,14 @@ function PendingDebugPanel({ data, t }: { data: PendingCuration; t: ReturnType<t
                           >@{p.author}</a>
                           <span style={{ color: C.faint }}>&nbsp;/{p.permlink.slice(0,20)}{p.permlink.length>20?"…":""}</span>
                         </td>
+                        <td style={{ ...tdR, color: C.warn, fontWeight: 600, whiteSpace: "nowrap" }}>{countdown}</td>
                         <td style={tdR}>{p.pendingPayoutSbd.toFixed(3)}</td>
                         <td style={tdR}>{p.sharePctWeight.toFixed(3)}%</td>
                         <td style={{ ...tdR, color: C.ok, fontWeight: 700 }}>{p.estimatedSp.toFixed(4)}</td>
                         <td style={{ ...tdR, color: C.dim }}>{p.estimatedSpRshares.toFixed(4)}</td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
