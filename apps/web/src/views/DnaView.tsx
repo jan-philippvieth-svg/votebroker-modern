@@ -800,6 +800,7 @@ function StrategyEditor(props: {
   onRemove: (username: string) => void;
   locale?: import("../i18n").Locale;
 }) {
+  const t = createTranslator(props.locale ?? "de");
   return (
     <div>
       <div style={{ overflowX: "auto" }}>
@@ -807,12 +808,12 @@ function StrategyEditor(props: {
           <thead>
             <tr style={{ color: "#607078", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.4px", borderBottom: "1px solid #dde8ed" }}>
               <th style={{ textAlign: "left", padding: "0.2rem 0.35rem", fontWeight: 600, width: "20px" }} />
-              <th style={{ textAlign: "left", padding: "0.2rem 0.35rem", fontWeight: 600, width: "20px" }}>An</th>
-              <th style={{ textAlign: "left", padding: "0.2rem 0.35rem", fontWeight: 600 }}>Autor</th>
-              <th style={{ textAlign: "left", padding: "0.2rem 0.35rem", fontWeight: 600 }}>Kategorie</th>
-              <th style={{ textAlign: "center", padding: "0.2rem 0.35rem", fontWeight: 600 }}>Max % / ≈$</th>
-              <th style={{ textAlign: "center", padding: "0.2rem 0.35rem", fontWeight: 600 }}>Min % / ≈$</th>
-              <th style={{ textAlign: "left", padding: "0.2rem 0.35rem", fontWeight: 600 }}>Quelle</th>
+              <th style={{ textAlign: "left", padding: "0.2rem 0.35rem", fontWeight: 600, width: "20px" }}>{t("stratColEnabled")}</th>
+              <th style={{ textAlign: "left", padding: "0.2rem 0.35rem", fontWeight: 600 }}>{t("stratColAuthor")}</th>
+              <th style={{ textAlign: "left", padding: "0.2rem 0.35rem", fontWeight: 600 }}>{t("stratColCategory")}</th>
+              <th style={{ textAlign: "center", padding: "0.2rem 0.35rem", fontWeight: 600 }}>{t("stratColMax")}</th>
+              <th style={{ textAlign: "center", padding: "0.2rem 0.35rem", fontWeight: 600 }}>{t("stratColMin")}</th>
+              <th style={{ textAlign: "left", padding: "0.2rem 0.35rem", fontWeight: 600 }}>{t("stratColSource")}</th>
               <th style={{ width: "20px" }} />
             </tr>
           </thead>
@@ -850,9 +851,9 @@ function StrategyRuleRow(props: {
   };
 
   const lastVoteLabel = rule.lastVoteDaysAgo === 0
-    ? "heute"
-    : rule.lastVoteDaysAgo === 1 ? "gestern"
-    : `vor ${rule.lastVoteDaysAgo}d`;
+    ? t("stratToday")
+    : rule.lastVoteDaysAgo === 1 ? t("stratYesterday")
+    : t("stratDaysAgo").replace("{{n}}", String(rule.lastVoteDaysAgo));
 
   return (
     <>
@@ -929,7 +930,7 @@ function StrategyRuleRow(props: {
             type="button"
             onClick={() => props.onRemove(rule.username)}
             style={{ background: "none", border: "none", color: "#8fa4b0", cursor: "pointer", fontSize: "0.78rem", padding: "0 2px" }}
-            title="Entfernen"
+            title={t("stratRemove")}
           >
             ✕
           </button>
@@ -942,9 +943,9 @@ function StrategyRuleRow(props: {
               {rule.voteCount > 0 && (
                 <>
                   <span><b style={{ color: "#2d3a42" }}>{rule.voteCount}</b> Votes</span>
-                  <span><b style={{ color: "#2d3a42" }}>{rule.sharePct}%</b> Anteil</span>
-                  <span>⌀ <b style={{ color: "#2d3a42" }}>{rule.avgWeightPct}%</b> Gewicht</span>
-                  <span>Letzter Vote: <b style={{ color: "#2d3a42" }}>{lastVoteLabel}</b></span>
+                  <span><b style={{ color: "#2d3a42" }}>{rule.sharePct}%</b> {t("stratSharePct")}</span>
+                  <span>{t("stratAvgWeight")} <b style={{ color: "#2d3a42" }}>{rule.avgWeightPct}%</b></span>
+                  <span>{t("stratLastVote")} <b style={{ color: "#2d3a42" }}>{lastVoteLabel}</b></span>
                 </>
               )}
               {rule.voteCount === 0 && <span style={{ fontStyle: "italic" }}>{t("stratNoDnaRecord")}</span>}
