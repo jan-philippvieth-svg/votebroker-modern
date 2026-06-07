@@ -29,6 +29,24 @@ import {
   OpenVoteOpportunities,
 } from "./VotePlanView";
 
+const CAT_EMOJI: Record<StrategyCategory, string> = {
+  immer_voten:    "🔥",
+  lieblingsautor: "⭐",
+  bevorzugt:      "🟦",
+  normal:         "⚪",
+  niedrig:        "⬇",
+  ignorieren:     "🚫",
+};
+
+const CAT_TKEY: Record<StrategyCategory, TranslationKey> = {
+  immer_voten:    "catAlways",
+  lieblingsautor: "catFavorite",
+  bevorzugt:      "catPreferred",
+  normal:         "catNormal",
+  niedrig:        "catLow",
+  ignorieren:     "catIgnore",
+};
+
 // ── InlineStrategyEditor — minimal author-add always available ────────────
 
 function InlineStrategyEditor(props: {
@@ -60,8 +78,8 @@ function InlineStrategyEditor(props: {
           onChange={e => props.setAddCategory(e.target.value as StrategyCategory)}
           style={{ ...inputStyle, cursor: "pointer" }}
         >
-          {(Object.keys(categoryLabel) as StrategyCategory[]).filter(k => k !== "ignorieren").map(k => (
-            <option key={k} value={k}>{categoryLabel[k]}</option>
+          {(Object.keys(CAT_EMOJI) as StrategyCategory[]).filter(k => k !== "ignorieren").map(k => (
+            <option key={k} value={k}>{CAT_EMOJI[k]} {props.t(CAT_TKEY[k])}</option>
           ))}
         </select>
         <button
@@ -69,7 +87,7 @@ function InlineStrategyEditor(props: {
           type="button"
           style={{ background: "#2563eb", border: "none", borderRadius: "6px", color: "#fff", cursor: "pointer", fontSize: "0.82rem", fontWeight: 700, padding: "0.35rem 0.85rem" }}
         >
-          Hinzufügen
+          {props.t("communityAddBtn")}
         </button>
       </div>
       {props.strategyRules && props.strategyRules.length > 0 && (
@@ -763,8 +781,8 @@ export function CurationDnaPanel(props: {
                   style={{ ...inputStyle, width: "140px" }}
                 />
                 <select value={addCategory} onChange={e => setAddCategory(e.target.value as StrategyCategory)} style={{ ...inputStyle, cursor: "pointer" }}>
-                  {(Object.keys(categoryLabel) as StrategyCategory[]).filter(k => k !== "ignorieren").map(k => (
-                    <option key={k} value={k}>{categoryLabel[k]}</option>
+                  {(Object.keys(CAT_EMOJI) as StrategyCategory[]).filter(k => k !== "ignorieren").map(k => (
+                    <option key={k} value={k}>{CAT_EMOJI[k]} {t(CAT_TKEY[k])}</option>
                   ))}
                 </select>
                 <button onClick={addManually} type="button" style={{ background: "#2563eb14", border: "1px solid #2563eb40", borderRadius: "6px", color: "#2563eb", cursor: "pointer", fontSize: "0.78rem", fontWeight: 600, padding: "0.3rem 0.65rem" }}>
@@ -824,8 +842,8 @@ function StrategyEditor(props: {
           </tbody>
         </table>
       </div>
-      <SimulationPanel rules={props.rules} votesPerDay={props.votesPerDay} />
-      <PlannedAutoVoteSection rules={props.rules} />
+      <SimulationPanel rules={props.rules} votesPerDay={props.votesPerDay} locale={props.locale} />
+      <PlannedAutoVoteSection rules={props.rules} locale={props.locale} />
     </div>
   );
 }
@@ -887,8 +905,8 @@ function StrategyRuleRow(props: {
             onChange={e => onUpdate(rule.username, { category: e.target.value as StrategyCategory })}
             style={selectStyle}
           >
-            {(Object.keys(categoryLabel) as StrategyCategory[]).map(k => (
-              <option key={k} value={k}>{categoryLabel[k]}</option>
+            {(Object.keys(CAT_EMOJI) as StrategyCategory[]).map(k => (
+              <option key={k} value={k}>{CAT_EMOJI[k]} {t(CAT_TKEY[k])}</option>
             ))}
           </select>
         </td>
@@ -969,7 +987,8 @@ function StrategyRuleRow(props: {
   );
 }
 
-function SimulationPanel(props: { rules: StrategyRule[]; votesPerDay: number }) {
+function SimulationPanel(props: { rules: StrategyRule[]; votesPerDay: number; locale?: import("../i18n").Locale }) {
+  const t = createTranslator(props.locale ?? "de");
   const active     = props.rules.filter(r => r.enabled && r.category !== "ignorieren");
   const aboveDust  = active.filter(r => r.maxWeightPct * 100 >= 1000); // ≥ 10% = meaningful
   const belowDust  = active.length - aboveDust.length;
@@ -986,11 +1005,11 @@ function SimulationPanel(props: { rules: StrategyRule[]; votesPerDay: number }) 
   // Category impact breakdown
   const byCategory = (cat: string) => aboveDust.filter(r => r.category === cat);
   const catGroups: Array<{ label: string; color: string; rules: StrategyRule[] }> = [
-    { label: "🔥 Immer",       color: "#ff6b35", rules: byCategory("immer_voten")    },
-    { label: "⭐ Liebling",    color: "#d97706", rules: byCategory("lieblingsautor") },
-    { label: "🟦 Bevorzugt",  color: "#2563eb", rules: byCategory("bevorzugt")      },
-    { label: "⚪ Normal",      color: "#16a34a", rules: byCategory("normal")         },
-    { label: "⬇ Niedrig",    color: "#607078", rules: byCategory("niedrig")         },
+    { label: `🔥 ${t("catAlways")}`,    color: "#ff6b35", rules: byCategory("immer_voten")    },
+    { label: `⭐ ${t("catFavorite")}`,  color: "#d97706", rules: byCategory("lieblingsautor") },
+    { label: `🟦 ${t("catPreferred")}`, color: "#2563eb", rules: byCategory("bevorzugt")      },
+    { label: `⚪ ${t("catNormal")}`,    color: "#16a34a", rules: byCategory("normal")         },
+    { label: `⬇ ${t("catLow")}`,       color: "#607078", rules: byCategory("niedrig")         },
   ].filter(g => g.rules.length > 0);
 
   const equilibriumVp = netBps >= 0 ? 100 : Math.max(0, Math.round(100 - (dailySpendBps - regenBps) / 20));
@@ -1053,7 +1072,8 @@ function SimulationPanel(props: { rules: StrategyRule[]; votesPerDay: number }) 
   );
 }
 
-function PlannedAutoVoteSection(props: { rules: StrategyRule[] }) {
+function PlannedAutoVoteSection(props: { rules: StrategyRule[]; locale?: import("../i18n").Locale }) {
+  const t = createTranslator(props.locale ?? "de");
   const active = props.rules.filter(r => r.enabled && r.category !== "ignorieren");
   const byCategory = (cat: StrategyCategory) => active.filter(r => r.category === cat);
 
@@ -1071,7 +1091,7 @@ function PlannedAutoVoteSection(props: { rules: StrategyRule[] }) {
           return (
             <div key={cat} style={{ marginBottom: "0.4rem", display: "flex", alignItems: "flex-start", gap: "0.5rem", flexWrap: "wrap" }}>
               <span style={{ color: categoryColor[cat], fontSize: "0.75rem", fontWeight: 600, minWidth: "120px" }}>
-                {categoryLabel[cat]}
+                {CAT_EMOJI[cat]} {t(CAT_TKEY[cat])}
               </span>
               <span style={{ color: "#607078", fontSize: "0.8rem" }}>
                 {authors.map(r => `@${r.username} (max ${r.maxWeightPct}%)`).join(" · ")}
