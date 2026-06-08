@@ -340,4 +340,274 @@ export async function registerStrategyRoutes(app: FastifyInstance): Promise<void
       entries,
     };
   });
+
+  // GET /api/me/copilot/outcome-analysis — learning foundation for CoPilot optimization
+  app.get("/api/me/copilot/outcome-analysis", {
+    schema: {
+      tags: ["Strategy"],
+      summary: "CoPilot Outcome-Analyse — SP-Effizienz nach Signal-Dimensionen (Lernbasis)",
+      security: [{ sessionToken: [] }],
+      querystring: zodToJsonSchema(z.object({
+        days: z.coerce.number().int().min(1).max(90).default(30),
+      })),
+    }
+  }, async (request, reply) => {
+    const session = getSession(getSessionHeader(request.headers.session));
+    if (!session) return reply.code(401).send({ error: "authorized_session_required" });
+
+    const query = z.object({ days: z.coerce.number().int().min(1).max(90).default(30) })
+      .safeParse(request.query);
+    if (!query.success) return reply.code(400).send({ error: "invalid_request" });
+
+    const username = session.user.username;
+    const since    = new Date(Date.now() - query.data.days * 24 * 3600 * 1000).toISOString();
+    const db       = getDb();
+
+    // ── Types ────────────────────────────────────────────────────────────────
+
+    interface OutcomeBucket {
+      label:        string;
+      n:            number;     // sample count
+      avgSp:        number;     // average realized curation SP per vote
+      avgSpPerVp:   number;     // SP per 100%-vote-equivalent (normalized for weight)
+      stddev:       number;     // standard deviation of spPerVp across samples
+      confidence:   number;     // 0–1: how much to trust this bucket's data
+      totalSp:      number;     // sum — useful for understanding absolute contribution
+    }
+
+    // Confidence: reaches 1.0 at 30 samples (Steem payout cycle ~7 days, realistic data rate)
+    function confidence(n: number): number {
+      return Math.round(Math.min(1, n / 30) * 100) / 100;
+    }
+
+    function makeBucket(label: string, values: number[], spValues: number[]): OutcomeBucket {
+      const n = values.length;
+      if (n === 0) return { label, n: 0, avgSp: 0, avgSpPerVp: 0, stddev: 0, confidence: 0, totalSp: 0 };
+      const avgSpPerVp = values.reduce((a, b) => a + b, 0) / n;
+      const avgSp      = spValues.reduce((a, b) => a + b, 0) / n;
+      const totalSp    = spValues.reduce((a, b) => a + b, 0);
+      const variance   = values.reduce((a, v) => a + (v - avgSpPerVp) ** 2, 0) / n;
+      return {
+        label,
+        n,
+        avgSp:      Math.round(avgSp      * 100_000) / 100_000,
+        avgSpPerVp: Math.round(avgSpPerVp * 100_000) / 100_000,
+        stddev:     Math.round(Math.sqrt(variance) * 100_000) / 100_000,
+        confidence: confidence(n),
+        totalSp:    Math.round(totalSp * 10_000) / 10_000,
+      };
+    }
+
+    // ── Fetch realized votes with whale signal ────────────────────────────────
+
+    type RealizedRow = {
+      author:               string;
+      voted_at:             string;
+      vote_delay_minutes:   number;
+      weight_bps:           number;
+      vp_at_vote_bps:       number | null;
+      realized_curation_sp: number;
+      strategy_category:    string;
+      is_self_post:         number;
+      whale_follow_rate:    number | null;
+      whale_count:          number | null;
+    };
+
+    const rows = db.prepare(`
+      SELECT gvo.author, gvo.voted_at, gvo.vote_delay_minutes, gvo.weight_bps,
+             gvo.vp_at_vote_bps, gvo.realized_curation_sp, gvo.strategy_category,
+             gvo.is_self_post,
+             sa.whale_follow_rate, sa.whale_count
+      FROM vb_global_vote_outcomes gvo
+      LEFT JOIN vb_signal_author sa ON gvo.author = sa.author
+      WHERE gvo.voter = ?
+        AND gvo.voted_at >= ?
+        AND gvo.realized_curation_sp IS NOT NULL
+        AND gvo.strategy_category IS NOT NULL
+        AND gvo.vote_delay_minutes IS NOT NULL
+      ORDER BY gvo.voted_at DESC
+    `).all(username, since) as RealizedRow[];
+
+    if (rows.length === 0) {
+      return {
+        username,
+        period:         { days: query.data.days, since },
+        dataNote:       "Keine realisierten Votes mit vollständigem Kontext gefunden. Erfordert strategy_category + vote_delay_minutes (ab 2026-06-03).",
+        meta:           { totalRealized: 0, totalSp: 0, avgSpPerVp: 0, computedAt: new Date().toISOString() },
+        byDelay:        {},
+        byCategory:     {},
+        byOpportunityScore: {},
+        byVpLevel:      {},
+        topAuthors:     [],
+        findings:       [],
+      };
+    }
+
+    // ── SP/VP normalization ───────────────────────────────────────────────────
+    // sp_per_vp = realized_sp / (weight_bps / 10_000)
+    // → "how much SP did a full 100% vote worth of power earn?"
+
+    type Enriched = RealizedRow & {
+      spPerVp:     number;
+      oppScore:    number;
+      delayBucket: string;
+      oppBucket:   string;
+      vpBucket:    string;
+    };
+
+    const DELAY_BUCKETS: Array<[string, string, number, number]> = [
+      // [key, label, minMin, maxMin]
+      ["0_30min",  "0–30 min",   0,    30],
+      ["30_120min","30–120 min",  30,   120],
+      ["2h_6h",    "2–6 h",      120,  360],
+      ["6h_24h",   "6–24 h",     360,  1440],
+      ["1d_3d",    "1–3 Tage",   1440, 4320],
+      ["3d_7d",    "3–7 Tage",   4320, 10080],
+    ];
+
+    const OPP_BUCKETS: Array<[string, string, number, number]> = [
+      ["0_20",  "Score 0–20",  0,  20],
+      ["20_40", "Score 20–40", 20, 40],
+      ["40_60", "Score 40–60", 40, 60],
+      ["60_80", "Score 60–80", 60, 80],
+      ["80_100","Score 80–100",80, 101],
+    ];
+
+    const VP_BUCKETS: Array<[string, string, number, number]> = [
+      ["lt70",   "VP < 70%",     0,    7000],
+      ["70_80",  "VP 70–80%",    7000, 8000],
+      ["80_90",  "VP 80–90%",    8000, 9000],
+      ["90_100", "VP 90–100%",   9000, 10001],
+    ];
+
+    function bucketKey<T extends [string, string, number, number]>(
+      buckets: T[], value: number
+    ): string {
+      for (const [key, , min, max] of buckets) {
+        if (value >= min && value < max) return key;
+      }
+      return buckets[buckets.length - 1][0];
+    }
+
+    const enriched: Enriched[] = rows.map(r => {
+      const spPerVp = r.realized_curation_sp / (r.weight_bps / 10_000);
+      const whaleFollowRate = r.whale_follow_rate != null
+        ? Math.min(1, (r.whale_count ?? 0) / 10) : undefined;
+      const opp = calcOpportunityScore({
+        ageMinutes:      r.vote_delay_minutes,
+        remainingHours:  Math.max(0, (7 * 24 * 60 - r.vote_delay_minutes) / 60),
+        category:        r.strategy_category,
+        whaleFollowRate,
+        isSelfPost:      r.is_self_post === 1,
+      });
+      return {
+        ...r,
+        spPerVp,
+        oppScore:    opp.score,
+        delayBucket: bucketKey(DELAY_BUCKETS, r.vote_delay_minutes),
+        oppBucket:   bucketKey(OPP_BUCKETS, opp.score),
+        vpBucket:    r.vp_at_vote_bps != null ? bucketKey(VP_BUCKETS, r.vp_at_vote_bps) : "unknown",
+      };
+    });
+
+    // ── Build buckets ─────────────────────────────────────────────────────────
+
+    function groupBy(key: keyof Enriched, bucketDefs: Array<[string, string, number, number]>): Record<string, OutcomeBucket> {
+      const result: Record<string, OutcomeBucket> = {};
+      for (const [bKey, label] of bucketDefs) {
+        const subset = enriched.filter(e => e[key] === bKey);
+        result[bKey] = makeBucket(label, subset.map(e => e.spPerVp), subset.map(e => e.realized_curation_sp));
+      }
+      return result;
+    }
+
+    const byDelay    = groupBy("delayBucket", DELAY_BUCKETS);
+    const byOppScore = groupBy("oppBucket",   OPP_BUCKETS);
+    const byVpLevel  = groupBy("vpBucket",    VP_BUCKETS);
+
+    // By category (not predefined ranges — use actual categories)
+    const categories = [...new Set(enriched.map(e => e.strategy_category))];
+    const byCategory: Record<string, OutcomeBucket> = {};
+    for (const cat of categories) {
+      const subset = enriched.filter(e => e.strategy_category === cat);
+      byCategory[cat] = makeBucket(cat, subset.map(e => e.spPerVp), subset.map(e => e.realized_curation_sp));
+    }
+
+    // Top authors by SP/VP efficiency (min 2 samples)
+    const authorMap = new Map<string, number[]>();
+    for (const e of enriched) {
+      if (!authorMap.has(e.author)) authorMap.set(e.author, []);
+      authorMap.get(e.author)!.push(e.spPerVp);
+    }
+    const topAuthors = [...authorMap.entries()]
+      .filter(([, v]) => v.length >= 2)
+      .map(([author, vals]) => ({
+        author,
+        n:          vals.length,
+        avgSpPerVp: Math.round(vals.reduce((a, b) => a + b, 0) / vals.length * 100_000) / 100_000,
+        totalSp:    Math.round(vals.reduce((a, b) => a + b, 0) * 10_000) / 10_000,
+        confidence: confidence(vals.length),
+      }))
+      .sort((a, b) => b.avgSpPerVp - a.avgSpPerVp)
+      .slice(0, 20);
+
+    // ── Meta ──────────────────────────────────────────────────────────────────
+
+    const allSpPerVp = enriched.map(e => e.spPerVp);
+    const totalSp    = enriched.reduce((a, e) => a + e.realized_curation_sp, 0);
+    const avgSpPerVp = allSpPerVp.reduce((a, b) => a + b, 0) / allSpPerVp.length;
+
+    // ── Findings: auto-generated insights (machine-readable) ─────────────────
+    // Each finding maps a signal dimension to an observed effect with confidence.
+    // These are the raw observations — not recommendations. The CoPilot uses them later.
+
+    interface Finding {
+      dimension:  string;
+      signal:     string;
+      label:      string;
+      avgSpPerVp: number;
+      vsBaseline: number;  // % difference vs overall avgSpPerVp
+      n:          number;
+      confidence: number;
+    }
+
+    const findings: Finding[] = [];
+    const baseline = avgSpPerVp;
+
+    function addFindings(buckets: Record<string, OutcomeBucket>, dimension: string) {
+      for (const [signal, b] of Object.entries(buckets)) {
+        if (b.n === 0) continue;
+        const vsBaseline = baseline > 0
+          ? Math.round((b.avgSpPerVp / baseline - 1) * 1000) / 10  // % with 1 decimal
+          : 0;
+        findings.push({ dimension, signal, label: b.label, avgSpPerVp: b.avgSpPerVp, vsBaseline, n: b.n, confidence: b.confidence });
+      }
+    }
+
+    addFindings(byDelay,    "delay");
+    addFindings(byCategory, "category");
+    addFindings(byOppScore, "opportunity_score");
+    addFindings(byVpLevel,  "vp_level");
+
+    // Sort by effect size descending (most impactful signals first)
+    findings.sort((a, b) => Math.abs(b.vsBaseline) - Math.abs(a.vsBaseline));
+
+    return {
+      username,
+      period:      { days: query.data.days, since },
+      dataNote:    `${enriched.length} realisierte Votes mit vollständigem Kontext. Konfidenz steigt ab 30 Samples pro Bucket.`,
+      meta: {
+        totalRealized: enriched.length,
+        totalSp:       Math.round(totalSp * 10_000) / 10_000,
+        avgSpPerVp:    Math.round(avgSpPerVp * 100_000) / 100_000,
+        computedAt:    new Date().toISOString(),
+      },
+      byDelay,
+      byCategory,
+      byOpportunityScore: byOppScore,
+      byVpLevel,
+      topAuthors,
+      findings,
+    };
+  });
 }
