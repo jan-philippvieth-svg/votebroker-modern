@@ -63,7 +63,7 @@ function InlineStrategyEditor(props: {
   return (
     <div style={{ border: "1px solid #dde8ed", borderRadius: "10px", padding: "1.25rem" }}>
       <p style={{ color: "#607078", fontSize: "0.75rem", fontWeight: 600, textTransform: "uppercase" as const, letterSpacing: "0.5px", margin: "0 0 0.85rem" }}>
-        🧬 Autor direkt hinzufügen
+        {props.t("dnaAddAuthorDirect")}
       </p>
       <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" as const, alignItems: "center", marginBottom: props.strategyRules && props.strategyRules.length > 0 ? "1rem" : 0 }}>
         <input
@@ -228,7 +228,7 @@ function WorkflowBar({ onNavigate, t }: {
           <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
             <Lightbulb size={16} color="#ca8a04" strokeWidth={2} />
             <span style={{ color: "#92400e", fontSize: "0.78rem", fontWeight: 800, letterSpacing: "0.3px" }}>
-              Tipp
+              {t("tipLabel")}
             </span>
           </div>
           <p style={{ color: "#78350f", fontSize: "0.73rem", margin: 0, lineHeight: 1.55 }}>
@@ -358,7 +358,7 @@ export function CurationDnaPanel(props: {
               {t("stepDna")}
             </strong>
             <p style={{ color: "#607078", fontSize: "0.85rem", margin: "0 0 1rem", lineHeight: 1.6 }}>
-              Noch keine Vote-Historie gefunden. Füge Autoren hinzu, die du regelmäßig unterstützen möchtest — VoteBroker erstellt daraus deine Strategie.
+              {t("dnaNoHistory")}
             </p>
             {props.onNavigate && (
               <button
@@ -786,14 +786,14 @@ export function CurationDnaPanel(props: {
                   ))}
                 </select>
                 <button onClick={addManually} type="button" style={{ background: "#2563eb14", border: "1px solid #2563eb40", borderRadius: "6px", color: "#2563eb", cursor: "pointer", fontSize: "0.78rem", fontWeight: 600, padding: "0.3rem 0.65rem" }}>
-                  Hinzufügen
+                  {t("communityAddBtn")}
                 </button>
               </div>
               {strategyRules && (
                 <div style={{ display: "flex", gap: "0.4rem" }}>
-                  <button style={{ ...chipBtn, fontSize: "0.78rem" }} type="button" onClick={regenerate}>↺ Anpassen</button>
+                  <button style={{ ...chipBtn, fontSize: "0.78rem" }} type="button" onClick={regenerate}>↺ {t("stratAdjust")}</button>
                   <button style={{ background: "#2563eb", border: "none", borderRadius: "7px", color: "#fff", cursor: "pointer", fontSize: "0.78rem", fontWeight: 700, padding: "0.35rem 0.75rem" }} type="button" onClick={generateStrategy}>
-                    ✦ Neu generieren
+                    ✦ {t("stratRegenerate")}
                   </button>
                 </div>
               )}
@@ -1016,21 +1016,21 @@ function SimulationPanel(props: { rules: StrategyRule[]; votesPerDay: number; lo
   const status: "sustainable" | "aggressive" | "critical" =
     netBps >= 200 ? "sustainable" : netBps >= -300 ? "aggressive" : "critical";
   const statusConfig = {
-    sustainable: { icon: "✓", text: "Nachhaltig", color: "#16a34a" },
-    aggressive:  { icon: "⚠", text: "Aggressiv — VP kann sinken", color: "#d97706" },
-    critical:    { icon: "🔴", text: "Kritisch — VP entleert sich", color: "#dc2626" },
+    sustainable: { icon: "✓", text: t("stratSustainable"), color: "#16a34a" },
+    aggressive:  { icon: "⚠", text: t("stratAggressive"), color: "#d97706" },
+    critical:    { icon: "🔴", text: t("stratCritical"), color: "#dc2626" },
   }[status];
 
   return (
     <div style={{ margin: "0.75rem 0", padding: "0.75rem 1rem", background: "#f0f5f7", borderRadius: "6px", border: "1px solid #30363d" }}>
       <p style={{ color: "#607078", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 0.6rem", fontWeight: 600 }}>
-        Strategie-Simulation
+        {t("stratSimTitle")}
       </p>
 
       {/* Dust warning */}
       {belowDust > 0 && (
         <div style={{ background: "#2d2a0e", border: "1px solid #f0a50055", borderRadius: "4px", padding: "0.3rem 0.6rem", marginBottom: "0.5rem", fontSize: "0.77rem", color: "#d97706" }}>
-          ⚠ {belowDust} {belowDust === 1 ? "Autor" : "Autoren"} mit zu geringem Gewicht (&lt;10%) — werden beim Vote übersprungen. Erhöhe `maxWeight%` oder ändere die Kategorie.
+          ⚠ {belowDust} {t("unitAuthors")} {t("stratDustWarning")}
         </div>
       )}
 
@@ -1042,8 +1042,8 @@ function SimulationPanel(props: { rules: StrategyRule[]; votesPerDay: number; lo
             return (
               <div key={g.label} style={{ display: "flex", alignItems: "center", gap: "0.75rem", fontSize: "0.78rem" }}>
                 <span style={{ color: g.color, minWidth: "100px", fontWeight: 600 }}>{g.label}</span>
-                <span style={{ color: "#607078" }}>{g.rules.length} Autor{g.rules.length > 1 ? "en" : ""}</span>
-                <span style={{ color: "#17202a" }}>Ø {avgPct}% pro Vote</span>
+                <span style={{ color: "#607078" }}>{g.rules.length} {t("unitAuthors")}</span>
+                <span style={{ color: "#17202a" }}>Ø {avgPct}% {t("simPerVote")}</span>
               </div>
             );
           })}
@@ -1052,10 +1052,10 @@ function SimulationPanel(props: { rules: StrategyRule[]; votesPerDay: number; lo
 
       {/* VP stats */}
       <div style={{ display: "flex", gap: "1.25rem", flexWrap: "wrap", fontSize: "0.79rem", color: "#607078", marginBottom: "0.4rem" }}>
-        <span>Sinnvolle Autoren: <b style={{ color: "#17202a" }}>{aboveDust.length}</b></span>
-        <span>Ø Gewicht: <b style={{ color: "#17202a" }}>{Math.round(avgWeightBps / 100 * 10) / 10}%</b></span>
-        <span>VP/Tag (est.): <b style={{ color: "#17202a" }}>{Math.round(dailySpendBps / 100 * 10) / 10}%</b></span>
-        <span>Bilanz/Tag: <b style={{ color: netBps >= 0 ? "#16a34a" : "#dc2626" }}>{netBps >= 0 ? "+" : ""}{Math.round(netBps / 100 * 10) / 10}%</b></span>
+        <span>{t("simEffectiveAuthors")} <b style={{ color: "#17202a" }}>{aboveDust.length}</b></span>
+        <span>{t("simAvgWeight")} <b style={{ color: "#17202a" }}>{Math.round(avgWeightBps / 100 * 10) / 10}%</b></span>
+        <span>{t("simVpPerDay")} <b style={{ color: "#17202a" }}>{Math.round(dailySpendBps / 100 * 10) / 10}%</b></span>
+        <span>{t("simBalancePerDay")} <b style={{ color: netBps >= 0 ? "#16a34a" : "#dc2626" }}>{netBps >= 0 ? "+" : ""}{Math.round(netBps / 100 * 10) / 10}%</b></span>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
@@ -1064,8 +1064,8 @@ function SimulationPanel(props: { rules: StrategyRule[]; votesPerDay: number; lo
         </span>
         <span style={{ color: "#607078", fontSize: "0.77rem" }}>
           {status === "sustainable"
-            ? `VP-Range: ${Math.max(80, equilibriumVp - 5)}–100%`
-            : `Gleichgewichts-VP: ca. ${equilibriumVp}%`}
+            ? `${t("simVpRange")} ${Math.max(80, equilibriumVp - 5)}–100%`
+            : `${t("simEquilVp")} ${equilibriumVp}%`}
         </span>
       </div>
     </div>
@@ -1080,10 +1080,10 @@ function PlannedAutoVoteSection(props: { rules: StrategyRule[]; locale?: import(
   return (
     <div style={{ marginTop: "1rem", padding: "0.75rem 1rem", background: "#f0f5f7", borderRadius: "6px", border: "1px solid #30363d" }}>
       <p style={{ color: "#607078", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 0.6rem", fontWeight: 600 }}>
-        Geplante Auto-Vote-Autoren · {active.length} aktiv
+        {t("plannedAutoVoteHeader")} · {active.length} {t("unitActive")}
       </p>
       {active.length === 0 ? (
-        <p style={{ color: "#8fa4b0", fontSize: "0.82rem", margin: 0 }}>Keine aktiven Autoren in der Strategie.</p>
+        <p style={{ color: "#8fa4b0", fontSize: "0.82rem", margin: 0 }}>{t("noActiveAuthors")}</p>
       ) : (
         (["lieblingsautor", "bevorzugt", "normal", "niedrig"] as StrategyCategory[]).map(cat => {
           const authors = byCategory(cat);

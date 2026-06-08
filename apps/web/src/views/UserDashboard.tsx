@@ -409,7 +409,7 @@ function RelationshipsPanel({ authors, t }: { authors: CurationProfile["topAutho
               </div>
               <div style={{ flexShrink:0, textAlign:"right" as const }}>
                 <div style={{ color:C.purple, fontWeight:800, fontSize:"1.1rem" }}>{a.voteCount}</div>
-                <div style={{ color:C.faint, fontSize:"0.6rem" }}>votes</div>
+                <div style={{ color:C.faint, fontSize:"0.6rem" }}>{t("unitVotes")}</div>
               </div>
             </div>
             <div style={{ height:"3px", background:C.inner2, borderRadius:"2px", overflow:"hidden" }}>
@@ -563,16 +563,16 @@ function OperativeKPIRow({ snapshot, snapshotLoading, snapshotRefreshedAt, oppor
               const to90=vpPct>=90?null:(90-vpPct)/20*24;
               return (
                 <div style={{ display:"flex", gap:"0.5rem", fontSize:"0.85rem" }}>
-                  {to90&&<span style={{ color:C.ok, fontWeight:600 }}>→ 90% in {to90<1?`${Math.round(to90*60)}m`:`${to90.toFixed(1)}h`}</span>}
-                  {regenH>0&&<span style={{ color:C.dim, marginLeft:"auto" }}>voll in {regenH<1?`${Math.round(regenH*60)}m`:`${regenH.toFixed(1)}h`}</span>}
-                  {regenH===0&&<span style={{ color:C.ok, marginLeft:"auto" }}>✓ voll geladen</span>}
+                  {to90&&<span style={{ color:C.ok, fontWeight:600 }}>{t("vpTo90In")} {to90<1?`${Math.round(to90*60)}m`:`${to90.toFixed(1)}h`}</span>}
+                  {regenH>0&&<span style={{ color:C.dim, marginLeft:"auto" }}>{t("vpFullIn")} {regenH<1?`${Math.round(regenH*60)}m`:`${regenH.toFixed(1)}h`}</span>}
+                  {regenH===0&&<span style={{ color:C.ok, marginLeft:"auto" }}>✓ {t("vpFullyCharged")}</span>}
                 </div>
               );
             })()}
             {snapshot&&<div style={{ color:C.dim, fontSize:"0.85rem", marginTop:"0.4rem" }}>{snapshot.steemPowerSp.toFixed(0)} SP · 100%: {fmtUsd(snapshot.fullPowerVoteUsd)}</div>}
           </>
         ):(
-          <div style={{ color:C.dim, fontSize:"0.82rem" }}>{snapshotLoading?"Lädt…":"—"}</div>
+          <div style={{ color:C.dim, fontSize:"0.82rem" }}>{snapshotLoading?t("loading"):"—"}</div>
         )}
         {snapshotRefreshedAt&&<div style={{ color:C.faint, fontSize:"0.73rem", marginTop:"0.3rem" }}>{fmtAge(snapshotRefreshedAt.toISOString(),t)}</div>}
       </div>
@@ -619,27 +619,25 @@ function OperativeKPIRow({ snapshot, snapshotLoading, snapshotRefreshedAt, oppor
               ✓
             </div>
             <div style={{ fontSize:"0.9rem", display:"flex", flexDirection:"column" as const, gap:"0.25rem" }}>
-              <span style={{ color:C.ok, fontWeight:700 }}>Alles gevotet</span>
+              <span style={{ color:C.ok, fontWeight:700 }}>{t("oppAllVoted")}</span>
               {opportunitiesMeta && (
                 <span style={{ color:C.dim }}>
-                  {opportunitiesMeta.scannedAuthors}/{opportunitiesMeta.requestedAuthors} Autoren geprüft
+                  {opportunitiesMeta.scannedAuthors}/{opportunitiesMeta.requestedAuthors} {t("oppScanned")}
                 </span>
               )}
-              <span style={{ color:C.dim }}>Keine offenen Beiträge gefunden</span>
+              <span style={{ color:C.dim }}>{t("oppNoneFound")}</span>
               {(() => {
-                // Estimate next scan: look at already-voted posts' remaining hours
                 const voted = (opportunities ?? []).filter(p => p.alreadyVoted && p.remainingHours > 0);
                 const minRemaining = voted.length > 0
                   ? Math.min(...voted.map(p => p.remainingHours))
                   : null;
-                // Suggest a re-scan after ~60 min (typical new post window)
                 return (
                   <span style={{ color:C.faint, fontSize:"0.85rem", marginTop:"0.1rem" }}>
-                    Nächster Scan empfohlen in{" "}
+                    {t("oppNextScanIn")}{" "}
                     <b style={{ color:C.dim }}>
                       {minRemaining !== null && minRemaining < 2
-                        ? "~30 Min."
-                        : "~60 Min."}
+                        ? t("opp30min")
+                        : t("opp60min")}
                     </b>
                   </span>
                 );
