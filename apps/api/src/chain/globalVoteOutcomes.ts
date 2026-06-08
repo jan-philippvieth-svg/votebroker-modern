@@ -13,6 +13,14 @@
 import { createSteemClient } from "./steemBroadcaster.js";
 import { getDb } from "../db/index.js";
 
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+// Votes before this date were imported from get_account_history retroactively.
+// They have artificially large vote_delay_minutes (days, not minutes) and are
+// not representative of VoteBroker's real-time auto-vote behavior.
+// recordVoteAtBroadcast was activated on this date — everything from here on is live.
+export const LIVE_VOTES_SINCE = "2026-06-03";
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface GlobalVoteOutcomeSummary {
@@ -23,8 +31,36 @@ export interface GlobalVoteOutcomeSummary {
   avgDelaySelf:   number | null;
   avgDelayOthers: number | null;
   avgCurationSp:  number | null;
-  bestDelayBucket: string | null;   // e.g. "5-30 min" or "30-60 min"
+  bestDelayBucket: string | null;
+  // Data quality annotation — present when pre-LIVE_VOTES_SINCE rows exist.
+  // bestDelayBucket is unreliable when dataNote is "includes_historical_imports".
+  dataNote: "live_only" | "includes_historical_imports";
+  historicalImportCount: number;  // votes before LIVE_VOTES_SINCE
   rebuiltAt:      string;
+}
+
+export interface LiveVoteReportBucket {
+  label:        string;
+  votes:        number;
+  avgCurationSp: number | null;
+  minDelay:     number | null;
+  maxDelay:     number | null;
+}
+
+export interface LiveVoteReport {
+  username:         string;
+  since:            string;          // LIVE_VOTES_SINCE
+  totalLive:        number;          // voted_at >= LIVE_VOTES_SINCE
+  realized:         number;          // with realized_curation_sp
+  pending:          number;          // without realized_curation_sp
+  avgCurationSp:    number | null;   // realized only
+  // 5 analysis dimensions (realized votes only)
+  byDelay:          LiveVoteReportBucket[];
+  byWeight:         LiveVoteReportBucket[];
+  byCategory:       Array<{ category: string; votes: number; avgCurationSp: number | null; avgWeightPct: number | null }>;
+  byCommunity:      Array<{ community: string; votes: number; avgCurationSp: number | null }>;
+  byAuthor:         Array<{ author: string; votes: number; avgDelay: number | null; avgWeightPct: number | null; avgCurationSp: number | null }>;
+  generatedAt:      string;
 }
 
 // ── Real-time capture at vote broadcast ──────────────────────────────────────
@@ -320,17 +356,20 @@ export function getVoteOutcomeSummary(username: string): GlobalVoteOutcomeSummar
       COUNT(*) as total,
       COUNT(realized_curation_sp) as with_outcome,
       COUNT(vote_delay_minutes) as with_delay,
+      SUM(CASE WHEN voted_at < ? THEN 1 ELSE 0 END) as historical_count,
       AVG(CASE WHEN is_self_post=1 THEN vote_delay_minutes END) as avg_delay_self,
       AVG(CASE WHEN is_self_post=0 THEN vote_delay_minutes END) as avg_delay_others,
       AVG(realized_curation_sp) as avg_sp
     FROM vb_global_vote_outcomes
     WHERE voter = ?
-  `).get(username) as {
-    total: number; with_outcome: number; with_delay: number;
+  `).get(LIVE_VOTES_SINCE, username) as {
+    total: number; with_outcome: number; with_delay: number; historical_count: number;
     avg_delay_self: number | null; avg_delay_others: number | null; avg_sp: number | null;
   } | undefined;
 
-  // Best performing delay bucket (5 buckets: <5, 5-30, 30-60, 60-1440, >1440 min)
+  const historicalCount = totals?.historical_count ?? 0;
+
+  // Best performing delay bucket — only meaningful from live votes
   const buckets = db.prepare(`
     SELECT
       CASE
@@ -343,21 +382,147 @@ export function getVoteOutcomeSummary(username: string): GlobalVoteOutcomeSummar
       AVG(realized_curation_sp) as avg_sp,
       COUNT(*) as n
     FROM vb_global_vote_outcomes
-    WHERE voter = ? AND realized_curation_sp IS NOT NULL AND vote_delay_minutes IS NOT NULL
+    WHERE voter = ? AND voted_at >= ? AND realized_curation_sp IS NOT NULL AND vote_delay_minutes IS NOT NULL
     GROUP BY bucket
     ORDER BY avg_sp DESC
     LIMIT 1
-  `).get(username) as { bucket: string; avg_sp: number; n: number } | undefined;
+  `).get(username, LIVE_VOTES_SINCE) as { bucket: string; avg_sp: number; n: number } | undefined;
 
   return {
     username,
-    totalVotes:      totals?.total ?? 0,
-    withOutcome:     totals?.with_outcome ?? 0,
-    withDelay:       totals?.with_delay ?? 0,
-    avgDelaySelf:    totals?.avg_delay_self ?? null,
-    avgDelayOthers:  totals?.avg_delay_others ?? null,
-    avgCurationSp:   totals?.avg_sp ?? null,
-    bestDelayBucket: buckets?.bucket ?? null,
-    rebuiltAt:       new Date().toISOString(),
+    totalVotes:            totals?.total ?? 0,
+    withOutcome:           totals?.with_outcome ?? 0,
+    withDelay:             totals?.with_delay ?? 0,
+    avgDelaySelf:          totals?.avg_delay_self ?? null,
+    avgDelayOthers:        totals?.avg_delay_others ?? null,
+    avgCurationSp:         totals?.avg_sp ?? null,
+    bestDelayBucket:       buckets?.bucket ?? null,
+    dataNote:              historicalCount > 0 ? "includes_historical_imports" : "live_only",
+    historicalImportCount: historicalCount,
+    rebuiltAt:             new Date().toISOString(),
+  };
+}
+
+// ── Live vote report — first real analytics baseline ─────────────────────────
+// Only votes from LIVE_VOTES_SINCE onwards; only realized entries.
+// This is the foundation for the future vote copilot.
+
+export function getLiveVoteReport(username: string): LiveVoteReport {
+  const db = getDb();
+
+  const overview = db.prepare(`
+    SELECT
+      COUNT(*) as total_live,
+      COUNT(realized_curation_sp) as realized,
+      AVG(realized_curation_sp) as avg_sp
+    FROM vb_global_vote_outcomes
+    WHERE voter = ? AND voted_at >= ?
+  `).get(username, LIVE_VOTES_SINCE) as {
+    total_live: number; realized: number; avg_sp: number | null;
+  };
+
+  const REALIZED_FILTER = "voter = ? AND voted_at >= ? AND realized_curation_sp IS NOT NULL";
+
+  const delayRows = db.prepare(`
+    SELECT
+      CASE
+        WHEN vote_delay_minutes < 30   THEN '< 30 min'
+        WHEN vote_delay_minutes < 60   THEN '30–60 min'
+        WHEN vote_delay_minutes < 120  THEN '1–2 h'
+        WHEN vote_delay_minutes < 360  THEN '2–6 h'
+        WHEN vote_delay_minutes < 1440 THEN '6–24 h'
+        WHEN vote_delay_minutes < 4320 THEN '1–3 Tage'
+        ELSE '> 3 Tage'
+      END as label,
+      COUNT(*) as votes,
+      AVG(realized_curation_sp) as avg_sp,
+      MIN(vote_delay_minutes) as min_delay,
+      MAX(vote_delay_minutes) as max_delay
+    FROM vb_global_vote_outcomes
+    WHERE ${REALIZED_FILTER}
+    GROUP BY label
+    ORDER BY MIN(vote_delay_minutes)
+  `).all(username, LIVE_VOTES_SINCE) as Array<{
+    label: string; votes: number; avg_sp: number | null; min_delay: number | null; max_delay: number | null;
+  }>;
+
+  const weightRows = db.prepare(`
+    SELECT
+      CASE
+        WHEN weight_bps < 1000  THEN '< 10%'
+        WHEN weight_bps < 3000  THEN '10–30%'
+        WHEN weight_bps < 5000  THEN '30–50%'
+        WHEN weight_bps < 8000  THEN '50–80%'
+        ELSE '80–100%'
+      END as label,
+      COUNT(*) as votes,
+      AVG(realized_curation_sp) as avg_sp,
+      MIN(vote_delay_minutes) as min_delay,
+      MAX(vote_delay_minutes) as max_delay
+    FROM vb_global_vote_outcomes
+    WHERE ${REALIZED_FILTER}
+    GROUP BY label
+    ORDER BY MIN(weight_bps)
+  `).all(username, LIVE_VOTES_SINCE) as Array<{
+    label: string; votes: number; avg_sp: number | null; min_delay: number | null; max_delay: number | null;
+  }>;
+
+  const categoryRows = db.prepare(`
+    SELECT
+      COALESCE(strategy_category, 'unbekannt') as category,
+      COUNT(*) as votes,
+      AVG(realized_curation_sp) as avg_sp,
+      AVG(weight_bps) / 100.0 as avg_weight_pct
+    FROM vb_global_vote_outcomes
+    WHERE ${REALIZED_FILTER}
+    GROUP BY strategy_category
+    ORDER BY avg_sp DESC
+  `).all(username, LIVE_VOTES_SINCE) as Array<{
+    category: string; votes: number; avg_sp: number | null; avg_weight_pct: number | null;
+  }>;
+
+  const communityRows = db.prepare(`
+    SELECT
+      COALESCE(post_community, '(kein Tag)') as community,
+      COUNT(*) as votes,
+      AVG(realized_curation_sp) as avg_sp
+    FROM vb_global_vote_outcomes
+    WHERE ${REALIZED_FILTER}
+    GROUP BY post_community
+    ORDER BY votes DESC
+    LIMIT 20
+  `).all(username, LIVE_VOTES_SINCE) as Array<{
+    community: string; votes: number; avg_sp: number | null;
+  }>;
+
+  const authorRows = db.prepare(`
+    SELECT
+      author,
+      COUNT(*) as votes,
+      AVG(vote_delay_minutes) as avg_delay,
+      AVG(weight_bps) / 100.0 as avg_weight_pct,
+      AVG(realized_curation_sp) as avg_sp
+    FROM vb_global_vote_outcomes
+    WHERE ${REALIZED_FILTER}
+    GROUP BY author
+    ORDER BY avg_sp DESC
+    LIMIT 30
+  `).all(username, LIVE_VOTES_SINCE) as Array<{
+    author: string; votes: number; avg_delay: number | null; avg_weight_pct: number | null; avg_sp: number | null;
+  }>;
+
+  return {
+    username,
+    since:         LIVE_VOTES_SINCE,
+    totalLive:     overview.total_live,
+    realized:      overview.realized,
+    pending:       overview.total_live - overview.realized,
+    avgCurationSp: overview.avg_sp,
+    byDelay:    delayRows.map(r => ({ label: r.label, votes: r.votes, avgCurationSp: r.avg_sp, minDelay: r.min_delay, maxDelay: r.max_delay })),
+    byWeight:   weightRows.map(r => ({ label: r.label, votes: r.votes, avgCurationSp: r.avg_sp, minDelay: r.min_delay, maxDelay: r.max_delay })),
+    byCategory: categoryRows.map(r => ({ category: r.category, votes: r.votes, avgCurationSp: r.avg_sp, avgWeightPct: r.avg_weight_pct })),
+    byCommunity: communityRows.map(r => ({ community: r.community, votes: r.votes, avgCurationSp: r.avg_sp })),
+    byAuthor:   authorRows.map(r => ({ author: r.author, votes: r.votes, avgDelay: r.avg_delay, avgWeightPct: r.avg_weight_pct, avgCurationSp: r.avg_sp })),
+    generatedAt: new Date().toISOString(),
   };
 }

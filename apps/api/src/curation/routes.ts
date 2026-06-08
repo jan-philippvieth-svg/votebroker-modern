@@ -629,6 +629,25 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
     }
   });
 
+  // ── GET /api/me/vote-outcomes/live-report — first real analytics baseline ────
+  // Filters to votes from LIVE_VOTES_SINCE onwards (post-recordVoteAtBroadcast).
+  // Only realized entries are included in the 5 analysis dimensions.
+  app.get("/api/me/vote-outcomes/live-report", {
+    schema: { tags: ["Account"], summary: "Live-Vote-Report (ab Echtzeit-Erfassung)", security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
+    const token   = (request.headers as Record<string, string>)["session"];
+    const session = token ? getSession(token) : null;
+    if (!session) return reply.code(401).send({ error: "unauthorized" });
+
+    try {
+      const { getLiveVoteReport } = await import("../chain/globalVoteOutcomes.js");
+      return getLiveVoteReport(session.user.username);
+    } catch (err) {
+      return reply.code(502).send({ error: "live_report_failed",
+        detail: err instanceof Error ? err.message : "unknown" });
+    }
+  });
+
   // ── GET /api/me/votebroker-earnings — VoteBroker-attributed curation ────────
   app.get("/api/me/votebroker-earnings", {
     schema: { tags: ["Account"], summary: "VoteBroker-zugerechnete Curation-Earnings", security: [{ sessionToken: [] }] }
