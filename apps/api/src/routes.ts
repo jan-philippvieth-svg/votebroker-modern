@@ -376,8 +376,17 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       const liveSnap = await fetchSteemAccountSnapshot(session.user.username);
       liveFullPowerVoteUsd = liveSnap.fullPowerVoteUsd;
       liveVpBeforeBps      = liveSnap.votingPowerBps ?? null;
+      // Cache the live snapshot so the fallback below has real data on next failure
+      saveAccount({
+        username:                    session.user.username,
+        votingPowerBps:              liveSnap.votingPowerBps,
+        fullPowerVoteUsd:            liveSnap.fullPowerVoteUsd,
+        status:                      "active",
+        consecutiveUnderfundedFees:  getAccount(session.user.username).consecutiveUnderfundedFees,
+      });
     } catch {
-      // Fall back to mockStore if Steem API unreachable
+      // Fall back to last cached snapshot — avoids blocking votes with implausible_quote
+      // when the Steem node is transiently unreachable (e.g. after heavy cron activity).
       const cached = getAccount(session.user.username);
       liveFullPowerVoteUsd = cached.fullPowerVoteUsd;
       liveStatus = cached.status;
