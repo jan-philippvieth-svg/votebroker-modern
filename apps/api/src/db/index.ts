@@ -361,6 +361,35 @@ function runMigrations(db: Database): void {
       if (!gvoCols.includes("post_community"))       db.exec("ALTER TABLE vb_global_vote_outcomes ADD COLUMN post_community TEXT");
     }
 
+    // CoPilot shadow run log — dry-run decisions written every 30 min, no broadcast
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS vb_copilot_shadow_runs (
+        id                   TEXT PRIMARY KEY,
+        run_id               TEXT NOT NULL,       -- UUID grouping all rows from one 30-min tick
+        username             TEXT NOT NULL,
+        run_at               TEXT NOT NULL,       -- ISO timestamp of the run
+        decision             TEXT NOT NULL,       -- 'would_vote'|'skip_score'|'skip_no_posts'|'skip_already_voted'|'skip_budget'
+        author               TEXT,
+        permlink             TEXT,
+        title                TEXT,
+        category             TEXT,
+        post_score           INTEGER,
+        score_gate           INTEGER,             -- minimum postScore required for this category
+        suggested_weight_bps INTEGER,
+        vp_cost_bps          INTEGER,             -- VP units this vote would consume (weight_bps/50)
+        expected_vote_usd    REAL,
+        reasons_json         TEXT,               -- JSON array of reason strings
+        skip_reason          TEXT,               -- human-readable skip reason (null if would_vote)
+        vp_bps_at_run        INTEGER,            -- VP at run start (0–10000)
+        vp_budget_bps        INTEGER,            -- VP available for this run
+        signals_json         TEXT,               -- JSON with all decision signals
+        created_at           TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_shadow_username ON vb_copilot_shadow_runs(username, run_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_shadow_run_id   ON vb_copilot_shadow_runs(run_id);
+      CREATE INDEX IF NOT EXISTS idx_shadow_decision ON vb_copilot_shadow_runs(decision);
+    `);
+
     // VP time-series for autopilot modeling — sampled every 15 min
     db.exec(`
       CREATE TABLE IF NOT EXISTS vb_vp_snapshots (

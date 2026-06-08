@@ -654,6 +654,7 @@ function OperativeKPIRow({ snapshot, snapshotLoading, snapshotRefreshedAt, oppor
 
 function PendingDebugPanel({ data, t }: { data: PendingCuration; t: ReturnType<typeof createTranslator> }) {
   const [open, setOpen] = useState(false);
+  const [view, setView] = useState<"top" | "next">("top");
   const db = data.debug;
   const skipped = db.skipped;
   const totalSkipped = skipped.alreadyPaidOut + skipped.payoutZero + skipped.noVoteFound + skipped.weightZero + skipped.limitReached;
@@ -708,54 +709,79 @@ function PendingDebugPanel({ data, t }: { data: PendingCuration; t: ReturnType<t
             </div>
           )}
 
-          {/* ── Top-10 Breakdown ── */}
-          {db.top10.length > 0 && (
-            <div>
-              <div style={{ fontWeight: 700, marginBottom: "0.25rem" }}>
-                {t("debugTopPosts").replace("{{n}}", String(db.top10.length))}
-              </div>
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ borderCollapse: "collapse", width: "100%", minWidth: "580px" }}>
-                  <thead>
-                    <tr style={{ background: C.border + "55" }}>
-                      <th style={{ ...tdL, fontWeight: 600 }}>{t("debugColAuthor")}</th>
-                      <th style={{ ...tdR, fontWeight: 600, color: C.warn }}>{t("debugColDue")}</th>
-                      <th style={{ ...tdR, fontWeight: 600 }}>{t("debugColPoolSbd")}</th>
-                      <th style={{ ...tdR, fontWeight: 600 }}>{t("debugColWeight")}</th>
-                      <th style={{ ...tdR, fontWeight: 600, color: C.ok }}>{t("debugColEstSteem")}</th>
-                      <th style={{ ...tdR, fontWeight: 600, color: C.dim }}>{t("debugColEstRshares")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {db.top10.map((p: PendingDebugPost, i: number) => {
-                      const msLeft = new Date(p.cashoutTime + "Z").getTime() - Date.now();
-                      const h = Math.floor(msLeft / 3_600_000);
-                      const m = Math.floor((msLeft % 3_600_000) / 60_000);
-                      const countdown = msLeft <= 0 ? t("debugDueNow") : h > 0 ? `${h}h ${m}m` : `${m}m`;
-                      return (
-                      <tr key={i} style={{ borderTop: `1px solid ${C.border}` }}>
-                        <td style={{ ...tdL, maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          <a
-                            href={`https://steemit.com/@${p.author}/${p.permlink}`}
-                            target="_blank" rel="noreferrer"
-                            style={{ color: C.info, textDecoration: "none" }}
-                            title={`@${p.author}/${p.permlink}`}
-                          >@{p.author}</a>
-                          <span style={{ color: C.faint }}>&nbsp;/{p.permlink.slice(0,20)}{p.permlink.length>20?"…":""}</span>
-                        </td>
-                        <td style={{ ...tdR, color: C.warn, fontWeight: 600, whiteSpace: "nowrap" }}>{countdown}</td>
-                        <td style={tdR}>{p.pendingPayoutSbd.toFixed(3)}</td>
-                        <td style={tdR}>{p.sharePctWeight.toFixed(3)}%</td>
-                        <td style={{ ...tdR, color: C.ok, fontWeight: 700 }}>{p.estimatedSp.toFixed(4)}</td>
-                        <td style={{ ...tdR, color: C.dim }}>{p.estimatedSpRshares.toFixed(4)}</td>
+          {/* ── Top-10 / Next-10 Breakdown ── */}
+          {(db.top10.length > 0 || db.next10.length > 0) && (() => {
+            const posts = view === "top" ? db.top10 : db.next10;
+            const title = view === "top"
+              ? t("debugTopPosts").replace("{{n}}", String(db.top10.length))
+              : t("debugNextPayouts").replace("{{n}}", String(db.next10.length));
+            const tabBtn = (v: "top" | "next", label: string) => (
+              <button
+                onClick={() => setView(v)}
+                style={{
+                  background: view === v ? C.info : "none",
+                  color:      view === v ? "#fff" : C.muted,
+                  border:     `1px solid ${view === v ? C.info : C.border}`,
+                  borderRadius: "4px",
+                  padding: "0.1rem 0.5rem",
+                  fontSize: "0.7rem",
+                  cursor: "pointer",
+                  fontWeight: view === v ? 700 : 400,
+                }}
+              >{label}</button>
+            );
+            return (
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginBottom: "0.35rem" }}>
+                  <span style={{ fontWeight: 700 }}>{title}</span>
+                  <div style={{ display: "flex", gap: "0.25rem", marginLeft: "auto" }}>
+                    {tabBtn("top",  t("debugTabTop"))}
+                    {tabBtn("next", t("debugTabNext"))}
+                  </div>
+                </div>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ borderCollapse: "collapse", width: "100%", minWidth: "580px" }}>
+                    <thead>
+                      <tr style={{ background: C.border + "55" }}>
+                        <th style={{ ...tdL, fontWeight: 600 }}>{t("debugColAuthor")}</th>
+                        <th style={{ ...tdR, fontWeight: 600, color: C.warn }}>{t("debugColDue")}</th>
+                        <th style={{ ...tdR, fontWeight: 600 }}>{t("debugColPoolSbd")}</th>
+                        <th style={{ ...tdR, fontWeight: 600 }}>{t("debugColWeight")}</th>
+                        <th style={{ ...tdR, fontWeight: 600, color: C.ok }}>{t("debugColEstSteem")}</th>
+                        <th style={{ ...tdR, fontWeight: 600, color: C.dim }}>{t("debugColEstRshares")}</th>
                       </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {posts.map((p: PendingDebugPost, i: number) => {
+                        const msLeft = new Date(p.cashoutTime + "Z").getTime() - Date.now();
+                        const h = Math.floor(msLeft / 3_600_000);
+                        const m = Math.floor((msLeft % 3_600_000) / 60_000);
+                        const countdown = msLeft <= 0 ? t("debugDueNow") : h > 0 ? `${h}h ${m}m` : `${m}m`;
+                        return (
+                          <tr key={i} style={{ borderTop: `1px solid ${C.border}` }}>
+                            <td style={{ ...tdL, maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              <a
+                                href={`https://steemit.com/@${p.author}/${p.permlink}`}
+                                target="_blank" rel="noreferrer"
+                                style={{ color: C.info, textDecoration: "none" }}
+                                title={`@${p.author}/${p.permlink}`}
+                              >@{p.author}</a>
+                              <span style={{ color: C.faint }}>&nbsp;/{p.permlink.slice(0,20)}{p.permlink.length>20?"…":""}</span>
+                            </td>
+                            <td style={{ ...tdR, color: C.warn, fontWeight: 600, whiteSpace: "nowrap" }}>{countdown}</td>
+                            <td style={tdR}>{p.pendingPayoutSbd.toFixed(3)}</td>
+                            <td style={tdR}>{p.sharePctWeight.toFixed(3)}%</td>
+                            <td style={{ ...tdR, color: C.ok, fontWeight: 700 }}>{p.estimatedSp.toFixed(4)}</td>
+                            <td style={{ ...tdR, color: C.dim }}>{p.estimatedSpRshares.toFixed(4)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
       )}
     </div>

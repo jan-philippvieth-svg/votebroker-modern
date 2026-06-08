@@ -16,6 +16,7 @@ import { startPriceSampler } from "./jobs/priceSampler.js";
 import { startWhaleEnrichment } from "./jobs/whaleEnrichment.js";
 import { startPayoutSync } from "./jobs/payoutSync.js";
 import { startSignalCompute } from "./jobs/signalCompute.js";
+import { startCopilotShadow } from "./jobs/copilotShadowJob.js";
 import { scanWhaleHistory } from "./chain/whaleHistoryScanner.js";
 import { registerContentRoutes } from "./admin/contentRoutes.js";
 import { registerStrategyRoutes } from "./strategy/routes.js";
@@ -91,3 +92,6 @@ const log = app.log as unknown as typeof console;
 scanWhaleHistory(log).catch(e => log.warn("[WhaleHistory] startup scan error:", e));
 startWhaleEnrichment(log);
 startSignalCompute(log);
+
+// CoPilot Shadow Mode — evaluates candidates every 30 min, writes to vb_copilot_shadow_runs, no broadcast
+startCopilotShadow(log);

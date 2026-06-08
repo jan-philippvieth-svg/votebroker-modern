@@ -902,6 +902,7 @@ export interface PendingCuration {
       limitReached:   number;
     };
     top10:   PendingDebugPost[];
+    next10:  PendingDebugPost[];
     method:  string;
   };
   computedAt:   string;
