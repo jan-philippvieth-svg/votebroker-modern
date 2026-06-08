@@ -47,6 +47,25 @@ export interface LiveVoteReportBucket {
   maxDelay:     number | null;
 }
 
+export interface PayoutBucketAnalysis {
+  label:         string;
+  votes:         number;
+  avgCurationSp: number | null;
+  avgVpBps:      number | null;   // VP before vote (vp_before_vote_bps)
+  avgWeightPct:  number | null;
+}
+
+// One cell of the delay × pending-payout cross-analysis.
+// Flat list — up to 35 cells (7 delay × 5 payout buckets).
+export interface DelayPayoutCell {
+  delayLabel:    string;
+  payoutLabel:   string;
+  votes:         number;
+  avgCurationSp: number | null;
+  avgVpBps:      number | null;
+  avgWeightPct:  number | null;
+}
+
 export interface LiveVoteReport {
   username:         string;
   since:            string;          // LIVE_VOTES_SINCE
@@ -54,13 +73,15 @@ export interface LiveVoteReport {
   realized:         number;          // with realized_curation_sp
   pending:          number;          // without realized_curation_sp
   avgCurationSp:    number | null;   // realized only
-  // 5 analysis dimensions (realized votes only)
-  byDelay:          LiveVoteReportBucket[];
-  byWeight:         LiveVoteReportBucket[];
-  byCategory:       Array<{ category: string; votes: number; avgCurationSp: number | null; avgWeightPct: number | null }>;
-  byCommunity:      Array<{ community: string; votes: number; avgCurationSp: number | null }>;
-  byAuthor:         Array<{ author: string; votes: number; avgDelay: number | null; avgWeightPct: number | null; avgCurationSp: number | null }>;
-  generatedAt:      string;
+  // 7 analysis dimensions (realized votes only)
+  byDelay:             LiveVoteReportBucket[];
+  byWeight:            LiveVoteReportBucket[];
+  byCategory:          Array<{ category: string; votes: number; avgCurationSp: number | null; avgWeightPct: number | null }>;
+  byCommunity:         Array<{ community: string; votes: number; avgCurationSp: number | null }>;
+  byAuthor:            Array<{ author: string; votes: number; avgDelay: number | null; avgWeightPct: number | null; avgCurationSp: number | null }>;
+  byPendingPayout:     PayoutBucketAnalysis[];
+  byDelayAndPayout:    DelayPayoutCell[];
+  generatedAt:         string;
 }
 
 // ── Real-time capture at vote broadcast ──────────────────────────────────────
@@ -511,6 +532,60 @@ export function getLiveVoteReport(username: string): LiveVoteReport {
     author: string; votes: number; avg_delay: number | null; avg_weight_pct: number | null; avg_sp: number | null;
   }>;
 
+  const payoutBucketRows = db.prepare(`
+    SELECT
+      CASE
+        WHEN post_pending_payout_sbd < 10  THEN '< 10 SBD'
+        WHEN post_pending_payout_sbd < 50  THEN '10–50 SBD'
+        WHEN post_pending_payout_sbd < 100 THEN '50–100 SBD'
+        WHEN post_pending_payout_sbd < 250 THEN '100–250 SBD'
+        ELSE '> 250 SBD'
+      END as label,
+      COUNT(*) as votes,
+      AVG(realized_curation_sp) as avg_sp,
+      AVG(vp_before_vote_bps) as avg_vp_bps,
+      AVG(weight_bps) / 100.0 as avg_weight_pct
+    FROM vb_global_vote_outcomes
+    WHERE ${REALIZED_FILTER} AND post_pending_payout_sbd IS NOT NULL
+    GROUP BY label
+    ORDER BY MIN(post_pending_payout_sbd)
+  `).all(username, LIVE_VOTES_SINCE) as Array<{
+    label: string; votes: number; avg_sp: number | null; avg_vp_bps: number | null; avg_weight_pct: number | null;
+  }>;
+
+  const delayPayoutRows = db.prepare(`
+    SELECT
+      CASE
+        WHEN vote_delay_minutes < 30   THEN '< 30 min'
+        WHEN vote_delay_minutes < 60   THEN '30–60 min'
+        WHEN vote_delay_minutes < 120  THEN '1–2 h'
+        WHEN vote_delay_minutes < 360  THEN '2–6 h'
+        WHEN vote_delay_minutes < 1440 THEN '6–24 h'
+        WHEN vote_delay_minutes < 4320 THEN '1–3 Tage'
+        ELSE '> 3 Tage'
+      END as delay_label,
+      CASE
+        WHEN post_pending_payout_sbd < 10  THEN '< 10 SBD'
+        WHEN post_pending_payout_sbd < 50  THEN '10–50 SBD'
+        WHEN post_pending_payout_sbd < 100 THEN '50–100 SBD'
+        WHEN post_pending_payout_sbd < 250 THEN '100–250 SBD'
+        ELSE '> 250 SBD'
+      END as payout_label,
+      COUNT(*) as votes,
+      AVG(realized_curation_sp) as avg_sp,
+      AVG(vp_before_vote_bps) as avg_vp_bps,
+      AVG(weight_bps) / 100.0 as avg_weight_pct
+    FROM vb_global_vote_outcomes
+    WHERE ${REALIZED_FILTER}
+      AND vote_delay_minutes IS NOT NULL
+      AND post_pending_payout_sbd IS NOT NULL
+    GROUP BY delay_label, payout_label
+    ORDER BY MIN(vote_delay_minutes), MIN(post_pending_payout_sbd)
+  `).all(username, LIVE_VOTES_SINCE) as Array<{
+    delay_label: string; payout_label: string; votes: number;
+    avg_sp: number | null; avg_vp_bps: number | null; avg_weight_pct: number | null;
+  }>;
+
   return {
     username,
     since:         LIVE_VOTES_SINCE,
@@ -523,6 +598,8 @@ export function getLiveVoteReport(username: string): LiveVoteReport {
     byCategory: categoryRows.map(r => ({ category: r.category, votes: r.votes, avgCurationSp: r.avg_sp, avgWeightPct: r.avg_weight_pct })),
     byCommunity: communityRows.map(r => ({ community: r.community, votes: r.votes, avgCurationSp: r.avg_sp })),
     byAuthor:   authorRows.map(r => ({ author: r.author, votes: r.votes, avgDelay: r.avg_delay, avgWeightPct: r.avg_weight_pct, avgCurationSp: r.avg_sp })),
+    byPendingPayout:  payoutBucketRows.map(r => ({ label: r.label, votes: r.votes, avgCurationSp: r.avg_sp, avgVpBps: r.avg_vp_bps, avgWeightPct: r.avg_weight_pct })),
+    byDelayAndPayout: delayPayoutRows.map(r => ({ delayLabel: r.delay_label, payoutLabel: r.payout_label, votes: r.votes, avgCurationSp: r.avg_sp, avgVpBps: r.avg_vp_bps, avgWeightPct: r.avg_weight_pct })),
     generatedAt: new Date().toISOString(),
   };
 }
