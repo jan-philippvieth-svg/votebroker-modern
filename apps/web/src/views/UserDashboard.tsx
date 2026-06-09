@@ -86,7 +86,7 @@ const lbl: React.CSSProperties = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function vpCol(v: number)  { return v >= 85 ? C.ok : v >= 65 ? C.warn : C.err; }
+function vpCol(v: number)  { return v >= 70 ? C.ok : v >= 50 ? C.warn : C.err; }
 function fmtUsd(v: number) { return v < 0.0005 ? "<$0.001" : `$${v.toFixed(3)}`; }
 function fmtMin(min: number) {
   if (min < 60) return `${min}m`;
@@ -790,7 +790,11 @@ function PendingDebugPanel({ data, t }: { data: PendingCuration; t: ReturnType<t
 
 // ── VP Budget Row ─────────────────────────────────────────────────────────────
 
-function VpBudgetRow({ budget, t }: { budget: VpBudget | null; t: ReturnType<typeof createTranslator> }) {
+function VpBudgetRow({ budget, todayWeightBps, t }: {
+  budget: VpBudget | null;
+  todayWeightBps: number | null;
+  t: ReturnType<typeof createTranslator>;
+}) {
   if (!budget) return null;
 
   const statusColor =
@@ -800,48 +804,74 @@ function VpBudgetRow({ budget, t }: { budget: VpBudget | null; t: ReturnType<typ
     budget.status === "recovering" ? "↑" :
     budget.status === "depleting"  ? "↓" : "↔";
 
-  const spendPct  = (budget.avgDailySpendBps  / 100).toFixed(1);
-  const regenPct  = (budget.regenBps          / 100).toFixed(0);
+  const avgPct    = budget.avgDailySpendBps / 100;
+  const regenPct  = (budget.regenBps / 100).toFixed(0);
   const netPct    = (Math.abs(budget.netDailyBps) / 100).toFixed(1);
   const netSign   = budget.netDailyBps >= 0 ? "+" : "−";
 
+  // Today's VP spend derived from todayStats (same formula as CurationTriple)
+  const todayPct  = todayWeightBps !== null ? todayWeightBps / 5000 : null;
+  const diff      = todayPct !== null ? todayPct - avgPct : null;
+  const diffSign  = diff !== null && diff >= 0 ? "+" : "−";
+  const diffCol   = diff === null ? C.faint : diff > 2 ? C.err : diff < -2 ? C.ok : C.muted;
+
   return (
-    <div style={{
-      ...card,
-      display: "flex", alignItems: "center", gap: "1rem",
-      padding: "0.85rem 1.25rem", flexWrap: "wrap" as const,
-    }}>
-      {/* Status badge */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: "0.35rem",
-        background: statusColor + "15", border: `1px solid ${statusColor}35`,
-        borderRadius: "8px", padding: "0.3rem 0.7rem", flexShrink: 0,
-      }}>
-        <span style={{ color: statusColor, fontWeight: 800, fontSize: "0.95rem" }}>{statusIcon}</span>
-        <span style={{ color: statusColor, fontWeight: 700, fontSize: "0.75rem", textTransform: "uppercase" as const, letterSpacing: "0.5px" }}>
-          {t(`vpBudgetStatus_${budget.status}` as any)}
-        </span>
-      </div>
-
-      {/* Metrics */}
-      {[
-        { lbl: t("vpBudgetSpend"),   val: `${spendPct}% / ${t("vpBudgetDay")}`,  col: C.err  },
-        { lbl: t("vpBudgetRegen"),   val: `+${regenPct}% / ${t("vpBudgetDay")}`, col: C.ok   },
-        { lbl: t("vpBudgetNet"),     val: `${netSign}${netPct}% / ${t("vpBudgetDay")}`, col: statusColor },
-        { lbl: t("vpBudgetSustain"), val: budget.sustainableVotesPerDay !== null
-            ? `${budget.sustainableVotesPerDay} ${t("vpBudgetVotesPerDay")}`
-            : "—",
-          col: C.muted },
-      ].map((m, i) => (
-        <div key={i} style={{ display: "flex", flexDirection: "column" as const, alignItems: "center", flex: 1, minWidth: "80px" }}>
-          <span style={{ color: m.col, fontWeight: 800, fontSize: "0.9rem" }}>{m.val}</span>
-          <span style={{ color: C.faint, fontSize: "0.63rem", fontWeight: 600, textTransform: "uppercase" as const, letterSpacing: "0.5px", marginTop: "0.15rem" }}>{m.lbl}</span>
+    <div style={{ ...card, padding: "0.85rem 1.25rem" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" as const }}>
+        {/* Status badge */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: "0.35rem",
+          background: statusColor + "15", border: `1px solid ${statusColor}35`,
+          borderRadius: "8px", padding: "0.3rem 0.7rem", flexShrink: 0,
+        }}>
+          <span style={{ color: statusColor, fontWeight: 800, fontSize: "0.95rem" }}>{statusIcon}</span>
+          <span style={{ color: statusColor, fontWeight: 700, fontSize: "0.75rem", textTransform: "uppercase" as const, letterSpacing: "0.5px" }}>
+            {t(`vpBudgetStatus_${budget.status}` as any)}
+          </span>
         </div>
-      ))}
 
-      {/* Avg weight info */}
-      <div style={{ color: C.faint, fontSize: "0.72rem", marginLeft: "auto", whiteSpace: "nowrap" as const }}>
-        ⌀ {budget.avgWeightPct}% · {budget.activeDaysIn7d}d {t("vpBudgetActive")}
+        {/* Heute vs. 7d-Ø comparison block */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: "0.5rem",
+          background: C.inner, borderRadius: "8px", padding: "0.3rem 0.75rem",
+          border: `1px solid ${C.border}`, flexShrink: 0,
+        }}>
+          <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "center" }}>
+            <span style={{ color: C.text, fontWeight: 800, fontSize: "0.9rem" }}>
+              {todayPct !== null ? `${todayPct.toFixed(1)}%` : "—"}
+            </span>
+            <span style={{ color: C.faint, fontSize: "0.6rem", fontWeight: 600, textTransform: "uppercase" as const, letterSpacing: "0.5px" }}>Heute</span>
+          </div>
+          <span style={{ color: C.faint, fontSize: "0.8rem" }}>vs.</span>
+          <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "center" }}>
+            <span style={{ color: C.muted, fontWeight: 700, fontSize: "0.9rem" }}>{avgPct.toFixed(1)}%</span>
+            <span style={{ color: C.faint, fontSize: "0.6rem", fontWeight: 600, textTransform: "uppercase" as const, letterSpacing: "0.5px" }}>⌀ 7d</span>
+          </div>
+          {diff !== null && (
+            <span style={{ color: diffCol, fontWeight: 700, fontSize: "0.8rem", marginLeft: "0.15rem" }}>
+              {diffSign}{Math.abs(diff).toFixed(1)}%
+            </span>
+          )}
+        </div>
+
+        {/* Regen / Netto / Nachhaltig */}
+        {[
+          { lbl: t("vpBudgetRegen"),   val: `+${regenPct}% / ${t("vpBudgetDay")}`,                       col: C.ok        },
+          { lbl: `${t("vpBudgetNet")} ⌀ 7d`, val: `${netSign}${netPct}% / ${t("vpBudgetDay")}`,          col: statusColor },
+          { lbl: t("vpBudgetSustain"), val: budget.sustainableVotesPerDay !== null
+              ? `${budget.sustainableVotesPerDay} ${t("vpBudgetVotesPerDay")}` : "—",
+            col: C.muted },
+        ].map((m, i) => (
+          <div key={i} style={{ display: "flex", flexDirection: "column" as const, alignItems: "center", flex: 1, minWidth: "80px" }}>
+            <span style={{ color: m.col, fontWeight: 800, fontSize: "0.9rem" }}>{m.val}</span>
+            <span style={{ color: C.faint, fontSize: "0.63rem", fontWeight: 600, textTransform: "uppercase" as const, letterSpacing: "0.5px", marginTop: "0.15rem" }}>{m.lbl}</span>
+          </div>
+        ))}
+
+        {/* Avg weight info */}
+        <div style={{ color: C.faint, fontSize: "0.72rem", marginLeft: "auto", whiteSpace: "nowrap" as const }}>
+          ⌀ {budget.avgWeightPct}% · {budget.activeDaysIn7d}d {t("vpBudgetActive")}
+        </div>
       </div>
     </div>
   );
@@ -1936,7 +1966,7 @@ export function UserDashboard(props: {
       />
 
       {/* 4. VP-Budget: täglicher Verbrauch vs. Regen */}
-      <VpBudgetRow budget={vpBudget} t={t} />
+      <VpBudgetRow budget={vpBudget} todayWeightBps={todayStats?.totalWeightBps ?? null} t={t} />
 
       {/* 5. Curation Timeline: Heute | 7-Tage | Lifetime */}
       <CurationTriple
