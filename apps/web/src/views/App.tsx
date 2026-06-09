@@ -485,7 +485,7 @@ export function App() {
   }
 
   // ── Single vote: Keychain if available, server as fallback ─────────────────
-  async function doVote(target: { author: string; permlink: string; weightBps: number }): Promise<{ transactionId: string }> {
+  async function doVote(target: { author: string; permlink: string; weightBps: number; strategyCategory?: string }): Promise<{ transactionId: string }> {
     if (!session) throw new VoteBroadcastError("session_expired", "Session abgelaufen.");
 
     if (keychainAvailable && window.steem_keychain) {
@@ -510,7 +510,8 @@ export function App() {
             // Audit log via backend — fire and forget
             executeVote(session!.token, {
               author: target.author, permlink: target.permlink,
-              weightBps: target.weightBps, broadcastMode: "keychain", transactionId: txId
+              weightBps: target.weightBps, broadcastMode: "keychain", transactionId: txId,
+              strategyCategory: target.strategyCategory,
             }).catch(() => {});
             resolve({ transactionId: txId });
           }
@@ -520,13 +521,14 @@ export function App() {
 
     // Fallback: server-side vote
     const res = await executeVote(session.token, {
-      author: target.author, permlink: target.permlink, weightBps: target.weightBps
+      author: target.author, permlink: target.permlink, weightBps: target.weightBps,
+      strategyCategory: target.strategyCategory,
     });
     return { transactionId: res.transactionId };
   }
 
   async function executeStrategyVotes(
-    targets: Array<{ author: string; permlink: string; weightBps: number }>
+    targets: Array<{ author: string; permlink: string; weightBps: number; strategyCategory?: string }>
   ): Promise<VoteBatchResult> {
     if (!session) return { ok: 0, failed: 0, skipped: 0, results: [] };
     let ok = 0, failed = 0, skipped = 0;
@@ -581,7 +583,7 @@ export function App() {
   }
 
   // Direct single-vote executor — throws on any failure, returns real transactionId
-  async function executeSingleVote(target: { author: string; permlink: string; weightBps: number }): Promise<{ transactionId: string }> {
+  async function executeSingleVote(target: { author: string; permlink: string; weightBps: number; strategyCategory?: string }): Promise<{ transactionId: string }> {
     const result = await doVote(target); // Keychain if available, server fallback
     // Track in dashboard recent votes
     setRecentVotes(prev => [{

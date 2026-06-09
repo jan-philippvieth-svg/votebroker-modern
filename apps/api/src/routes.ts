@@ -49,7 +49,8 @@ const executeVoteSchema = z.object({
   permlink: z.string().min(1),
   weightBps: z.number().int().min(1).max(10_000),
   broadcastMode: z.enum(["server", "token", "keychain"]).optional(),
-  transactionId: z.string().optional()  // provided by client when broadcastMode === "keychain"
+  transactionId: z.string().optional(),  // provided by client when broadcastMode === "keychain"
+  strategyCategory: z.string().optional(),
 });
 
 // Screenshots dir (same logic as contentRoutes.ts)
@@ -418,12 +419,13 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       });
       import("./chain/globalVoteOutcomes.js").then(({ recordVoteAtBroadcast }) =>
         recordVoteAtBroadcast({
-          voter:        session.user.username,
-          author:       input.data.author,
-          permlink:     input.data.permlink,
-          weightBps:    input.data.weightBps,
+          voter:            session.user.username,
+          author:           input.data.author,
+          permlink:         input.data.permlink,
+          weightBps:        input.data.weightBps,
           transactionId,
-          vpBeforeBps:  liveVpBeforeBps,
+          vpBeforeBps:      liveVpBeforeBps,
+          strategyCategory: input.data.strategyCategory ?? null,
         }).catch(() => {})
       ).catch(() => {});
       return { transactionId };
@@ -541,12 +543,13 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     // Capture autopilot training data: VP before/after, vote value, community — fire and forget
     import("./chain/globalVoteOutcomes.js").then(({ recordVoteAtBroadcast }) =>
       recordVoteAtBroadcast({
-        voter:         session.user.username,
-        author:        input.data.author,
-        permlink:      input.data.permlink,
-        weightBps:     input.data.weightBps,
-        transactionId: transactionId ?? null,
-        vpBeforeBps:   liveVpBeforeBps,
+        voter:            session.user.username,
+        author:           input.data.author,
+        permlink:         input.data.permlink,
+        weightBps:        input.data.weightBps,
+        transactionId:    transactionId ?? null,
+        vpBeforeBps:      liveVpBeforeBps,
+        strategyCategory: input.data.strategyCategory ?? null,
       }).catch(err => request.log.warn({ err }, "recordVoteAtBroadcast failed (non-critical)"))
     ).catch(() => {/* import failed — non-critical */});
 

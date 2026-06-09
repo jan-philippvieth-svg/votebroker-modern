@@ -370,6 +370,7 @@ export async function executeVote(token: string, payload: {
   weightBps: number;
   broadcastMode?: "server" | "token" | "keychain";
   transactionId?: string;
+  strategyCategory?: string;
 }): Promise<VoteExecutionResponse> {
   const response = await fetch(`${API_BASE}/api/votes/execute`, {
     method: "POST",

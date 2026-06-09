@@ -144,7 +144,7 @@ export function VotePlanSection(props: {
   currentVoteUsd?: number; // dollar value of a 100% vote at current VP — for override recalc
   sbdPerSteem?: number;    // SBD/STEEM — for SP conversion: expectedVoteUsd / sbdPerSteem ≈ SP
   onGenerate: () => void;
-  onExecuteSingle: (target: { author: string; permlink: string; weightBps: number }) => Promise<{ transactionId: string }>;
+  onExecuteSingle: (target: { author: string; permlink: string; weightBps: number; strategyCategory?: string }) => Promise<{ transactionId: string }>;
   onPlanExecuted?: () => void;
   onMetricsChange?: (m: LivePlanMetrics) => void;
   additionalCandidates?: VotePlanEntry[];
@@ -308,9 +308,10 @@ export function VotePlanSection(props: {
       try {
         // Direct call — throws VoteBroadcastError on any failure
         const result = await props.onExecuteSingle({
-          author:    e.author,
-          permlink:  e.permlink,
-          weightBps: e.suggestedWeightBps,
+          author:           e.author,
+          permlink:         e.permlink,
+          weightBps:        e.suggestedWeightBps,
+          strategyCategory: e.category,
         });
         const txShort = result.transactionId.length > 12
           ? result.transactionId.slice(0, 12) + "…"

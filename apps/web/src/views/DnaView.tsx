@@ -255,8 +255,8 @@ export function CurationDnaPanel(props: {
   opportunitiesError: string | null;
   accountSnapshot: SteemAccountSnapshot | null;
   onLoadOpportunities: () => void;
-  onExecuteVotes: (targets: Array<{ author: string; permlink: string; weightBps: number }>) => Promise<VoteBatchResult>;
-  onExecuteSingle: (target: { author: string; permlink: string; weightBps: number }) => Promise<{ transactionId: string }>;
+  onExecuteVotes: (targets: Array<{ author: string; permlink: string; weightBps: number; strategyCategory?: string }>) => Promise<VoteBatchResult>;
+  onExecuteSingle: (target: { author: string; permlink: string; weightBps: number; strategyCategory?: string }) => Promise<{ transactionId: string }>;
   onPlanExecuted?: () => void;
   votePlan: VotePlanResponse | null;
   planLoading: boolean;
