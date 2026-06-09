@@ -113,33 +113,45 @@ export async function runPayoutSync(log: typeof console = console): Promise<void
     const update = db.prepare(`
       UPDATE vb_global_vote_outcomes
       SET post_final_payout_sbd = ?
-      WHERE author = ? AND permlink = ?
+      WHERE author = ? AND permlink = ? AND post_final_payout_sbd IS NULL
     `);
 
+    let finalUpdated = 0;
     for (const { author, permlink } of unpaid) {
       try {
         const post = await client.database.call("get_content", [author, permlink]) as {
-          author?:              string;
-          total_payout_value?:  string;
-          pending_payout_value?: string;
+          author?:               string;
+          total_payout_value?:   string;    // author payout (SBD) — non-zero after payout
+          curator_payout_value?: string;    // curator payout (SP expressed as SBD) — non-zero after payout
+          pending_payout_value?: string;    // pre-payout total — zero after payout
         };
 
         if (!post?.author) {
-          update.run(0, author, permlink); // post deleted — mark with 0
+          update.run(0, author, permlink); // post deleted/not found — mark with 0
+          finalUpdated++;
           continue;
         }
 
-        const total   = parseFloat(String(post.total_payout_value   ?? "0").split(" ")[0]) || 0;
-        const pending = parseFloat(String(post.pending_payout_value ?? "0").split(" ")[0]) || 0;
+        const authorSbd   = parseFloat(String(post.total_payout_value   ?? "0").split(" ")[0]) || 0;
+        const curatorSbd  = parseFloat(String(post.curator_payout_value ?? "0").split(" ")[0]) || 0;
+        const pendingSbd  = parseFloat(String(post.pending_payout_value ?? "0").split(" ")[0]) || 0;
 
-        // total_payout_value is non-zero only after payout; pending is pre-payout
-        if (total > 0 || pending === 0) {
-          update.run(total || null, author, permlink);
+        // post_pending_payout_sbd at vote time = author + curator combined.
+        // post_final_payout_sbd must use the same basis for a valid growth-factor comparison.
+        // After payout: total_payout_value + curator_payout_value = full pool.
+        // Before payout (still pending): skip — will be captured on next daily run.
+        const hasPaidOut = authorSbd > 0 || curatorSbd > 0 || pendingSbd === 0;
+        if (hasPaidOut) {
+          const finalTotal = authorSbd + curatorSbd || null;
+          update.run(finalTotal, author, permlink);
+          finalUpdated++;
         }
       } catch { /* skip — will retry next run */ }
 
       await sleep(RATE_MS);
     }
+
+    log.info(`[PayoutSync] post_final_payout_sbd set for ${finalUpdated} posts`);
 
     log.info("[PayoutSync] Done");
   } finally {
