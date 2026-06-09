@@ -24,6 +24,7 @@ const btnStyle = (col = C.border): React.CSSProperties => ({ background: col + "
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fmtAge(iso: string): string {
   const m = Math.round((Date.now() - Date.parse(iso)) / 60000);
+  if (m < 1)    return "just now";
   if (m < 60)   return `${m}m ago`;
   if (m < 1440) return `${Math.round(m/60)}h ago`;
   return `${Math.round(m/1440)}d ago`;

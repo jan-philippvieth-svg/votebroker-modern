@@ -34,6 +34,29 @@ function medianPriceFromHistory(priceHistory: Array<{ base: string; quote: strin
   return prices[Math.floor(prices.length / 2)];
 }
 
+// Shared 5-minute cache for the SBD/STEEM price — used by all callers.
+let _priceCache: { value: number; expiresAt: number } | null = null;
+
+/**
+ * Fetches the live SBD/STEEM median price from the witness feed.
+ * Cached for 5 minutes so multiple concurrent callers share one RPC call.
+ * Falls back to 0.05 on error.
+ */
+export async function fetchLiveSbdPerSteem(): Promise<number> {
+  if (_priceCache && Date.now() < _priceCache.expiresAt) return _priceCache.value;
+  try {
+    const client = createSteemClient();
+    const feed = await client.database.call("get_feed_history", []) as {
+      price_history: Array<{ base: string; quote: string }>;
+    };
+    const value = medianPriceFromHistory(feed.price_history ?? []);
+    _priceCache = { value, expiresAt: Date.now() + 5 * 60 * 1000 };
+    return value;
+  } catch {
+    return _priceCache?.value ?? 0.05;
+  }
+}
+
 export async function fetchSteemAccountSnapshot(username: string): Promise<SteemAccountSnapshot> {
   const client = createSteemClient();
 

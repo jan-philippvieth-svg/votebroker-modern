@@ -1,7 +1,7 @@
 // ── VotePlanView — VotePlanSection, OpenVoteOpportunities, RecoveryBanner ──────
 // Extracted from App.tsx — vote plan execution and opportunity scanning
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { createTranslator } from "../i18n";
 import type {
   VotePlanResponse,
@@ -158,6 +158,7 @@ export function VotePlanSection(props: {
   const [aborted, setAborted]       = useState(false);
   const [overrides, setOverrides]   = useState<Map<string, number>>(new Map());
   const [additions, setAdditions]   = useState<VotePlanEntry[]>([]);  // manuell hinzugefügte Kandidaten
+  const confirmingRef = useRef<HTMLDivElement>(null);
 
   // Display mode — persisted in localStorage
   const [voteMode, setVoteModeRaw] = useState<VoteDisplayMode>(() =>
@@ -288,6 +289,12 @@ export function VotePlanSection(props: {
       freeBudgetPct: freeBudget,
     });
   }, [overrides, plan]);
+
+  useEffect(() => {
+    if (phase === "confirming") {
+      confirmingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [phase]);
 
   function reset() {
     setPhase(plan ? "generated" : "idle");
@@ -527,44 +534,78 @@ export function VotePlanSection(props: {
 
       {/* ── Phase: confirming ──────────────────────── */}
       {phase === "confirming" && plan && (
-        <div style={{ background: "#ffffff", border: "1px solid #f0a500", borderRadius: "6px", padding: "1rem" }}>
-          <p style={{ color: "#d97706", fontWeight: 700, margin: "0 0 0.75rem", fontSize: "0.9rem" }}>
-            {t("planConfirmTitle").replace("{{count}}", String(allPlanEntries.length))}
-          </p>
+        <div ref={confirmingRef} style={{ borderRadius: "14px", overflow: "hidden", border: "1.5px solid #f59e0b" }}>
 
-          <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", fontSize: "0.82rem", marginBottom: "0.75rem" }}>
-            <span style={{ color: "#607078" }}>{t("planVpNow")} <b style={{ color: "#17202a" }}>{plan.summary.currentVpPct.toFixed(1)}%</b></span>
-            <span style={{ color: "#607078" }}>{t("planVpCost")} <b style={{ color: "#17202a" }}>{plan.summary.estimatedVpSpendPct}%</b></span>
-            <span style={{ color: "#607078" }}>{t("planVpAfter")} <b style={{ color: sustainColor }}>{plan.summary.estimatedVpAfterPct.toFixed(1)}%</b></span>
+          {/* Header — compact meta strip */}
+          <div style={{ background: "#fffbeb", padding: "0.65rem 1.1rem", display: "flex", gap: "1.25rem", flexWrap: "wrap" as const, alignItems: "center", fontSize: "0.8rem", borderBottom: "1px solid #fde68a" }}>
+            <span style={{ color: "#78350f", fontWeight: 700, fontSize: "0.88rem" }}>
+              {t("planConfirmTitle").replace("{{count}}", String(allPlanEntries.length))}
+            </span>
+            <span style={{ color: "#92400e" }}>{t("planVpNow")} <b>{plan.summary.currentVpPct.toFixed(1)}%</b></span>
+            <span style={{ color: "#92400e" }}>{t("planVpCost")} <b>{plan.summary.estimatedVpSpendPct}%</b></span>
+            <span style={{ color: "#92400e" }}>{t("planVpAfter")} <b style={{ color: sustainColor }}>{plan.summary.estimatedVpAfterPct.toFixed(1)}%</b></span>
             <span style={{ color: sustainColor, fontWeight: 600 }}>
               {plan.summary.sustainability === "sustainable" ? t("planSustainSustainable") : plan.summary.sustainability === "aggressive" ? t("planSustainAggressive") : t("planSustainCritical")}
             </span>
           </div>
 
-          <div style={{ background: "#f0f5f7", borderRadius: "4px", padding: "0.5rem 0.75rem", marginBottom: "0.75rem", fontSize: "0.77rem", color: "#607078" }}>
-            <b style={{ color: "#2d3a42" }}>{t("planSafeguards")}</b> {t("planSafeguardsDetail")}
-          </div>
+          {/* Main confirm area */}
+          <div style={{ background: "#ffffff", padding: "1.25rem 1.1rem" }}>
+            <div style={{ textAlign: "center" as const, marginBottom: "0.85rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}>
+              <span style={{ fontSize: "1.6rem", lineHeight: 1 }}>⚠️</span>
+              <span style={{ fontSize: "1rem", fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" as const, color: "#b45309" }}>
+                {t("planConfirmLastStep")}
+              </span>
+              <span style={{ fontSize: "1.6rem", lineHeight: 1 }}>⚠️</span>
+            </div>
 
-          <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem", cursor: "pointer", fontSize: "0.82rem", color: "#2d3a42" }}>
-            <input
-              type="checkbox"
-              checked={confirmed}
-              onChange={e => setConfirmed(e.target.checked)}
-              style={{ accentColor: "#d97706" }}
-            />
-            {t("planConfirmCheck").replace("{{count}}", String(allPlanEntries.length))}
-          </label>
+            {/* THE dominant element: checkbox + text */}
+            <label style={{
+              display: "flex", flexDirection: "row" as const, alignItems: "center", justifyContent: "center", gap: "0.85rem",
+              cursor: "pointer",
+              background: confirmed ? "#f0fdf4" : "#fafafa",
+              border: `2.5px solid ${confirmed ? "#16a34a" : "#d1d5db"}`,
+              borderRadius: "12px",
+              padding: "1rem 1.25rem",
+              marginBottom: "1rem",
+              transition: "border-color 0.15s, background 0.15s",
+            }}>
+              <input
+                type="checkbox"
+                checked={confirmed}
+                onChange={e => setConfirmed(e.target.checked)}
+                style={{ display: "inline-block", accentColor: "#16a34a", width: "22px", height: "22px", minWidth: "22px", flexShrink: 0, cursor: "pointer", margin: 0 }}
+              />
+              <span style={{ fontSize: "1rem", fontWeight: 700, color: confirmed ? "#15803d" : "#374151", lineHeight: 1.4 }}>
+                {t("planConfirmCheck").replace("{{count}}", String(allPlanEntries.length))}
+              </span>
+            </label>
 
-          <div style={{ display: "flex", gap: "0.5rem" }}>
-            <button
-              style={{ ...chipBtn, background: confirmed ? "#f0a50022" : "#dde8ed", borderColor: confirmed ? "#d97706" : "#c5d3da", color: confirmed ? "#d97706" : "#8fa4b0", fontWeight: 600 }}
-              type="button"
-              disabled={!confirmed}
-              onClick={() => void startExecution()}
-            >
-              {t("planSendNow").replace("{{count}}", String(allPlanEntries.length))}
-            </button>
-            <button style={chipBtn} type="button" onClick={reset}>{t("planBack")}</button>
+            {/* Safeguards note — secondary, small */}
+            <p style={{ fontSize: "0.75rem", color: "#9ca3af", margin: "0 0 1rem", paddingLeft: "0.25rem" }}>
+              <b style={{ color: "#6b7280" }}>{t("planSafeguards")}</b> {t("planSafeguardsDetail")}
+            </p>
+
+            {/* Actions */}
+            <div style={{ display: "flex", gap: "0.6rem", alignItems: "center" }}>
+              <button
+                type="button"
+                disabled={!confirmed}
+                onClick={() => void startExecution()}
+                style={{
+                  background: confirmed ? "#16a34a" : "#e5e7eb",
+                  border: "none", borderRadius: "10px",
+                  color: confirmed ? "#ffffff" : "#9ca3af",
+                  cursor: confirmed ? "pointer" : "not-allowed",
+                  fontSize: "0.95rem", fontWeight: 800,
+                  padding: "0.7rem 1.5rem",
+                  transition: "background 0.15s, color 0.15s",
+                }}
+              >
+                {t("planSendNow").replace("{{count}}", String(allPlanEntries.length))}
+              </button>
+              <button style={chipBtn} type="button" onClick={reset}>{t("planBack")}</button>
+            </div>
           </div>
         </div>
       )}

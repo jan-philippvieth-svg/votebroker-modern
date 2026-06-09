@@ -86,7 +86,7 @@ function getUserAnalytics() {
 
   // All unique users with last seen
   const users = db.prepare(`
-    SELECT username, MAX(expiry) as last_seen
+    SELECT username, MAX(created_at) as last_seen
     FROM sessions GROUP BY username ORDER BY last_seen DESC LIMIT 50
   `).all() as UserRow[];
 

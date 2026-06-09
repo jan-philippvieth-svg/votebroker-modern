@@ -14,6 +14,7 @@
  */
 
 import { createSteemClient } from "./steemBroadcaster.js";
+import { fetchLiveSbdPerSteem } from "./steemAccount.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -112,7 +113,7 @@ type PostContent = {
 
 export async function fetchPendingCuration(
   username:    string,
-  sbdPerSteem: number,   // SBD per STEEM from witness median price feed
+  sbdPerSteem: number,   // SBD per STEEM hint from caller — overridden by live feed
 ): Promise<PendingCurationResult> {
   // ── Cache check ────────────────────────────────────────────────────────────
   const cached = cache.get(username);
@@ -122,6 +123,9 @@ export async function fetchPendingCuration(
   const nowMs   = Date.now();
   const cutoff7d  = nowMs - 7  * 24 * 3600 * 1000;
   const cutoff30d = nowMs - 30 * 24 * 3600 * 1000;
+
+  // ── Live SBD/STEEM price — shared cache with steemAccount ────────────────
+  sbdPerSteem = await fetchLiveSbdPerSteem();
 
   // ── 1. Single history traversal covering 30 days ───────────────────────────
   //    Collect: vote ops ≤7d  AND  curation_reward ops ≤30d
@@ -266,9 +270,13 @@ export async function fetchPendingCuration(
 
     const shareW        = myWeight  / sumWeight;
     const shareR        = sumRshares > 0 ? myRshares / sumRshares : 0;
-    const estimatedSp   = Math.round(payout * 0.25 * shareW / sbdPerSteem * 1_000) / 1_000;
-    const estimatedSpR  = Math.round(payout * 0.25 * shareR / sbdPerSteem * 1_000) / 1_000;
-    const estimatedSbd  = Math.round(payout * 0.25 * shareW * 10_000) / 10_000;
+    // Factor 0.20: empirically validated against SteemWorld for all post sizes.
+    // pending_payout_value already encodes the convergent_linear author curve, making
+    // it the best pool proxy. The effective curation fraction is ~20% of pending_payout.
+    // (Nominal 50% curation split reduced by the convergent_square_root curve effects.)
+    const estimatedSp   = Math.round(payout * 0.20 * shareW / sbdPerSteem * 1_000) / 1_000;
+    const estimatedSpR  = Math.round(payout * 0.20 * shareR / sbdPerSteem * 1_000) / 1_000;
+    const estimatedSbd  = Math.round(payout * 0.20 * shareW * 10_000) / 10_000;
 
     pendingPosts.push({
       author:      unique[index].author,
