@@ -528,7 +528,7 @@ export function App() {
   }
 
   async function executeStrategyVotes(
-    targets: Array<{ author: string; permlink: string; weightBps: number; strategyCategory?: string }>
+    targets: Array<{ author: string; permlink: string; weightBps: number; strategyCategory?: string; category?: string }>
   ): Promise<VoteBatchResult> {
     if (!session) return { ok: 0, failed: 0, skipped: 0, results: [] };
     let ok = 0, failed = 0, skipped = 0;
@@ -536,7 +536,10 @@ export function App() {
 
     for (const target of targets) {
       try {
-        const res = await doVote(target);
+        const res = await doVote({
+          ...target,
+          strategyCategory: target.strategyCategory ?? target.category,
+        });
         ok++;
         results.push({ author: target.author, permlink: target.permlink, status: "success", transactionId: res.transactionId });
         const key = `${target.author}/${target.permlink}`;
