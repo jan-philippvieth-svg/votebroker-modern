@@ -623,6 +623,188 @@ export function getLiveVoteReport(username: string): LiveVoteReport {
   };
 }
 
+// ── Growth Analytics ─────────────────────────────────────────────────────────
+//
+// Measures how much the post's total payout grew between vote time and payout:
+//   growth_factor = post_final_payout_sbd / post_pending_payout_sbd
+//
+// This is the empirical foundation for the Faktor-0.20 hypothesis:
+//   if avg(growth_factor) ≈ 2.5  →  0.50 × (1/2.5) ≈ 0.20  (confirmed)
+//
+// Groups by: delay, strategy category, pool size, community, author,
+//            weekday and hour of vote.
+
+export interface GrowthBucket {
+  label:         string;
+  n:             number;
+  avgGrowth:     number | null;   // null if n < 2 (insufficient data)
+  avgPendingSbd: number | null;
+}
+
+export interface GrowthAnalytics {
+  n:             number;          // rows with both pending > 0 and final > 0
+  avgGrowth:     number | null;
+  byDelay:       GrowthBucket[];
+  byCategory:    GrowthBucket[];
+  byPoolBucket:  GrowthBucket[];
+  byCommunity:   GrowthBucket[];  // top 15 by n
+  byAuthor:      GrowthBucket[];  // top 15 by n
+  byWeekday:     GrowthBucket[];  // 0=Sun … 6=Sat
+  byHour:        GrowthBucket[];  // 0–23
+}
+
+const WEEKDAY_LABELS = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+
+export function getGrowthAnalytics(username: string): GrowthAnalytics {
+  const db = getDb();
+
+  const BASE_FILTER = `
+    voter = ?
+    AND post_pending_payout_sbd > 0.01
+    AND post_final_payout_sbd  IS NOT NULL
+    AND post_final_payout_sbd  > 0
+  `;
+
+  const toBucket = (rows: Array<{ label: string; n: number; avg_growth: number | null; avg_pending: number | null }>): GrowthBucket[] =>
+    rows.map(r => ({
+      label:         r.label,
+      n:             r.n,
+      avgGrowth:     r.n >= 2 && r.avg_growth !== null ? Math.round(r.avg_growth * 100) / 100 : null,
+      avgPendingSbd: r.avg_pending !== null ? Math.round(r.avg_pending * 100) / 100 : null,
+    }));
+
+  const overview = db.prepare(`
+    SELECT COUNT(*) as n, AVG(post_final_payout_sbd / post_pending_payout_sbd) as avg_growth
+    FROM vb_global_vote_outcomes
+    WHERE ${BASE_FILTER}
+  `).get(username) as { n: number; avg_growth: number | null };
+
+  const byDelay = toBucket(db.prepare(`
+    SELECT
+      CASE
+        WHEN vote_delay_minutes IS NULL  THEN 'Unbekannt'
+        WHEN vote_delay_minutes < 5      THEN '< 5 min'
+        WHEN vote_delay_minutes < 15     THEN '5–15 min'
+        WHEN vote_delay_minutes < 30     THEN '15–30 min'
+        WHEN vote_delay_minutes < 60     THEN '30–60 min'
+        WHEN vote_delay_minutes < 120    THEN '1–2 h'
+        WHEN vote_delay_minutes < 360    THEN '2–6 h'
+        WHEN vote_delay_minutes < 1440   THEN '6–24 h'
+        ELSE '> 24 h'
+      END as label,
+      COUNT(*) as n,
+      AVG(post_final_payout_sbd / post_pending_payout_sbd) as avg_growth,
+      AVG(post_pending_payout_sbd) as avg_pending
+    FROM vb_global_vote_outcomes
+    WHERE ${BASE_FILTER}
+    GROUP BY label
+    ORDER BY MIN(COALESCE(vote_delay_minutes, 99999))
+  `).all(username) as any[]);
+
+  const byCategory = toBucket(db.prepare(`
+    SELECT
+      COALESCE(strategy_category, 'unbekannt') as label,
+      COUNT(*) as n,
+      AVG(post_final_payout_sbd / post_pending_payout_sbd) as avg_growth,
+      AVG(post_pending_payout_sbd) as avg_pending
+    FROM vb_global_vote_outcomes
+    WHERE ${BASE_FILTER}
+    GROUP BY label
+    ORDER BY n DESC
+  `).all(username) as any[]);
+
+  const byPoolBucket = toBucket(db.prepare(`
+    SELECT
+      CASE
+        WHEN post_pending_payout_sbd < 1    THEN '< 1 SBD'
+        WHEN post_pending_payout_sbd < 5    THEN '1–5 SBD'
+        WHEN post_pending_payout_sbd < 20   THEN '5–20 SBD'
+        WHEN post_pending_payout_sbd < 50   THEN '20–50 SBD'
+        WHEN post_pending_payout_sbd < 150  THEN '50–150 SBD'
+        ELSE '> 150 SBD'
+      END as label,
+      COUNT(*) as n,
+      AVG(post_final_payout_sbd / post_pending_payout_sbd) as avg_growth,
+      AVG(post_pending_payout_sbd) as avg_pending
+    FROM vb_global_vote_outcomes
+    WHERE ${BASE_FILTER}
+    GROUP BY label
+    ORDER BY MIN(post_pending_payout_sbd)
+  `).all(username) as any[]);
+
+  const byCommunity = toBucket(db.prepare(`
+    SELECT
+      COALESCE(post_community, '—') as label,
+      COUNT(*) as n,
+      AVG(post_final_payout_sbd / post_pending_payout_sbd) as avg_growth,
+      AVG(post_pending_payout_sbd) as avg_pending
+    FROM vb_global_vote_outcomes
+    WHERE ${BASE_FILTER}
+    GROUP BY label
+    ORDER BY n DESC
+    LIMIT 15
+  `).all(username) as any[]);
+
+  const byAuthor = toBucket(db.prepare(`
+    SELECT
+      author as label,
+      COUNT(*) as n,
+      AVG(post_final_payout_sbd / post_pending_payout_sbd) as avg_growth,
+      AVG(post_pending_payout_sbd) as avg_pending
+    FROM vb_global_vote_outcomes
+    WHERE ${BASE_FILTER}
+    GROUP BY label
+    ORDER BY n DESC
+    LIMIT 15
+  `).all(username) as any[]);
+
+  const byWeekday = toBucket(db.prepare(`
+    SELECT
+      CAST(strftime('%w', voted_at) AS INTEGER) as dow,
+      COUNT(*) as n,
+      AVG(post_final_payout_sbd / post_pending_payout_sbd) as avg_growth,
+      AVG(post_pending_payout_sbd) as avg_pending
+    FROM vb_global_vote_outcomes
+    WHERE ${BASE_FILTER} AND voted_at IS NOT NULL
+    GROUP BY dow
+    ORDER BY dow
+  `).all(username).map((r: any) => ({
+    label:      WEEKDAY_LABELS[r.dow] ?? String(r.dow),
+    n:          r.n,
+    avg_growth: r.avg_growth,
+    avg_pending: r.avg_pending,
+  })) as any[]);
+
+  const byHour = toBucket(db.prepare(`
+    SELECT
+      CAST(strftime('%H', voted_at) AS INTEGER) as hour,
+      COUNT(*) as n,
+      AVG(post_final_payout_sbd / post_pending_payout_sbd) as avg_growth,
+      AVG(post_pending_payout_sbd) as avg_pending
+    FROM vb_global_vote_outcomes
+    WHERE ${BASE_FILTER} AND voted_at IS NOT NULL
+    GROUP BY hour
+    ORDER BY hour
+  `).all(username).map((r: any) => ({
+    label:      String(r.hour).padStart(2, "0") + "h",
+    n:          r.n,
+    avg_growth: r.avg_growth,
+    avg_pending: r.avg_pending,
+  })) as any[]);
+
+  return {
+    n:           overview.n,
+    avgGrowth:   overview.avg_growth !== null ? Math.round(overview.avg_growth * 100) / 100 : null,
+    byDelay,
+    byCategory,
+    byPoolBucket,
+    byCommunity,
+    byAuthor,
+    byWeekday,
+    byHour,
+  };
+}
+
 // ── Model comparison metrics ──────────────────────────────────────────────────
 
 export function getModelComparisonMetrics(username: string): ModelComparisonMetrics | null {

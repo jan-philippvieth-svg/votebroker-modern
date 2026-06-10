@@ -2,11 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Users, Dna, Target, type LucideIcon } from "lucide-react";
 import type {
   AuthSession, CurationProfile, DailyEarnings, DailyHistoryPoint, DailyHistoryResult,
-  DailyHistorySummary, GrowthData, OpportunitiesMeta, PendingCuration, PendingDebugPost,
-  PostOpportunity, SteemAccountSnapshot, TodayStats, VBEarningsResult, VotePlanResponse,
-  VpBudget,
+  DailyHistorySummary, GrowthAnalytics, GrowthBucket, GrowthData, OpportunitiesMeta,
+  PendingCuration, PendingDebugPost, PostOpportunity, SteemAccountSnapshot, TodayStats,
+  VBEarningsResult, VotePlanResponse, VpBudget,
 } from "../api";
-import { fetchVBEarnings, fetchVpBudget } from "../api";
+import { fetchGrowthAnalytics, fetchVBEarnings, fetchVpBudget } from "../api";
 import { fetchDailyHistory, fetchGrowthData, fetchPendingCuration, fetchTodayStats } from "../api";
 import { createTranslator, type Locale, type TranslationKey } from "../i18n";
 
@@ -1126,6 +1126,154 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
   );
 }
 
+// ── Growth Analytics Panel ────────────────────────────────────────────────────
+
+type GrowthDimension = "delay" | "category" | "pool" | "community" | "author" | "weekday";
+
+function growthColor(g: number | null): string {
+  if (g === null) return C.faint;
+  if (g >= 3.0)  return C.ok;
+  if (g >= 2.0)  return C.warn;
+  if (g >= 1.2)  return C.dim;
+  return C.err;
+}
+
+function GrowthTable({ buckets }: { buckets: GrowthBucket[] }) {
+  if (buckets.length === 0)
+    return <p style={{ color: C.faint, fontSize: "0.8rem", margin: "0.5rem 0 0" }}>Keine Daten</p>;
+  return (
+    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
+      <thead>
+        <tr style={{ color: C.faint, textAlign: "left" }}>
+          <th style={{ padding: "0.2rem 0.4rem 0.2rem 0", fontWeight: 500 }}>Gruppe</th>
+          <th style={{ padding: "0.2rem 0.4rem", fontWeight: 500, textAlign: "right" }}>n</th>
+          <th style={{ padding: "0.2rem 0.4rem", fontWeight: 500, textAlign: "right" }}>Ø Wachstum</th>
+          <th style={{ padding: "0.2rem 0 0.2rem 0.4rem", fontWeight: 500, textAlign: "right" }}>Ø Pool (Vote)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {buckets.map(b => (
+          <tr key={b.label} style={{ borderTop: `1px solid ${C.border}` }}>
+            <td style={{ padding: "0.25rem 0.4rem 0.25rem 0", color: C.text }}>{b.label}</td>
+            <td style={{ padding: "0.25rem 0.4rem", color: C.faint, textAlign: "right" }}>{b.n}</td>
+            <td style={{ padding: "0.25rem 0.4rem", textAlign: "right" }}>
+              {b.avgGrowth !== null
+                ? <strong style={{ color: growthColor(b.avgGrowth) }}>{b.avgGrowth.toFixed(2)}×</strong>
+                : <span style={{ color: C.faint }}>—</span>}
+            </td>
+            <td style={{ padding: "0.25rem 0 0.25rem 0.4rem", color: C.faint, textAlign: "right" }}>
+              {b.avgPendingSbd !== null ? `${b.avgPendingSbd.toFixed(2)} SBD` : "—"}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+const GROWTH_DIM_LABELS: Record<GrowthDimension, string> = {
+  delay:     "Vote Delay",
+  category:  "Kategorie",
+  pool:      "Pool-Größe",
+  community: "Community",
+  author:    "Autor",
+  weekday:   "Wochentag",
+};
+
+function GrowthAnalyticsPanel({ data, loading }: {
+  data: GrowthAnalytics | null;
+  loading: boolean;
+}) {
+  const [open,   setOpen]   = useState(false);
+  const [dim,    setDim]    = useState<GrowthDimension>("delay");
+
+  const buckets: Record<GrowthDimension, GrowthBucket[]> = data ? {
+    delay:     data.byDelay,
+    category:  data.byCategory,
+    pool:      data.byPoolBucket,
+    community: data.byCommunity,
+    author:    data.byAuthor,
+    weekday:   data.byWeekday,
+  } : { delay: [], category: [], pool: [], community: [], author: [], weekday: [] };
+
+  const overallColor = data?.avgGrowth !== null && data?.avgGrowth !== undefined
+    ? growthColor(data.avgGrowth) : C.faint;
+
+  return (
+    <div style={{ ...card, marginTop: 0 }}>
+      <div
+        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
+        onClick={() => setOpen(o => !o)}
+      >
+        <div style={{ display: "flex", flexDirection: "column" as const, gap: "0.15rem" }}>
+          <p style={{ ...lbl, margin: 0 }}>Growth Analytics</p>
+          {data && (
+            <span style={{ fontSize: "0.75rem", color: C.faint }}>
+              {data.n} Posts ausgewertet
+              {data.avgGrowth !== null && (
+                <> · Ø Wachstum{" "}
+                  <strong style={{ color: overallColor }}>{data.avgGrowth.toFixed(2)}×</strong>
+                  {data.avgGrowth >= 2.0 && data.avgGrowth < 3.0 &&
+                    <span style={{ color: C.faint }}> (Hypothese: ~2.5×)</span>}
+                </>
+              )}
+            </span>
+          )}
+        </div>
+        <span style={{ color: C.faint, fontSize: "0.85rem", userSelect: "none" }}>{open ? "▲" : "▼"}</span>
+      </div>
+
+      {open && (
+        <div style={{ marginTop: "1rem" }}>
+          {loading && <p style={{ color: C.faint, fontSize: "0.82rem", margin: 0 }}>Lade…</p>}
+
+          {!loading && !data && (
+            <p style={{ color: C.faint, fontSize: "0.82rem", margin: 0 }}>
+              Noch keine abgeschlossenen Posts mit gespeichertem Pool-Wachstum.
+              Daten werden täglich nach Auszahlung ergänzt.
+            </p>
+          )}
+
+          {!loading && data && data.n === 0 && (
+            <p style={{ color: C.faint, fontSize: "0.82rem", margin: 0 }}>
+              Noch keine Daten — {data.n} Posts mit final/pending vorhanden.
+            </p>
+          )}
+
+          {!loading && data && data.n > 0 && (
+            <>
+              {/* Dimension selector */}
+              <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" as const, marginBottom: "0.75rem" }}>
+                {(Object.keys(GROWTH_DIM_LABELS) as GrowthDimension[]).map(d => (
+                  <button
+                    key={d}
+                    onClick={() => setDim(d)}
+                    style={{
+                      fontSize: "0.75rem", padding: "0.2rem 0.6rem",
+                      borderRadius: "4px", border: `1px solid ${dim === d ? C.info : C.border}`,
+                      background: dim === d ? C.info + "22" : "transparent",
+                      color: dim === d ? C.info : C.faint,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {GROWTH_DIM_LABELS[d]}
+                  </button>
+                ))}
+              </div>
+
+              <GrowthTable buckets={buckets[dim]} />
+
+              <p style={{ color: C.faint, fontSize: "0.72rem", marginTop: "0.75rem", marginBottom: 0 }}>
+                growth_factor = post_final_payout / pool_at_vote_time · Ø ≈ 2.5 bestätigt Faktor 0.20-Hypothese
+              </p>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Alle Durchläufe heute ─────────────────────────────────────────────────────
 
 function AllRunsPanel({ todayStats, snapshot, timezone, locale, t }: {
@@ -1916,6 +2064,10 @@ export function UserDashboard(props: {
 
   const [vpBudget, setVpBudget] = useState<VpBudget|null>(null);
 
+  const [growthAnalytics,        setGrowthAnalytics]        = useState<GrowthAnalytics|null>(null);
+  const [growthAnalyticsLoading, setGrowthAnalyticsLoading] = useState(false);
+  const [growthAnalyticsFetched, setGrowthAnalyticsFetched] = useState(false);
+
   // Lifetime VoteBroker earnings — fetched once, not period-dependent
   const [lifetimeEarnings, setLifetimeEarnings] =useState<VBEarningsResult|null>(null);
 
@@ -1952,6 +2104,12 @@ export function UserDashboard(props: {
       .then(setLifetimeEarnings).catch(()=>{});
     fetchVpBudget(props.session.token)
       .then(setVpBudget).catch(()=>{});
+    // Growth Analytics — lazy: fetched once on first mount, not re-fetched on vote
+    setGrowthAnalyticsLoading(true);
+    fetchGrowthAnalytics(props.session.token)
+      .then(d => { setGrowthAnalytics(d); setGrowthAnalyticsFetched(true); })
+      .catch(()=> setGrowthAnalyticsFetched(true))
+      .finally(()=> setGrowthAnalyticsLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[props.session.token]);
 
@@ -2060,7 +2218,15 @@ export function UserDashboard(props: {
         growthPeriod={growthPeriod} setGrowthPeriod={setGrowthPeriod} t={t}
       />
 
-      {/* 6. Autorenliste */}
+      {/* 6. Growth Analytics */}
+      {growthAnalyticsFetched && (
+        <GrowthAnalyticsPanel
+          data={growthAnalytics}
+          loading={growthAnalyticsLoading}
+        />
+      )}
+
+      {/* 7. Autorenliste */}
       {strategyRules!==null&&(
         <AuthorGrid rules={rules} openOpps={openOpps} snapshot={snapshot} dnaMap={dnaMap} onTabChange={props.onTabChange} t={t}/>
       )}

@@ -648,6 +648,23 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
     }
   });
 
+  // ── GET /api/me/vote-outcomes/growth-analytics ───────────────────────────────
+  app.get("/api/me/vote-outcomes/growth-analytics", {
+    schema: { tags: ["Account"], summary: "Post-Growth-Analytics: final/pending Pool-Wachstum nach Dimension", security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
+    const token   = (request.headers as Record<string, string>)["session"];
+    const session = token ? getSession(token) : null;
+    if (!session) return reply.code(401).send({ error: "unauthorized" });
+
+    try {
+      const { getGrowthAnalytics } = await import("../chain/globalVoteOutcomes.js");
+      return getGrowthAnalytics(session.user.username);
+    } catch (err) {
+      return reply.code(502).send({ error: "growth_analytics_failed",
+        detail: err instanceof Error ? err.message : "unknown" });
+    }
+  });
+
   // ── GET /api/me/votebroker-earnings — VoteBroker-attributed curation ────────
   app.get("/api/me/votebroker-earnings", {
     schema: { tags: ["Account"], summary: "VoteBroker-zugerechnete Curation-Earnings", security: [{ sessionToken: [] }] }

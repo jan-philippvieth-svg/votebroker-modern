@@ -1264,6 +1264,35 @@ export async function fetchVpBudget(token: string): Promise<VpBudget> {
   return res.json();
 }
 
+// ── Growth Analytics ──────────────────────────────────────────────────────────
+
+export interface GrowthBucket {
+  label:         string;
+  n:             number;
+  avgGrowth:     number | null;   // final_pool / pending_pool — null if n < 2
+  avgPendingSbd: number | null;
+}
+
+export interface GrowthAnalytics {
+  n:             number;          // posts with both pending + final payout stored
+  avgGrowth:     number | null;
+  byDelay:       GrowthBucket[];
+  byCategory:    GrowthBucket[];
+  byPoolBucket:  GrowthBucket[];
+  byCommunity:   GrowthBucket[];
+  byAuthor:      GrowthBucket[];
+  byWeekday:     GrowthBucket[];
+  byHour:        GrowthBucket[];
+}
+
+export async function fetchGrowthAnalytics(token: string): Promise<GrowthAnalytics> {
+  const res = await fetch(`${API_BASE}/api/me/vote-outcomes/growth-analytics`, {
+    headers: { session: token },
+  });
+  if (!res.ok) throw new Error("Growth Analytics konnten nicht geladen werden.");
+  return res.json();
+}
+
 export async function fixScreenshotUrls(token: string, filename: string): Promise<{ ok: boolean; changed: boolean; replacements: number; hint: string }> {
   const res = await fetch(`${API_BASE}/api/admin/content/fix-screenshot-urls`, {
     method: "POST",
