@@ -11,6 +11,7 @@
  */
 
 import { rebuildVoteOutcomes } from "../chain/rebuildVoteOutcomes.js";
+import { enrichCurationEstimates } from "../chain/globalVoteOutcomes.js";
 import { createSteemClient } from "../chain/steemBroadcaster.js";
 import { getDb } from "../db/index.js";
 
@@ -152,6 +153,22 @@ export async function runPayoutSync(log: typeof console = console): Promise<void
     }
 
     log.info(`[PayoutSync] post_final_payout_sbd set for ${finalUpdated} posts`);
+
+    // ── D) Enrich curation estimates for model validation ─────────────────────
+    // Runs after realized_curation_sp is cross-updated, so error metrics are
+    // immediately computable for any newly realized vote.
+    const voters = (db.prepare(
+      "SELECT DISTINCT voter FROM vb_global_vote_outcomes ORDER BY voter"
+    ).all() as Array<{ voter: string }>).map(r => r.voter);
+
+    for (const voter of voters) {
+      try {
+        const result = await enrichCurationEstimates(voter, log);
+        log.info(`[PayoutSync] estimates @${voter}: updated=${result.updated} skipped=${result.skipped}`);
+      } catch (err) {
+        log.warn(`[PayoutSync] enrichEstimates failed for @${voter}:`, err);
+      }
+    }
 
     log.info("[PayoutSync] Done");
   } finally {

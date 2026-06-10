@@ -298,6 +298,12 @@ function initSchema(db: Database): void {
       -- Chain provenance (allows verification + rebuild from chain)
       source_vote_trx_id      TEXT,          -- transaction_id of the vote op
       source_reward_trx_id    TEXT,          -- transaction_id of curation_reward op
+      -- Curation model estimates (filled by enrichCurationEstimates job)
+      estimated_sp_weight      REAL,   -- pool × 0.20 × (my_weight/sum_weight) / sbd_per_steem
+      estimated_sp_rshares     REAL,   -- pool × 0.20 × (my_rshares/sum_rshares) / sbd_per_steem
+      steemworld_estimate_sp   REAL,   -- external reference (SteemWorld), populated manually
+      estimation_sbd_per_steem REAL,   -- SBD/STEEM price used for the above estimates
+      estimated_at             TEXT,   -- ISO — when the last estimate was computed
       -- Metadata
       recorded_at             TEXT DEFAULT (datetime('now')),
       PRIMARY KEY (voter, author, permlink)
@@ -359,6 +365,12 @@ function runMigrations(db: Database): void {
       if (!gvoCols.includes("vp_after_vote_bps"))   db.exec("ALTER TABLE vb_global_vote_outcomes ADD COLUMN vp_after_vote_bps INTEGER");
       if (!gvoCols.includes("vote_value_sbd"))       db.exec("ALTER TABLE vb_global_vote_outcomes ADD COLUMN vote_value_sbd REAL");
       if (!gvoCols.includes("post_community"))       db.exec("ALTER TABLE vb_global_vote_outcomes ADD COLUMN post_community TEXT");
+      // Model validation columns
+      if (!gvoCols.includes("estimated_sp_weight"))      db.exec("ALTER TABLE vb_global_vote_outcomes ADD COLUMN estimated_sp_weight REAL");
+      if (!gvoCols.includes("estimated_sp_rshares"))     db.exec("ALTER TABLE vb_global_vote_outcomes ADD COLUMN estimated_sp_rshares REAL");
+      if (!gvoCols.includes("steemworld_estimate_sp"))   db.exec("ALTER TABLE vb_global_vote_outcomes ADD COLUMN steemworld_estimate_sp REAL");
+      if (!gvoCols.includes("estimation_sbd_per_steem")) db.exec("ALTER TABLE vb_global_vote_outcomes ADD COLUMN estimation_sbd_per_steem REAL");
+      if (!gvoCols.includes("estimated_at"))             db.exec("ALTER TABLE vb_global_vote_outcomes ADD COLUMN estimated_at TEXT");
     }
 
     // CoPilot shadow run log — dry-run decisions written every 30 min, no broadcast

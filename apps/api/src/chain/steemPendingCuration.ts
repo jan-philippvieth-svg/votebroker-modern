@@ -47,8 +47,9 @@ export interface PendingDebugPost {
 
 export interface PendingCurationResult {
   // 7-day pending window
-  pendingUsd:   number;
-  pendingSp:    number;
+  pendingUsd:       number;
+  pendingSp:        number;
+  pendingSpRshares: number;  // same total via rshares-based share (for comparison with SteemWorld)
   postCount:    number;
   voteCount:    number;
   nextPayout:   { cashoutTime: string; estimatedSp: number; estimatedUsd: number } | null;
@@ -72,8 +73,8 @@ export interface PendingCurationResult {
       weightZero:     number;  // weight=0 (early vote fully penalised or neutral vote)
       limitReached:   number;
     };
-    top10:   PendingDebugPost[];   // top 10 by estimatedSp, full calculation breakdown
-    next10:  PendingDebugPost[];   // next 10 by cashout_time asc
+    posts:       PendingDebugPost[];   // all posts sorted by estimatedSp desc
+    postsByTime: PendingDebugPost[];   // all posts sorted by cashout_time asc
     method:  "weight";            // curation estimation method in use
   };
 
@@ -195,11 +196,11 @@ export async function fetchPendingCuration(
 
   if (unique.length === 0) {
     const empty: PendingCurationResult = {
-      pendingUsd: 0, pendingSp: 0, postCount: 0,
+      pendingUsd: 0, pendingSp: 0, pendingSpRshares: 0, postCount: 0,
       voteCount: voteOps.length, nextPayout: null, topPending: [],
       earned30dSp, earned30dUsd, earned30dCount,
       sbdPerSteemUsed: sbdPerSteem,
-      debug: { uniqueTotal: 0, fetched: 0, totalPayoutUsd: 0, skipped, top10: [], next10: [], method: "weight" },
+      debug: { uniqueTotal: 0, fetched: 0, totalPayoutUsd: 0, skipped, posts: [], postsByTime: [], method: "weight" },
       computedAt: new Date().toISOString(),
     };
     cache.set(username, { result: empty, expiresAt: nowMs + CACHE_TTL_MS });
@@ -304,8 +305,8 @@ export async function fetchPendingCuration(
   // Sort by estimated value desc
   pendingPosts.sort((a, b) => b.estimatedUsd - a.estimatedUsd);
 
-  const pendingUsd = Math.round(pendingPosts.reduce((s, p) => s + p.estimatedUsd, 0) * 10_000) / 10_000;
-  const pendingSp  = Math.round(pendingPosts.reduce((s, p) => s + p.estimatedSp,  0) * 1_000)  / 1_000;
+  const pendingUsd       = Math.round(pendingPosts.reduce((s, p) => s + p.estimatedUsd,        0) * 10_000) / 10_000;
+  const pendingSp        = Math.round(pendingPosts.reduce((s, p) => s + p.estimatedSp,         0) * 1_000)  / 1_000;
 
   // Next payout = post with earliest cashout_time that still has value
   const byTime = [...pendingPosts].sort(
@@ -315,15 +316,16 @@ export async function fetchPendingCuration(
     ? { cashoutTime: byTime[0].cashoutTime, estimatedSp: byTime[0].estimatedSp, estimatedUsd: byTime[0].estimatedUsd }
     : null;
 
-  // next10 = earliest cashout first (same source as byTime, but from debugPosts for full fields)
+  // debugPosts: sorted by value desc (for "posts"), and by time (for "postsByTime")
+  debugPosts.sort((a, b) => b.estimatedSp - a.estimatedSp);
   const debugByTime = [...debugPosts].sort(
     (a, b) => new Date(a.cashoutTime).getTime() - new Date(b.cashoutTime).getTime()
   );
 
-  debugPosts.sort((a, b) => b.estimatedSp - a.estimatedSp);
+  const pendingSpRshares = Math.round(debugPosts.reduce((s, p) => s + p.estimatedSpRshares, 0) * 1_000)  / 1_000;
 
   const result: PendingCurationResult = {
-    pendingUsd, pendingSp,
+    pendingUsd, pendingSp, pendingSpRshares,
     postCount:   pendingPosts.length,
     voteCount:   voteOps.length,
     nextPayout,
@@ -335,8 +337,8 @@ export async function fetchPendingCuration(
       fetched:        allResults.length,
       totalPayoutUsd: Math.round(totalPayoutUsd * 10_000) / 10_000,
       skipped,
-      top10:  debugPosts.slice(0, 10),
-      next10: debugByTime.slice(0, 10),
+      posts:       debugPosts,
+      postsByTime: debugByTime,
       method: "weight",
     },
     computedAt:  new Date().toISOString(),

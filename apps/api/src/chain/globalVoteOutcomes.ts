@@ -11,7 +11,11 @@
  */
 
 import { createSteemClient } from "./steemBroadcaster.js";
+import { fetchLiveSbdPerSteem } from "./steemAccount.js";
 import { getDb } from "../db/index.js";
+
+const CURATION_FACTOR = 0.20;
+const ENRICH_CONCURRENCY = 15;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -66,6 +70,19 @@ export interface DelayPayoutCell {
   avgWeightPct:  number | null;
 }
 
+export interface ModelErrorMetrics {
+  mae:            number;   // mean absolute error
+  medianAbsError: number;
+  rmse:           number;   // root mean square error
+  mape:           number | null;   // mean absolute percentage error (null if any realized == 0)
+}
+
+export interface ModelComparisonMetrics {
+  n:        number;         // votes with both estimate and realized_curation_sp
+  weight:   ModelErrorMetrics;
+  rshares:  ModelErrorMetrics;
+}
+
 export interface LiveVoteReport {
   username:         string;
   since:            string;          // LIVE_VOTES_SINCE
@@ -73,6 +90,7 @@ export interface LiveVoteReport {
   realized:         number;          // with realized_curation_sp
   pending:          number;          // without realized_curation_sp
   avgCurationSp:    number | null;   // realized only
+  modelComparison:  ModelComparisonMetrics | null;  // null until enough data
   // 7 analysis dimensions (realized votes only)
   byDelay:             LiveVoteReportBucket[];
   byWeight:            LiveVoteReportBucket[];
@@ -588,11 +606,12 @@ export function getLiveVoteReport(username: string): LiveVoteReport {
 
   return {
     username,
-    since:         LIVE_VOTES_SINCE,
-    totalLive:     overview.total_live,
-    realized:      overview.realized,
-    pending:       overview.total_live - overview.realized,
-    avgCurationSp: overview.avg_sp,
+    since:           LIVE_VOTES_SINCE,
+    totalLive:       overview.total_live,
+    realized:        overview.realized,
+    pending:         overview.total_live - overview.realized,
+    avgCurationSp:   overview.avg_sp,
+    modelComparison: getModelComparisonMetrics(username),
     byDelay:    delayRows.map(r => ({ label: r.label, votes: r.votes, avgCurationSp: r.avg_sp, minDelay: r.min_delay, maxDelay: r.max_delay })),
     byWeight:   weightRows.map(r => ({ label: r.label, votes: r.votes, avgCurationSp: r.avg_sp, minDelay: r.min_delay, maxDelay: r.max_delay })),
     byCategory: categoryRows.map(r => ({ category: r.category, votes: r.votes, avgCurationSp: r.avg_sp, avgWeightPct: r.avg_weight_pct })),
@@ -602,4 +621,185 @@ export function getLiveVoteReport(username: string): LiveVoteReport {
     byDelayAndPayout: delayPayoutRows.map(r => ({ delayLabel: r.delay_label, payoutLabel: r.payout_label, votes: r.votes, avgCurationSp: r.avg_sp, avgVpBps: r.avg_vp_bps, avgWeightPct: r.avg_weight_pct })),
     generatedAt: new Date().toISOString(),
   };
+}
+
+// ── Model comparison metrics ──────────────────────────────────────────────────
+
+export function getModelComparisonMetrics(username: string): ModelComparisonMetrics | null {
+  const db = getDb();
+
+  const rows = db.prepare(`
+    SELECT realized_curation_sp, estimated_sp_weight, estimated_sp_rshares
+    FROM vb_global_vote_outcomes
+    WHERE voter = ?
+      AND realized_curation_sp IS NOT NULL
+      AND (estimated_sp_weight IS NOT NULL OR estimated_sp_rshares IS NOT NULL)
+  `).all(username) as Array<{
+    realized_curation_sp: number;
+    estimated_sp_weight:  number | null;
+    estimated_sp_rshares: number | null;
+  }>;
+
+  if (rows.length === 0) return null;
+
+  const weightAbs:   number[] = [];
+  const rsharesAbs:  number[] = [];
+  const weightSq:    number[] = [];
+  const rsharesSq:   number[] = [];
+  const weightPct:   number[] = [];
+  const rsharesPct:  number[] = [];
+
+  for (const r of rows) {
+    const real = r.realized_curation_sp;
+    if (r.estimated_sp_weight !== null) {
+      const e = Math.abs(real - r.estimated_sp_weight);
+      weightAbs.push(e);
+      weightSq.push(e * e);
+      if (real > 0) weightPct.push(e / real * 100);
+    }
+    if (r.estimated_sp_rshares !== null) {
+      const e = Math.abs(real - r.estimated_sp_rshares);
+      rsharesAbs.push(e);
+      rsharesSq.push(e * e);
+      if (real > 0) rsharesPct.push(e / real * 100);
+    }
+  }
+
+  const mean   = (a: number[]) => a.length ? a.reduce((s, v) => s + v, 0) / a.length : 0;
+  const rmse   = (sq: number[]) => sq.length ? Math.sqrt(mean(sq)) : 0;
+  const median = (a: number[]) => {
+    if (!a.length) return 0;
+    const s = [...a].sort((x, y) => x - y);
+    const m = Math.floor(s.length / 2);
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  };
+  const r6 = (n: number) => Math.round(n * 1_000_000) / 1_000_000;
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+
+  return {
+    n: rows.length,
+    weight: {
+      mae:            r6(mean(weightAbs)),
+      medianAbsError: r6(median(weightAbs)),
+      rmse:           r6(rmse(weightSq)),
+      mape:           weightPct.length ? r2(mean(weightPct)) : null,
+    },
+    rshares: {
+      mae:            r6(mean(rsharesAbs)),
+      medianAbsError: r6(median(rsharesAbs)),
+      rmse:           r6(rmse(rsharesSq)),
+      mape:           rsharesPct.length ? r2(mean(rsharesPct)) : null,
+    },
+  };
+}
+
+// ── Curation estimate enrichment ──────────────────────────────────────────────
+//
+// Computes estimated_sp_weight + estimated_sp_rshares for every GVO row:
+//   - Pending posts: uses live pending_payout_value (updated on each run)
+//   - Paid-out posts without estimate: uses stored post_pending_payout_sbd
+//     (vote-time snapshot) as pool — gives a consistent pre-payout proxy
+//
+// Called daily from payoutSync after realized_curation_sp is cross-updated,
+// so that model error metrics are immediately computable after each payout.
+
+export async function enrichCurationEstimates(
+  username: string,
+  log: typeof console = console,
+): Promise<{ updated: number; skipped: number }> {
+  const db     = getDb();
+  const client = createSteemClient();
+
+  // Rows to enrich:
+  //   a) Never estimated (estimated_at IS NULL)
+  //   b) Still pending and estimate is stale (> 6 hours old)
+  const rows = db.prepare(`
+    SELECT voter, author, permlink, realized_at, post_pending_payout_sbd
+    FROM vb_global_vote_outcomes
+    WHERE voter = ?
+      AND (
+        estimated_at IS NULL
+        OR (realized_at IS NULL AND estimated_at < datetime('now', '-6 hours'))
+      )
+    ORDER BY voted_at DESC
+  `).all(username) as Array<{
+    voter: string; author: string; permlink: string;
+    realized_at: string | null; post_pending_payout_sbd: number | null;
+  }>;
+
+  if (rows.length === 0) {
+    log.info(`[EnrichEstimates] Nothing to enrich for @${username}`);
+    return { updated: 0, skipped: 0 };
+  }
+
+  log.info(`[EnrichEstimates] @${username}: ${rows.length} rows to enrich`);
+
+  const sbdPerSteem = await fetchLiveSbdPerSteem();
+
+  const updateStmt = db.prepare(`
+    UPDATE vb_global_vote_outcomes
+    SET estimated_sp_weight      = ?,
+        estimated_sp_rshares     = ?,
+        estimation_sbd_per_steem = ?,
+        estimated_at             = datetime('now')
+    WHERE voter = ? AND author = ? AND permlink = ?
+  `);
+
+  let updated = 0, skipped = 0;
+
+  for (let i = 0; i < rows.length; i += ENRICH_CONCURRENCY) {
+    const batch   = rows.slice(i, i + ENRICH_CONCURRENCY);
+    const settled = await Promise.allSettled(
+      batch.map(r =>
+        client.database.call("get_content", [r.author, r.permlink]) as Promise<{
+          author?:               string;
+          pending_payout_value?: string;
+          active_votes?:         Array<{ voter: string; rshares: string | number; weight: string | number }>;
+        }>
+      )
+    );
+
+    for (let j = 0; j < settled.length; j++) {
+      const row = batch[j];
+      const res = settled[j];
+
+      if (res.status !== "fulfilled" || !res.value?.author) { skipped++; continue; }
+      const post = res.value;
+
+      const livePayout = parseFloat(String(post.pending_payout_value ?? "0").split(" ")[0]) || 0;
+
+      // Pool for estimate:
+      //   - still pending → use live pending_payout_value (most accurate)
+      //   - already paid out → use stored vote-time snapshot (pending_payout_value is now 0)
+      const pool = livePayout > 0
+        ? livePayout
+        : (row.post_pending_payout_sbd ?? 0);
+
+      if (pool <= 0 || sbdPerSteem <= 0) { skipped++; continue; }
+
+      const votes    = post.active_votes ?? [];
+      const myVote   = votes.find(v => v.voter === username);
+      if (!myVote) { skipped++; continue; }
+
+      const sumW = votes.reduce((s, v) => s + Math.max(0, Number(v.weight)),  0);
+      const myW  = Math.max(0, Number(myVote.weight));
+      const sumR = votes.reduce((s, v) => s + Math.max(0, Number(v.rshares)), 0);
+      const myR  = Math.max(0, Number(myVote.rshares));
+
+      const estW = myW > 0 && sumW > 0
+        ? Math.round(pool * CURATION_FACTOR * (myW / sumW)  / sbdPerSteem * 1_000_000) / 1_000_000
+        : null;
+      const estR = myR > 0 && sumR > 0
+        ? Math.round(pool * CURATION_FACTOR * (myR / sumR) / sbdPerSteem * 1_000_000) / 1_000_000
+        : null;
+
+      if (estW === null && estR === null) { skipped++; continue; }
+
+      updateStmt.run(estW, estR, sbdPerSteem, username, row.author, row.permlink);
+      updated++;
+    }
+  }
+
+  log.info(`[EnrichEstimates] @${username}: updated=${updated} skipped=${skipped}`);
+  return { updated, skipped };
 }

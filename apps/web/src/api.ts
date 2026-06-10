@@ -881,8 +881,9 @@ export interface PendingDebugPost {
 }
 
 export interface PendingCuration {
-  pendingUsd:   number;
-  pendingSp:    number;
+  pendingUsd:       number;
+  pendingSp:        number;
+  pendingSpRshares: number;  // same total via rshares-based share (for comparison)
   postCount:    number;
   voteCount:    number;
   nextPayout:   { cashoutTime: string; estimatedSp: number; estimatedUsd: number } | null;
@@ -902,8 +903,8 @@ export interface PendingCuration {
       weightZero:     number;
       limitReached:   number;
     };
-    top10:   PendingDebugPost[];
-    next10:  PendingDebugPost[];
+    posts:       PendingDebugPost[];   // all posts, sorted by estimatedSp desc
+    postsByTime: PendingDebugPost[];   // all posts, sorted by cashoutTime asc
     method:  string;
   };
   computedAt:   string;
