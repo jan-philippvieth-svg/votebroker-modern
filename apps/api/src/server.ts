@@ -17,6 +17,7 @@ import { startWhaleEnrichment } from "./jobs/whaleEnrichment.js";
 import { startPayoutSync } from "./jobs/payoutSync.js";
 import { startSignalCompute } from "./jobs/signalCompute.js";
 import { startCopilotShadow } from "./jobs/copilotShadowJob.js";
+import { startGrowthSnapshotSampler } from "./jobs/growthSnapshotSampler.js";
 import { scanWhaleHistory } from "./chain/whaleHistoryScanner.js";
 import { registerContentRoutes } from "./admin/contentRoutes.js";
 import { registerStrategyRoutes } from "./strategy/routes.js";
@@ -95,3 +96,6 @@ startSignalCompute(log);
 
 // CoPilot Shadow Mode — evaluates candidates every 30 min, writes to vb_copilot_shadow_runs, no broadcast
 startCopilotShadow(log);
+
+// Growth snapshot sampler — captures pending_payout_value at T+0/15m/1h/6h/24h/72h/final
+startGrowthSnapshotSampler(log);

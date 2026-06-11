@@ -313,6 +313,61 @@ function initSchema(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_gvo_delay       ON vb_global_vote_outcomes(vote_delay_minutes);
     CREATE INDEX IF NOT EXISTS idx_gvo_category    ON vb_global_vote_outcomes(strategy_category);
     CREATE INDEX IF NOT EXISTS idx_gvo_realized    ON vb_global_vote_outcomes(realized_at);
+
+    -- Growth snapshot time series — raw payout measurements at fixed intervals after vote cast.
+    -- Snapshot types: 'vote_time' | 't15m' | 't1h' | 't6h' | 't24h' | 't72h' | 'final'
+    -- pending_payout_sbd: pending_payout_value from get_content (0 after payout; 'final' uses post_final_payout_sbd)
+    -- actual_delta_min: real elapsed minutes since voted_at when the snapshot was captured
+    CREATE TABLE IF NOT EXISTS vote_growth_snapshots (
+      voter              TEXT    NOT NULL,
+      author             TEXT    NOT NULL,
+      permlink           TEXT    NOT NULL,
+      snapshot_type      TEXT    NOT NULL,
+      target_minutes     INTEGER,
+      pending_payout_sbd REAL,
+      active_votes_count INTEGER,
+      measured_at        TEXT    NOT NULL,
+      actual_delta_min   REAL,
+      PRIMARY KEY (voter, author, permlink, snapshot_type)
+    );
+    CREATE INDEX IF NOT EXISTS idx_vgs_vote ON vote_growth_snapshots(voter, author, permlink);
+    CREATE INDEX IF NOT EXISTS idx_vgs_type ON vote_growth_snapshots(snapshot_type, measured_at);
+
+    -- Feature extraction view — Layer 3 over raw snapshots.
+    -- Computes early_momentum, velocities, growth_factor, trajectory_class via SQL pivot.
+    CREATE VIEW IF NOT EXISTS vw_growth_features AS
+    WITH pivoted AS (
+      SELECT
+        voter, author, permlink,
+        MAX(CASE WHEN snapshot_type = 'vote_time' THEN pending_payout_sbd END) AS t0,
+        MAX(CASE WHEN snapshot_type = 't15m'      THEN pending_payout_sbd END) AS t15m,
+        MAX(CASE WHEN snapshot_type = 't1h'       THEN pending_payout_sbd END) AS t1h,
+        MAX(CASE WHEN snapshot_type = 't6h'       THEN pending_payout_sbd END) AS t6h,
+        MAX(CASE WHEN snapshot_type = 't24h'      THEN pending_payout_sbd END) AS t24h,
+        MAX(CASE WHEN snapshot_type = 't72h'      THEN pending_payout_sbd END) AS t72h,
+        MAX(CASE WHEN snapshot_type = 'final'     THEN pending_payout_sbd END) AS t_final,
+        COUNT(*) AS snapshot_count
+      FROM vote_growth_snapshots
+      GROUP BY voter, author, permlink
+    )
+    SELECT
+      voter, author, permlink,
+      t0, t15m, t1h, t6h, t24h, t72h, t_final,
+      snapshot_count,
+      CASE WHEN t0 > 0 THEN t1h / t0        END AS early_momentum,
+      CASE WHEN t0 IS NOT NULL AND t1h IS NOT NULL
+           THEN (t1h - t0) / 60.0           END AS velocity_0_1h,
+      CASE WHEN t6h IS NOT NULL AND t24h IS NOT NULL
+           THEN (t24h - t6h) / (18.0 * 60)  END AS velocity_6h_24h,
+      CASE WHEN t0 > 0 THEN t_final / t0    END AS growth_factor,
+      CASE
+        WHEN t_final IS NULL OR t0 IS NULL OR t0 = 0 THEN 'unknown'
+        WHEN t_final / t0 < 1.5                       THEN 'flat'
+        WHEN t1h IS NOT NULL AND t1h / t0 > 1.8 AND t_final / t0 < 4.0 THEN 'early_spike'
+        WHEN t1h IS NOT NULL AND t1h / t0 < 1.3 AND t_final / t0 > 3.0 THEN 'slow_burn'
+        ELSE 'unknown'
+      END AS trajectory_class
+    FROM pivoted;
   `);
 }
 
