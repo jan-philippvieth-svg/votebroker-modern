@@ -685,7 +685,7 @@ function PendingDebugPanel({ data, t }: { data: PendingCuration; t: ReturnType<t
       >
         <span>{open ? "▾" : "▸"}</span>
         <span>{t("debugTitle")}</span>
-        <span style={{ color: C.faint }}>· {data.sbdPerSteemUsed.toFixed(4)} SBD/STEEM · {totalSkipped} {t("debugSkipped")}</span>
+        <span style={{ color: C.faint }}>· {data.sbdPerSteemUsed.toFixed(4)} SBD/SP · {totalSkipped} {t("debugSkipped")}</span>
       </button>
 
       {open && (
@@ -703,7 +703,7 @@ function PendingDebugPanel({ data, t }: { data: PendingCuration; t: ReturnType<t
               )}
             </div>
             <div style={{ marginTop: "0.2rem" }}>
-              {t("debugCalculatedWith")}&nbsp;<strong>{data.sbdPerSteemUsed.toFixed(4)} SBD/STEEM</strong>
+              {t("debugCalculatedWith")}&nbsp;<strong>{data.sbdPerSteemUsed.toFixed(4)} SBD/SP</strong>
               &nbsp;·&nbsp;{t("debugSumPending")} <strong title={t("debugSumPendingTip")}>{db.totalPayoutUsd.toFixed(2)} SBD</strong>
             </div>
             {spDelta !== null && (
