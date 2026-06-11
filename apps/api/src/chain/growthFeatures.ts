@@ -8,6 +8,7 @@ export interface GrowthSnapshot {
   measured_at:        string;
   actual_delta_min:   number | null;
   source:             string;
+  collocated:         number;
 }
 
 export interface GrowthFeatures {
@@ -30,6 +31,7 @@ export interface GrowthFeatures {
   growth_factor:    number | null;  // payout_final / payout_t0
   trajectory_class: string | null;  // 'early_spike' | 'slow_burn' | 'flat' | 'unknown'
   population:       string;         // 'native_growth_tracking' | 'historical_backfill'
+  has_collocated:   boolean;        // true if any timed snapshot was collocated (same job run as another)
   snapshot_count:   number;
 }
 
@@ -82,10 +84,11 @@ export function getGrowthFeatures(
 
   const velocity01h   = t0 !== null && t1h !== null ? (t1h - t0) / 60 : null;
   const velocity6h24h = t6h !== null && t24h !== null ? (t24h - t6h) / (18 * 60) : null;
-  const timedSources  = rows.filter(r => r.snapshot_type !== "final").map(r => r.source);
-  const population    = timedSources.length > 0 && timedSources.every(s => s === "native")
+  const timedRows    = rows.filter(r => r.snapshot_type !== "final");
+  const population   = timedRows.length > 0 && timedRows.every(r => r.source === "native")
     ? "native_growth_tracking"
     : "historical_backfill";
+  const hasCollocated = timedRows.some(r => r.collocated === 1);
 
   return {
     voter, author, permlink,
@@ -103,6 +106,7 @@ export function getGrowthFeatures(
     growth_factor:    div(tFinal, t0),
     trajectory_class: classifyTrajectory(t0, t1h, tFinal),
     population,
+    has_collocated:   hasCollocated,
     snapshot_count:   rows.length,
   };
 }

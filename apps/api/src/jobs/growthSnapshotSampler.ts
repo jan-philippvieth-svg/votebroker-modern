@@ -74,8 +74,8 @@ export async function runGrowthSnapshotSampler(log: typeof console = console): P
   const insertStmt = db.prepare(`
     INSERT OR IGNORE INTO vote_growth_snapshots
       (voter, author, permlink, snapshot_type, target_minutes, pending_payout_sbd,
-       active_votes_count, measured_at, actual_delta_min, source)
-    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?)
+       active_votes_count, measured_at, actual_delta_min, source, collocated)
+    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?)
   `);
 
   let liveFetched = 0;
@@ -97,16 +97,16 @@ export async function runGrowthSnapshotSampler(log: typeof console = console): P
       const votedMs = toUtcMs(entry.voted_at);
 
       db.transaction(() => {
+        const actualDelta  = (now - votedMs) / 60_000;
+        const collocated   = entry.types.length > 1 ? 1 : 0;
         for (const snapType of entry.types) {
-          const def          = TIMED_SNAPSHOTS.find(s => s.type === snapType)!;
-          const actualDelta  = (now - votedMs) / 60_000;
-          // 'native' if captured within one job interval (45 min) of the target checkpoint
-          const source       = actualDelta <= def.targetMinutes + 45 ? "native" : "historical_backfill";
+          const def    = TIMED_SNAPSHOTS.find(s => s.type === snapType)!;
+          const source = actualDelta <= def.targetMinutes + 45 ? "native" : "historical_backfill";
           insertStmt.run(
             entry.voter, entry.author, entry.permlink,
             snapType, def.targetMinutes,
             pendingSbd, voteCount,
-            actualDelta, source
+            actualDelta, source, collocated
           );
         }
       })();
@@ -150,7 +150,7 @@ export async function runGrowthSnapshotSampler(log: typeof console = console): P
         "final", null,
         row.post_final_payout_sbd, row.post_active_votes_count,
         (realizedMs - votedMs) / 60_000,
-        "native"  // final payout value is always accurate regardless of capture time
+        "native", 0  // final: always accurate, never collocated with timed checkpoints
       );
     }
   })();
