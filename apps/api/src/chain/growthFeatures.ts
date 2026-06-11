@@ -7,6 +7,7 @@ export interface GrowthSnapshot {
   active_votes_count: number | null;
   measured_at:        string;
   actual_delta_min:   number | null;
+  source:             string;
 }
 
 export interface GrowthFeatures {
@@ -28,6 +29,7 @@ export interface GrowthFeatures {
   acceleration:     number | null;  // velocity_0_1h / velocity_6h_24h ratio
   growth_factor:    number | null;  // payout_final / payout_t0
   trajectory_class: string | null;  // 'early_spike' | 'slow_burn' | 'flat' | 'unknown'
+  population:       string;         // 'native_growth_tracking' | 'historical_backfill'
   snapshot_count:   number;
 }
 
@@ -59,7 +61,7 @@ export function getGrowthFeatures(
   const db = getDb();
   const rows = db.prepare(`
     SELECT snapshot_type, target_minutes, pending_payout_sbd, active_votes_count,
-           measured_at, actual_delta_min
+           measured_at, actual_delta_min, source
     FROM vote_growth_snapshots
     WHERE voter = ? AND author = ? AND permlink = ?
   `).all(voter, author, permlink) as GrowthSnapshot[];
@@ -80,6 +82,10 @@ export function getGrowthFeatures(
 
   const velocity01h   = t0 !== null && t1h !== null ? (t1h - t0) / 60 : null;
   const velocity6h24h = t6h !== null && t24h !== null ? (t24h - t6h) / (18 * 60) : null;
+  const timedSources  = rows.filter(r => r.snapshot_type !== "final").map(r => r.source);
+  const population    = timedSources.length > 0 && timedSources.every(s => s === "native")
+    ? "native_growth_tracking"
+    : "historical_backfill";
 
   return {
     voter, author, permlink,
@@ -96,6 +102,7 @@ export function getGrowthFeatures(
     acceleration:     div(velocity01h, velocity6h24h),
     growth_factor:    div(tFinal, t0),
     trajectory_class: classifyTrajectory(t0, t1h, tFinal),
+    population,
     snapshot_count:   rows.length,
   };
 }
