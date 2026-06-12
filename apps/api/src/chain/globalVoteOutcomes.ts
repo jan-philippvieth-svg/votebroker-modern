@@ -83,6 +83,13 @@ export interface ModelComparisonMetrics {
   rshares:  ModelErrorMetrics;
 }
 
+export interface DelayVsPostBucket {
+  label:               string;
+  votes:               number;
+  avgFinalPayoutSbd:   number | null;
+  medianFinalPayoutSbd: number | null;
+}
+
 export interface LiveVoteReport {
   username:         string;
   since:            string;          // LIVE_VOTES_SINCE
@@ -90,9 +97,14 @@ export interface LiveVoteReport {
   realized:         number;          // with realized_curation_sp
   pending:          number;          // without realized_curation_sp
   avgCurationSp:    number | null;   // realized only
+  // quality factors for confidence score
+  distinctAuthors:     number;
+  distinctCommunities: number;
+  firstVotedAt:        string | null;
   modelComparison:  ModelComparisonMetrics | null;  // null until enough data
-  // 7 analysis dimensions (realized votes only)
+  // analysis dimensions (realized votes only)
   byDelay:             LiveVoteReportBucket[];
+  byDelayVsPost:       DelayVsPostBucket[];
   byWeight:            LiveVoteReportBucket[];
   byCategory:          Array<{ category: string; votes: number; avgCurationSp: number | null; avgWeightPct: number | null }>;
   byCommunity:         Array<{ community: string; votes: number; avgCurationSp: number | null }>;
@@ -412,11 +424,15 @@ export function getVoteOutcomeSummary(username: string): GlobalVoteOutcomeSummar
   const buckets = db.prepare(`
     SELECT
       CASE
-        WHEN vote_delay_minutes < 5   THEN '0-5 min'
-        WHEN vote_delay_minutes < 30  THEN '5-30 min'
-        WHEN vote_delay_minutes < 60  THEN '30-60 min'
-        WHEN vote_delay_minutes < 1440 THEN '1-24h'
-        ELSE '>24h'
+        WHEN vote_delay_minutes < 5    THEN '0–5 min'
+        WHEN vote_delay_minutes < 10   THEN '5–10 min'
+        WHEN vote_delay_minutes < 15   THEN '10–15 min'
+        WHEN vote_delay_minutes < 20   THEN '15–20 min'
+        WHEN vote_delay_minutes < 25   THEN '20–25 min'
+        WHEN vote_delay_minutes < 30   THEN '25–30 min'
+        WHEN vote_delay_minutes < 60   THEN '30–60 min'
+        WHEN vote_delay_minutes < 1440 THEN '1–24 h'
+        ELSE '> 24 h'
       END as bucket,
       AVG(realized_curation_sp) as avg_sp,
       COUNT(*) as n
@@ -465,7 +481,12 @@ export function getLiveVoteReport(username: string): LiveVoteReport {
   const delayRows = db.prepare(`
     SELECT
       CASE
-        WHEN vote_delay_minutes < 30   THEN '< 30 min'
+        WHEN vote_delay_minutes < 5    THEN '0–5 min'
+        WHEN vote_delay_minutes < 10   THEN '5–10 min'
+        WHEN vote_delay_minutes < 15   THEN '10–15 min'
+        WHEN vote_delay_minutes < 20   THEN '15–20 min'
+        WHEN vote_delay_minutes < 25   THEN '20–25 min'
+        WHEN vote_delay_minutes < 30   THEN '25–30 min'
         WHEN vote_delay_minutes < 60   THEN '30–60 min'
         WHEN vote_delay_minutes < 120  THEN '1–2 h'
         WHEN vote_delay_minutes < 360  THEN '2–6 h'
@@ -574,7 +595,12 @@ export function getLiveVoteReport(username: string): LiveVoteReport {
   const delayPayoutRows = db.prepare(`
     SELECT
       CASE
-        WHEN vote_delay_minutes < 30   THEN '< 30 min'
+        WHEN vote_delay_minutes < 5    THEN '0–5 min'
+        WHEN vote_delay_minutes < 10   THEN '5–10 min'
+        WHEN vote_delay_minutes < 15   THEN '10–15 min'
+        WHEN vote_delay_minutes < 20   THEN '15–20 min'
+        WHEN vote_delay_minutes < 25   THEN '20–25 min'
+        WHEN vote_delay_minutes < 30   THEN '25–30 min'
         WHEN vote_delay_minutes < 60   THEN '30–60 min'
         WHEN vote_delay_minutes < 120  THEN '1–2 h'
         WHEN vote_delay_minutes < 360  THEN '2–6 h'
@@ -604,19 +630,87 @@ export function getLiveVoteReport(username: string): LiveVoteReport {
     avg_sp: number | null; avg_vp_bps: number | null; avg_weight_pct: number | null;
   }>;
 
+  // ── Quality factors ───────────────────────────────────────────────────────
+  const qualityStats = db.prepare(`
+    SELECT
+      COUNT(DISTINCT author)                        as distinct_authors,
+      COUNT(DISTINCT COALESCE(post_community, ''))  as distinct_communities,
+      MIN(voted_at)                                 as first_voted_at
+    FROM vb_global_vote_outcomes
+    WHERE voter = ? AND voted_at >= ? AND realized_curation_sp IS NOT NULL
+  `).get(username, LIVE_VOTES_SINCE) as {
+    distinct_authors: number; distinct_communities: number; first_voted_at: string | null;
+  };
+
+  // ── Delay vs. post final payout (Block D) ─────────────────────────────────
+  // Uses CTE + window functions to compute per-bucket median without correlated subqueries.
+  const DELAY_LABEL = `
+    CASE
+      WHEN vote_delay_minutes < 5    THEN '0–5 min'
+      WHEN vote_delay_minutes < 10   THEN '5–10 min'
+      WHEN vote_delay_minutes < 15   THEN '10–15 min'
+      WHEN vote_delay_minutes < 20   THEN '15–20 min'
+      WHEN vote_delay_minutes < 25   THEN '20–25 min'
+      WHEN vote_delay_minutes < 30   THEN '25–30 min'
+      WHEN vote_delay_minutes < 60   THEN '30–60 min'
+      WHEN vote_delay_minutes < 120  THEN '1–2 h'
+      WHEN vote_delay_minutes < 360  THEN '2–6 h'
+      WHEN vote_delay_minutes < 1440 THEN '6–24 h'
+      WHEN vote_delay_minutes < 4320 THEN '1–3 Tage'
+      ELSE '> 3 Tage'
+    END`;
+  const DELAY_SORT = `
+    CASE label
+      WHEN '0–5 min'   THEN 0 WHEN '5–10 min'  THEN 1 WHEN '10–15 min' THEN 2
+      WHEN '15–20 min' THEN 3 WHEN '20–25 min' THEN 4 WHEN '25–30 min' THEN 5
+      WHEN '30–60 min' THEN 6 WHEN '1–2 h'     THEN 7 WHEN '2–6 h'     THEN 8
+      WHEN '6–24 h'    THEN 9 WHEN '1–3 Tage'  THEN 10
+      ELSE 11
+    END`;
+
+  const delayVsPostRows = db.prepare(`
+    WITH base AS (
+      SELECT ${DELAY_LABEL} as label, post_final_payout_sbd
+      FROM vb_global_vote_outcomes
+      WHERE voter = ? AND voted_at >= ?
+        AND realized_curation_sp IS NOT NULL
+        AND post_final_payout_sbd IS NOT NULL
+        AND vote_delay_minutes IS NOT NULL
+    ), ranked AS (
+      SELECT label, post_final_payout_sbd,
+        COUNT(*) OVER (PARTITION BY label) as cnt,
+        ROW_NUMBER() OVER (PARTITION BY label ORDER BY post_final_payout_sbd) as rn
+      FROM base
+    )
+    SELECT
+      label,
+      COUNT(*) as votes,
+      ROUND(AVG(post_final_payout_sbd), 4) as avg_final,
+      ROUND(AVG(CASE WHEN rn IN ((cnt+1)/2, (cnt+2)/2) THEN post_final_payout_sbd END), 4) as median_final
+    FROM ranked
+    GROUP BY label
+    ORDER BY ${DELAY_SORT}
+  `).all(username, LIVE_VOTES_SINCE) as Array<{
+    label: string; votes: number; avg_final: number | null; median_final: number | null;
+  }>;
+
   return {
     username,
-    since:           LIVE_VOTES_SINCE,
-    totalLive:       overview.total_live,
-    realized:        overview.realized,
-    pending:         overview.total_live - overview.realized,
-    avgCurationSp:   overview.avg_sp,
+    since:               LIVE_VOTES_SINCE,
+    totalLive:           overview.total_live,
+    realized:            overview.realized,
+    pending:             overview.total_live - overview.realized,
+    avgCurationSp:       overview.avg_sp,
+    distinctAuthors:     qualityStats.distinct_authors,
+    distinctCommunities: qualityStats.distinct_communities,
+    firstVotedAt:        qualityStats.first_voted_at,
     modelComparison: getModelComparisonMetrics(username),
-    byDelay:    delayRows.map(r => ({ label: r.label, votes: r.votes, avgCurationSp: r.avg_sp, minDelay: r.min_delay, maxDelay: r.max_delay })),
-    byWeight:   weightRows.map(r => ({ label: r.label, votes: r.votes, avgCurationSp: r.avg_sp, minDelay: r.min_delay, maxDelay: r.max_delay })),
-    byCategory: categoryRows.map(r => ({ category: r.category, votes: r.votes, avgCurationSp: r.avg_sp, avgWeightPct: r.avg_weight_pct })),
-    byCommunity: communityRows.map(r => ({ community: r.community, votes: r.votes, avgCurationSp: r.avg_sp })),
-    byAuthor:   authorRows.map(r => ({ author: r.author, votes: r.votes, avgDelay: r.avg_delay, avgWeightPct: r.avg_weight_pct, avgCurationSp: r.avg_sp })),
+    byDelay:       delayRows.map(r => ({ label: r.label, votes: r.votes, avgCurationSp: r.avg_sp, minDelay: r.min_delay, maxDelay: r.max_delay })),
+    byDelayVsPost: delayVsPostRows.map(r => ({ label: r.label, votes: r.votes, avgFinalPayoutSbd: r.avg_final, medianFinalPayoutSbd: r.median_final })),
+    byWeight:      weightRows.map(r => ({ label: r.label, votes: r.votes, avgCurationSp: r.avg_sp, minDelay: r.min_delay, maxDelay: r.max_delay })),
+    byCategory:    categoryRows.map(r => ({ category: r.category, votes: r.votes, avgCurationSp: r.avg_sp, avgWeightPct: r.avg_weight_pct })),
+    byCommunity:   communityRows.map(r => ({ community: r.community, votes: r.votes, avgCurationSp: r.avg_sp })),
+    byAuthor:      authorRows.map(r => ({ author: r.author, votes: r.votes, avgDelay: r.avg_delay, avgWeightPct: r.avg_weight_pct, avgCurationSp: r.avg_sp })),
     byPendingPayout:  payoutBucketRows.map(r => ({ label: r.label, votes: r.votes, avgCurationSp: r.avg_sp, avgVpBps: r.avg_vp_bps, avgWeightPct: r.avg_weight_pct })),
     byDelayAndPayout: delayPayoutRows.map(r => ({ delayLabel: r.delay_label, payoutLabel: r.payout_label, votes: r.votes, avgCurationSp: r.avg_sp, avgVpBps: r.avg_vp_bps, avgWeightPct: r.avg_weight_pct })),
     generatedAt: new Date().toISOString(),
@@ -683,9 +777,12 @@ export function getGrowthAnalytics(username: string): GrowthAnalytics {
     SELECT
       CASE
         WHEN vote_delay_minutes IS NULL  THEN 'Unbekannt'
-        WHEN vote_delay_minutes < 5      THEN '< 5 min'
-        WHEN vote_delay_minutes < 15     THEN '5–15 min'
-        WHEN vote_delay_minutes < 30     THEN '15–30 min'
+        WHEN vote_delay_minutes < 5      THEN '0–5 min'
+        WHEN vote_delay_minutes < 10     THEN '5–10 min'
+        WHEN vote_delay_minutes < 15     THEN '10–15 min'
+        WHEN vote_delay_minutes < 20     THEN '15–20 min'
+        WHEN vote_delay_minutes < 25     THEN '20–25 min'
+        WHEN vote_delay_minutes < 30     THEN '25–30 min'
         WHEN vote_delay_minutes < 60     THEN '30–60 min'
         WHEN vote_delay_minutes < 120    THEN '1–2 h'
         WHEN vote_delay_minutes < 360    THEN '2–6 h'
