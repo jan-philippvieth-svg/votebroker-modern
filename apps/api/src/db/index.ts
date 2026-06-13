@@ -435,22 +435,31 @@ function runMigrations(db: Database): void {
       if (!wvdCols.includes("pending_payout_sbd")) db.exec("ALTER TABLE vb_whale_vote_details ADD COLUMN pending_payout_sbd REAL");
       if (!wvdCols.includes("post_community"))     db.exec("ALTER TABLE vb_whale_vote_details ADD COLUMN post_community TEXT");
 
-      // Indexes required by computeCommunitySignals CTE:
-      //   idx_whale_details_author_permlink — speeds up GROUP BY (author, permlink) in the CTE
-      //     and the subsequent LEFT JOIN lookup.
-      //   idx_whale_details_enriched — speeds up the outer WHERE enriched_at IS NOT NULL
-      //     filter (only 13k/456k rows are enriched; without an index SQLite does a full scan).
-      //   idx_whale_details_enriched_community — covers the additional community IS NOT NULL
-      //     filter in computeCommunitySignals.
+      // Indexes for signal compute queries on vb_whale_vote_details (456k+ rows):
+      //
+      //   (author, permlink) — CTE GROUP BY + LEFT JOIN in computeCommunitySignals;
+      //     also covers any per-post lookup by author.
+      //
+      //   (enriched_at) full index — WHERE enriched_at IS NOT NULL scan in both
+      //     computeAuthorSignals and computeCommunitySignals; full (not partial) so
+      //     the planner can also use it for ORDER BY enriched_at and range queries.
+      //
+      //   (post_community) partial — covers the community IS NOT NULL filter in
+      //     computeCommunitySignals without indexing the majority of NULL rows.
+      //
+      //   (whale) — standalone index for GROUP BY whale and per-whale lookups;
+      //     the existing (whale, author) partial and (whale, voted_at) indexes are
+      //     too narrow for community-level aggregations that group purely by whale.
       db.exec(`
         CREATE INDEX IF NOT EXISTS idx_whale_details_author_permlink
           ON vb_whale_vote_details(author, permlink);
-        CREATE INDEX IF NOT EXISTS idx_whale_details_enriched
-          ON vb_whale_vote_details(enriched_at)
-          WHERE enriched_at IS NOT NULL;
-        CREATE INDEX IF NOT EXISTS idx_whale_details_enriched_community
+        CREATE INDEX IF NOT EXISTS idx_whale_details_enriched_at
+          ON vb_whale_vote_details(enriched_at);
+        CREATE INDEX IF NOT EXISTS idx_whale_details_community
           ON vb_whale_vote_details(post_community)
           WHERE enriched_at IS NOT NULL AND post_community IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_whale_details_whale
+          ON vb_whale_vote_details(whale);
       `);
     }
 
