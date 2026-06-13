@@ -158,6 +158,7 @@ export function VotePlanSection(props: {
   const [aborted, setAborted]       = useState(false);
   const [overrides, setOverrides]   = useState<Map<string, number>>(new Map());
   const [additions, setAdditions]   = useState<VotePlanEntry[]>([]);  // manuell hinzugefügte Kandidaten
+  const [excluded, setExcluded]     = useState<Set<string>>(new Set()); // manuell deaktivierte Votes
   const confirmingRef = useRef<HTMLDivElement>(null);
 
   // Display mode — persisted in localStorage
@@ -212,20 +213,22 @@ export function VotePlanSection(props: {
   });
 
   // Full plan = base + added
-  const allPlanEntries = [...effectiveEntries, ...additionEntries];
+  const allPlanEntries    = [...effectiveEntries, ...additionEntries];
+  // Active = all entries that haven't been manually deactivated
+  const activePlanEntries = allPlanEntries.filter(e => !excluded.has(`${e.author}/${e.permlink}`));
 
   const vpNowPct     = plan?.summary.currentVpPct ?? 0;
   const origVpCost   = entries.reduce((s, e) => s + e.suggestedWeightBps / MANA_DIV, 0);
-  const effVpCost    = allPlanEntries.reduce((s, e) => s + e.suggestedWeightBps / MANA_DIV, 0);
+  const effVpCost    = activePlanEntries.reduce((s, e) => s + e.suggestedWeightBps / MANA_DIV, 0);
   const origVpMorgen = Math.min(100, Math.round((vpNowPct - origVpCost + 20) * 10) / 10);
   const effVpMorgen  = Math.min(100, Math.round((vpNowPct - effVpCost  + 20) * 10) / 10);
   const savedVpPct   = Math.round((origVpCost - effVpCost) * 100) / 100;
-  const hasEdits     = overrides.size > 0 || additions.length > 0;
+  const hasEdits     = overrides.size > 0 || additions.length > 0 || excluded.size > 0;
 
   // Which additional candidates actually fit in the remaining budget?
   const dynamicBudget  = plan?.report.dynamicBudgetPct ?? 0;
   const addedKeys      = new Set(additions.map(e => `${e.author}/${e.permlink}`));
-  let remainBudget     = Math.max(0, dynamicBudget - effVpCost);
+  let remainBudget     = Math.max(0, dynamicBudget - activePlanEntries.reduce((s, e) => s + e.suggestedWeightBps / MANA_DIV, 0));
   const fittingCandidates: VotePlanEntry[] = [];
   for (const c of (props.additionalCandidates ?? [])) {
     const key = `${c.author}/${c.permlink}`;
@@ -237,6 +240,14 @@ export function VotePlanSection(props: {
     }
   }
   const addlPossible = fittingCandidates.length;
+
+  function toggleExclude(key: string) {
+    setExcluded(prev => {
+      const s = new Set(prev);
+      if (s.has(key)) s.delete(key); else s.add(key);
+      return s;
+    });
+  }
 
   function adjustWeight(key: string, deltaBps: number) {
     const entry = entries.find(e => `${e.author}/${e.permlink}` === key);
@@ -255,6 +266,7 @@ export function VotePlanSection(props: {
       setPhase("generated");
       setConfirmed(false); setExecLog([]); setExecIndex(0); setAborted(false);
       setOverrides(new Map());
+      setExcluded(new Set());
 
       // Auto-fill: add fitting candidates from pre-scanned opportunities into the plan.
       // The server plan only fetches independently — remaining budget often goes unused.
@@ -284,11 +296,11 @@ export function VotePlanSection(props: {
       vpAfterPct:    Math.max(0, Math.round((vpNowPct - effVpCost) * 10) / 10),
       vpMorgenPct:   effVpMorgen,
       vpCostPct:     Math.round(effVpCost * 100) / 100,
-      entryCount:    effectiveEntries.length,
+      entryCount:    activePlanEntries.length,
       hasEdits,
       freeBudgetPct: freeBudget,
     });
-  }, [overrides, plan]);
+  }, [overrides, plan, excluded]);
 
   useEffect(() => {
     if (phase === "confirming") {
@@ -302,16 +314,16 @@ export function VotePlanSection(props: {
   }
 
   async function startExecution() {
-    if (!confirmed || allPlanEntries.length === 0) return;
+    if (!confirmed || activePlanEntries.length === 0) return;
     setPhase("executing");
     setExecLog([]);
     setAborted(false);
     const log: VoteLogEntry[] = [];
 
-    for (let i = 0; i < allPlanEntries.length; i++) {
+    for (let i = 0; i < activePlanEntries.length; i++) {
       if (aborted) break;
       setExecIndex(i);
-      const e = allPlanEntries[i];
+      const e = activePlanEntries[i];
       try {
         // Direct call — throws VoteBroadcastError on any failure
         const result = await props.onExecuteSingle({
@@ -407,6 +419,11 @@ export function VotePlanSection(props: {
                         ✓ {additions.length} Opportunit{additions.length === 1 ? "y" : "ies"} automatisch ergänzt
                       </span>
                     )}
+                    {excluded.size > 0 && (
+                      <span style={{ color: "#6b7280", fontSize: "0.78rem" }}>
+                        {excluded.size} Vote{excluded.size > 1 ? "s" : ""} deaktiviert
+                      </span>
+                    )}
                     {plan?.report.dynamicBudgetPct !== undefined && (
                       <span style={{ color: "#64748b", fontSize: "0.78rem" }}>
                         Freies Budget: <b style={{ color: "#0369a1" }}>{Math.max(0, plan.report.dynamicBudgetPct - effVpCost).toFixed(2)}% VP</b>
@@ -458,14 +475,26 @@ export function VotePlanSection(props: {
                     : (entries.find(x => `${x.author}/${x.permlink}` === key)?.suggestedWeightBps ?? e.suggestedWeightBps);
                   const scoreBg    = e.postScore >= 80 ? "#dcfce7" : e.postScore >= 50 ? "#fef9c3" : "#f0f5f7";
                   const scoreColor = e.postScore >= 80 ? "#15803d" : e.postScore >= 50 ? "#a16207" : "#607078";
+                  const isExcluded = excluded.has(key);
                   return (
                     <div key={key} style={{
                       background: isAdded ? "#f0fdf4" : isEdited ? "#f8faff" : "#ffffff",
                       border: `1px solid ${isAdded ? "#86efac" : isEdited ? "#93c5fd" : e.warning ? "#fde68a" : "#e5e7eb"}`,
-                      borderLeft: `4px solid ${isAdded ? "#16a34a" : color}`,
+                      borderLeft: `4px solid ${isExcluded ? "#d1d5db" : isAdded ? "#16a34a" : color}`,
                       borderRadius: "10px", padding: "0.65rem 0.85rem",
                       display: "flex", gap: "0.75rem", alignItems: "center",
+                      opacity: isExcluded ? 0.45 : 1,
+                      transition: "opacity 0.15s",
                     }}>
+                      {/* Deaktivierungs-Checkbox */}
+                      <label title={isExcluded ? "Vote aktivieren" : "Vote aus Plan entfernen"} style={{ flexShrink: 0, display: "flex", alignItems: "center", cursor: "pointer" }}>
+                        <input
+                          type="checkbox"
+                          checked={!isExcluded}
+                          onChange={() => toggleExclude(key)}
+                          style={{ width: "15px", height: "15px", cursor: "pointer", accentColor: "#16a34a", flexShrink: 0 }}
+                        />
+                      </label>
                       {/* Score-Badge (hinzugefügte: grünes +) */}
                       <div style={{ flexShrink: 0, width: "40px", height: "40px", borderRadius: "9px", background: isAdded ? "#dcfce7" : scoreBg, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column" as const, position: "relative" as const }}>
                         {isAdded && <span style={{ position: "absolute" as const, top: "-5px", right: "-5px", background: "#16a34a", color: "#fff", borderRadius: "50%", width: "14px", height: "14px", fontSize: "0.65rem", fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>+</span>}
@@ -475,7 +504,7 @@ export function VotePlanSection(props: {
 
                       {/* Titel + Metadaten */}
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ color: "#111827", fontSize: "0.91rem", fontWeight: 700, margin: "0 0 0.18rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
+                        <p style={{ color: "#111827", fontSize: "0.91rem", fontWeight: 700, margin: "0 0 0.18rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, textDecoration: isExcluded ? "line-through" : "none" }}>
                           {e.title || `${e.author}/${e.permlink}`}
                           {isAdded && <span style={{ marginLeft: "0.5rem", background: "#dcfce7", color: "#15803d", borderRadius: "4px", padding: "0.05rem 0.35rem", fontSize: "0.65rem", fontWeight: 700 }}>hinzugefügt</span>}
                         </p>
@@ -523,9 +552,10 @@ export function VotePlanSection(props: {
               <button
                 style={{ background: "#d97706", border: "none", borderRadius: "10px", color: "#fff", cursor: "pointer", fontSize: "0.92rem", fontWeight: 800, padding: "0.65rem 1.4rem" }}
                 type="button"
+                disabled={activePlanEntries.length === 0}
                 onClick={() => { setPhase("confirming"); setConfirmed(false); }}
               >
-                {t("planConfirmBtn").replace("{{count}}", String(allPlanEntries.length))}
+                {t("planConfirmBtn").replace("{{count}}", String(activePlanEntries.length))}
               </button>
             </>
           )}
@@ -539,7 +569,7 @@ export function VotePlanSection(props: {
           {/* Header — compact meta strip */}
           <div style={{ background: "#fffbeb", padding: "0.65rem 1.1rem", display: "flex", gap: "1.25rem", flexWrap: "wrap" as const, alignItems: "center", fontSize: "0.8rem", borderBottom: "1px solid #fde68a" }}>
             <span style={{ color: "#78350f", fontWeight: 700, fontSize: "0.88rem" }}>
-              {t("planConfirmTitle").replace("{{count}}", String(allPlanEntries.length))}
+              {t("planConfirmTitle").replace("{{count}}", String(activePlanEntries.length))}
             </span>
             <span style={{ color: "#92400e" }}>{t("planVpNow")} <b>{plan.summary.currentVpPct.toFixed(1)}%</b></span>
             <span style={{ color: "#92400e" }}>{t("planVpCost")} <b>{plan.summary.estimatedVpSpendPct}%</b></span>
@@ -577,7 +607,7 @@ export function VotePlanSection(props: {
                 style={{ display: "inline-block", accentColor: "#16a34a", width: "22px", height: "22px", minWidth: "22px", flexShrink: 0, cursor: "pointer", margin: 0 }}
               />
               <span style={{ fontSize: "1rem", fontWeight: 700, color: confirmed ? "#15803d" : "#374151", lineHeight: 1.4 }}>
-                {t("planConfirmCheck").replace("{{count}}", String(allPlanEntries.length))}
+                {t("planConfirmCheck").replace("{{count}}", String(activePlanEntries.length))}
               </span>
             </label>
 

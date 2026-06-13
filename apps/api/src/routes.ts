@@ -610,6 +610,22 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     `).all(since30d) as Array<{ author: string; cnt: number; last_at: string }>;
     const actMap = new Map(activity.map(a => [a.author, { votes: a.cnt, lastAt: a.last_at }]));
 
+    // Author activity filter: last seen in whale-vote data within 60 days.
+    // Filters out historically popular authors who haven't posted recently.
+    const since60d = new Date(Date.now() - 60 * 24 * 3600 * 1000).toISOString();
+    const whaleActivity = db.prepare(`
+      SELECT author, MAX(voted_at) AS last_seen
+      FROM vb_whale_vote_details
+      WHERE voted_at IS NOT NULL
+      GROUP BY author
+    `).all() as Array<{ author: string; last_seen: string }>;
+    const authorLastSeen = new Map(whaleActivity.map(a => [a.author, a.last_seen]));
+
+    const isActiveAuthor = (username: string) => {
+      const lastSeen = authorLastSeen.get(username);
+      return lastSeen != null && lastSeen >= since60d;
+    };
+
     const catLabels: Record<string, string> = {
       immer_voten: "Immer voten", lieblingsautor: "Lieblingsautor",
       bevorzugt: "Bevorzugt", normal: "Normal", niedrig: "Niedrig",
@@ -631,18 +647,19 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
         topCategoryLabel: catLabels[topCategory] ?? topCategory,
         recentVotes: act?.votes ?? 0,
         lastVotedAt: act?.lastAt ?? null,
+        lastSeenAt: authorLastSeen.get(username) ?? null,
         reasons,
         inMyStrategy: myAuthors.has(username),
       };
     };
 
     const communityAuthors = [...authorMap.entries()]
-      .filter(([u, e]) => e.curators.length >= 2 && !myAuthors.has(u))
+      .filter(([u, e]) => e.curators.length >= 2 && !myAuthors.has(u) && isActiveAuthor(u))
       .map(([u, e]) => buildCard(u, e))
       .sort((a, b) => b.curatorCount - a.curatorCount);
 
     const discoveries = [...authorMap.entries()]
-      .filter(([u]) => !myAuthors.has(u))
+      .filter(([u]) => !myAuthors.has(u) && isActiveAuthor(u))
       .map(([u, e]) => buildCard(u, e))
       .sort((a, b) => b.curatorCount - a.curatorCount || b.recentVotes - a.recentVotes)
       .slice(0, 20);
