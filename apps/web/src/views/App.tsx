@@ -83,7 +83,11 @@ import {
   type SteemAccountSnapshot,
   type VotePlanConstraints,
   type VoteExecutionResponse,
-  type VoteQuoteResponse
+  type VoteQuoteResponse,
+  fetchCurationConstants,
+  type CurationConstants,
+  fetchUserSettings,
+  updateUserSettings,
 } from "../api";
 import { createTranslator, locales, type Locale, type TranslationKey } from "../i18n";
 import {
@@ -112,13 +116,20 @@ import { CurationDnaPanel } from "./DnaView";
 
 export function App() {
   const [locale, setLocale] = useState<Locale>(() => (window.localStorage.getItem("votebroker.locale") as Locale | null) ?? "de");
-  const [timezone, setTimezoneRaw] = useState<string>(() =>
-    window.localStorage.getItem("votebroker.timezone") ??
-    Intl.DateTimeFormat().resolvedOptions().timeZone
-  );
-  const setTimezone = (tz: string) => {
+  const [timezone, setTimezoneRaw] = useState<string>(() => {
+    const stored = window.localStorage.getItem("votebroker.timezone");
+    if (stored) return stored;
+    // First visit: detect browser timezone and persist it immediately so that
+    // the login sync loop can push it to the server.
+    const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    window.localStorage.setItem("votebroker.timezone", detected);
+    return detected;
+  });
+  const setTimezone = (tz: string, token?: string) => {
     window.localStorage.setItem("votebroker.timezone", tz);
     setTimezoneRaw(tz);
+    const tok = token ?? session?.token;
+    if (tok) updateUserSettings(tok, { timezone: tz }).catch(() => {/* ignore — localStorage is source of truth */});
   };
   const [session, setSession] = useState<AuthSession | null>(() => {
     const raw = window.localStorage.getItem("votebroker.session");
@@ -181,6 +192,7 @@ export function App() {
   // Prevents debounce-save from overwriting API data before hydration completes
   const [strategyHydrated, setStrategyHydrated] = useState(false);
   const [sessionExpired, setSessionExpired] = useState(false);
+  const [curationConstants, setCurationConstants] = useState<CurationConstants | null>(null);
   const [activeTab, setActiveTab] = useState<"dna" | "dashboard" | "community" | "billing" | "admin">("dna");
   const t = createTranslator(locale);
 
@@ -188,6 +200,10 @@ export function App() {
     getConsentCatalog()
       .then(setConsentCatalog)
       .catch((err) => setConsentError(err instanceof Error ? err.message : "Consent catalog could not be loaded"));
+  }, []);
+
+  useEffect(() => {
+    fetchCurationConstants().then(setCurationConstants).catch(() => { /* non-critical */ });
   }, []);
 
   // ── Steem Keychain detection (once on mount) ────────────────────────────
@@ -298,6 +314,24 @@ export function App() {
       .finally(() => setAuthLoading(false));
   }, []);
 
+  // On login: sync timezone from server (server is authoritative across devices).
+  // If no server setting exists yet, push the local value to server.
+  useEffect(() => {
+    if (!session) return;
+    fetchUserSettings(session.token).then(s => {
+      const serverTz = s.timezone;
+      const localTz  = window.localStorage.getItem("votebroker.timezone");
+      if (localTz && localTz !== serverTz) {
+        // Local setting differs from server → push local to server (user may have changed it offline)
+        updateUserSettings(session.token, { timezone: localTz }).catch(() => {});
+      } else {
+        // No local or matches server → adopt server value (handles cross-device scenario)
+        window.localStorage.setItem("votebroker.timezone", serverTz);
+        setTimezoneRaw(serverTz);
+      }
+    }).catch(() => {/* non-fatal — localStorage stays active */});
+  }, [session?.token]);
+
   // Step 1: On login, load strategy from API (authoritative source)
   // Sets hydrated=true when done so debounce-save knows it's safe to write
   useEffect(() => {
@@ -364,17 +398,14 @@ export function App() {
     const clean = username.replace(/^@/, "").toLowerCase().trim();
     if (!clean) return;
     const base = Math.max(5, curationProfile?.powerStable.maxAvgWeightPct ?? 20);
-    // Dust floors per category — must match server-side CATEGORY_DUST_BPS
-    const dustFloor: Record<StrategyCategory, number> = {
-      immer_voten: 50, lieblingsautor: 30, bevorzugt: 15,
-      normal: 10, niedrig: 5, ignorieren: 0,
-    };
+    const dustBps = curationConstants?.categoryDustBps ?? {};
+    const floor = (cat: string) => Math.round((dustBps[cat] ?? 0) / 100);
     const maxFor: Record<StrategyCategory, number> = {
-      immer_voten:    Math.min(100, Math.max(dustFloor.immer_voten,    Math.round(base * 3))),
-      lieblingsautor: Math.min(100, Math.max(dustFloor.lieblingsautor, Math.round(base * 2.5))),
-      bevorzugt:      Math.min(100, Math.max(dustFloor.bevorzugt,      Math.round(base * 1.5))),
-      normal:         Math.min(100, Math.max(dustFloor.normal,         Math.round(base))),
-      niedrig:        Math.min(100, Math.max(dustFloor.niedrig,        Math.round(base * 0.4))),
+      immer_voten:    Math.min(100, Math.max(floor("immer_voten"),    Math.round(base * 3))),
+      lieblingsautor: Math.min(100, Math.max(floor("lieblingsautor"), Math.round(base * 2.5))),
+      bevorzugt:      Math.min(100, Math.max(floor("bevorzugt"),      Math.round(base * 1.5))),
+      normal:         Math.min(100, Math.max(floor("normal"),         Math.round(base))),
+      niedrig:        Math.min(100, Math.max(floor("niedrig"),        Math.round(base * 0.4))),
       ignorieren:     0,
     };
     const newRule: StrategyRule = {

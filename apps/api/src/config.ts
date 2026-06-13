@@ -1,5 +1,7 @@
 import type { FeePolicy } from "@votebroker/domain";
 
+export { DEFAULT_TIMEZONE } from "./utils/timezone.js";
+
 export const feePolicy: FeePolicy = {
   feeBps: Number(process.env.VOTEBROKER_FEE_BPS ?? 300),
   minFeeUsd: Number(process.env.VOTEBROKER_MIN_FEE_USD ?? 0.05),

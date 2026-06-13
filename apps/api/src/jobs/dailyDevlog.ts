@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { getDb } from "../db/index.js";
+import { localDateString } from "../utils/timezone.js";
 const CONTENT_DIR = (() => {
   if (process.env.VOTEBROKER_CONTENT_DIR) return process.env.VOTEBROKER_CONTENT_DIR;
   const dbPath = process.env.VOTEBROKER_DB_PATH;
@@ -220,7 +221,7 @@ export async function generateDevlogDraft(
   opts: DevlogDraftOptions = {},
 ): Promise<DevlogDraftResult> {
   const now     = opts.date ?? new Date();
-  const dateStr = now.toISOString().slice(0, 10);
+  const dateStr = localDateString(now);
   const filename = `${dateStr}-devlog-post.md`;
   const filePath = resolve(CONTENT_DIR, filename);
   const db = getDb();

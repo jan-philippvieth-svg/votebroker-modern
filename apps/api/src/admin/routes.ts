@@ -4,6 +4,7 @@ import { getDb } from "../db/index.js";
 import { getAuditStats, getRecentAuditEvents } from "../audit/auditLog.js";
 import { getRecentFeePostLog, getLastFeePostRun, runDailyFeePost } from "../jobs/dailyFeePost.js";
 import { broadcastConfig, steemNetworkConfig } from "../config.js";
+import { todayBoundsUtc } from "../utils/timezone.js";
 import { createSteemClient } from "../chain/steemBroadcaster.js";
 
 // ── Owner-only access ─────────────────────────────────────────────────────────
@@ -43,15 +44,16 @@ function getPlatformOverview() {
   const activeUsers7d  = count("SELECT COUNT(DISTINCT username) as n FROM sessions WHERE created_at >= datetime('now', '-7 days')");
   const activeUsers30d = count("SELECT COUNT(DISTINCT username) as n FROM sessions WHERE created_at >= datetime('now', '-30 days')");
 
-  // New users: first session today
+  // New users: first session today (Europe/Berlin calendar day)
+  const { startIso: todayStart, endIso: todayEnd } = todayBoundsUtc();
   const newUsersToday = count(`
     SELECT COUNT(DISTINCT s1.username) as n FROM sessions s1
-    WHERE date(s1.created_at) = date('now')
+    WHERE s1.created_at >= ? AND s1.created_at < ?
     AND NOT EXISTS (
       SELECT 1 FROM sessions s2
-      WHERE s2.username = s1.username AND date(s2.created_at) < date('now')
+      WHERE s2.username = s1.username AND s2.created_at < ?
     )
-  `);
+  `, todayStart, todayEnd, todayStart);
 
   const newUsersMonth = count(`
     SELECT COUNT(DISTINCT s1.username) as n FROM sessions s1
@@ -255,10 +257,11 @@ function getKpis() {
   const newUsers24h   = count("SELECT COUNT(DISTINCT s.username) as n FROM (SELECT username, MIN(created_at) as first FROM sessions GROUP BY username) s WHERE s.first >= datetime('now', '-1 day')");
   const newUsers7d    = count("SELECT COUNT(DISTINCT s.username) as n FROM (SELECT username, MIN(created_at) as first FROM sessions GROUP BY username) s WHERE s.first >= datetime('now', '-7 days')");
 
-  // Votes
-  const votesToday     = count("SELECT COUNT(*) as n FROM audit_events WHERE type='vote_broadcast_attempt' AND created_at >= datetime('now','start of day')");
-  const votesSuccess   = count("SELECT COUNT(*) as n FROM audit_events WHERE type='vote_broadcast_success' AND created_at >= datetime('now','start of day')");
-  const votesBlocked   = count("SELECT COUNT(*) as n FROM audit_events WHERE type='vote_broadcast_blocked' AND created_at >= datetime('now','start of day')");
+  // Votes (Europe/Berlin calendar day)
+  const { startIso: voteStart, endIso: voteEnd } = todayBoundsUtc();
+  const votesToday     = count("SELECT COUNT(*) as n FROM audit_events WHERE type='vote_broadcast_attempt' AND created_at >= ? AND created_at < ?", voteStart, voteEnd);
+  const votesSuccess   = count("SELECT COUNT(*) as n FROM audit_events WHERE type='vote_broadcast_success' AND created_at >= ? AND created_at < ?", voteStart, voteEnd);
+  const votesBlocked   = count("SELECT COUNT(*) as n FROM audit_events WHERE type='vote_broadcast_blocked' AND created_at >= ? AND created_at < ?", voteStart, voteEnd);
   const totalVotesAll  = count("SELECT COUNT(*) as n FROM audit_events WHERE type='vote_broadcast_success'");
   const totalBlockedAll= count("SELECT COUNT(*) as n FROM audit_events WHERE type='vote_broadcast_blocked'");
 

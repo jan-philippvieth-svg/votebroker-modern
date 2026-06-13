@@ -927,6 +927,30 @@ export async function fetchTodayStats(token: string): Promise<TodayStats> {
   return res.json();
 }
 
+// ── User Settings ─────────────────────────────────────────────────────────────
+
+export interface UserSettings {
+  timezone: string;
+}
+
+export async function fetchUserSettings(token: string): Promise<UserSettings> {
+  const res = await fetch(`${API_BASE}/api/me/settings`, {
+    headers: { session: token },
+  });
+  if (!res.ok) throw new Error("Settings konnten nicht geladen werden.");
+  return res.json();
+}
+
+export async function updateUserSettings(token: string, settings: Partial<UserSettings>): Promise<UserSettings> {
+  const res = await fetch(`${API_BASE}/api/me/settings`, {
+    method: "PATCH",
+    headers: { session: token, "content-type": "application/json" },
+    body: JSON.stringify(settings),
+  });
+  if (!res.ok) throw new Error("Settings konnten nicht gespeichert werden.");
+  return res.json();
+}
+
 export interface DailyHistoryPoint {
   day:              string;   // "YYYY-MM-DD"
   votes:            number;
@@ -1290,6 +1314,67 @@ export async function fetchGrowthAnalytics(token: string): Promise<GrowthAnalyti
     headers: { session: token },
   });
   if (!res.ok) throw new Error("Growth Analytics konnten nicht geladen werden.");
+  return res.json();
+}
+
+export interface CurationConstants {
+  categoryDustBps: Record<string, number>;
+}
+
+export async function fetchCurationConstants(): Promise<CurationConstants> {
+  const res = await fetch(`${API_BASE}/api/curation/constants`);
+  if (!res.ok) throw new Error("Curation-Konstanten konnten nicht geladen werden.");
+  return res.json();
+}
+
+export interface ModelErrorMetrics {
+  mae:            number;
+  medianAbsError: number;
+  rmse:           number;
+  mape:           number | null;
+}
+
+export interface ModelComparisonMetrics {
+  n:       number;
+  weight:  ModelErrorMetrics;
+  rshares: ModelErrorMetrics;
+}
+
+export interface LiveVoteReportBucket {
+  label:        string;
+  votes:        number;
+  avgCurationSp: number | null;
+  minDelay:     number | null;
+  maxDelay:     number | null;
+}
+
+export interface DelayVsPostBucket {
+  label:                string;
+  votes:                number;
+  avgFinalPayoutSbd:    number | null;
+  medianFinalPayoutSbd: number | null;
+}
+
+export interface LiveVoteReport {
+  username:            string;
+  since:               string;
+  totalLive:           number;
+  realized:            number;
+  pending:             number;
+  avgCurationSp:       number | null;
+  distinctAuthors:     number;
+  distinctCommunities: number;
+  firstVotedAt:        string | null;
+  modelComparison:     ModelComparisonMetrics | null;
+  byDelay:             LiveVoteReportBucket[];
+  byDelayVsPost:       DelayVsPostBucket[];
+}
+
+export async function fetchLiveVoteReport(token: string): Promise<LiveVoteReport> {
+  const res = await fetch(`${API_BASE}/api/me/vote-outcomes/live-report`, {
+    headers: { session: token },
+  });
+  if (!res.ok) throw new Error("Live-Report konnte nicht geladen werden.");
   return res.json();
 }
 

@@ -25,27 +25,36 @@ let _started  = false;
 
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
-export async function runPayoutSync(log: typeof console = console): Promise<void> {
+export async function runPayoutSync(
+  log: typeof console = console,
+  opts: { chainScan?: boolean } = {},
+): Promise<void> {
   if (_running) { log.info("[PayoutSync] Already running, skipping"); return; }
   _running = true;
 
   try {
     const db = getDb();
 
-    // ── A) Rebuild vb_vote_outcomes for all voters ──────────────────────────
-    const users = db.prepare(
-      "SELECT DISTINCT voter FROM vb_global_vote_outcomes ORDER BY voter"
-    ).all() as Array<{ voter: string }>;
+    // ── A) Rebuild vb_vote_outcomes for all voters (chain scan) ────────────
+    // Skipped on startup runs — the Steem node is often overloaded outside
+    // of the scheduled 04:00 UTC window. Only runs in the daily scheduled run.
+    if (opts.chainScan !== false) {
+      const users = db.prepare(
+        "SELECT DISTINCT voter FROM vb_global_vote_outcomes ORDER BY voter"
+      ).all() as Array<{ voter: string }>;
 
-    log.info(`[PayoutSync] Rebuilding curation rewards for ${users.length} user(s)`);
+      log.info(`[PayoutSync] Rebuilding curation rewards for ${users.length} user(s)`);
 
-    for (const { voter } of users) {
-      try {
-        const report = await rebuildVoteOutcomes(voter, log);
-        log.info(`[PayoutSync] @${voter}: matched=${report.matched} pending=${report.pending}`);
-      } catch (err) {
-        log.warn(`[PayoutSync] rebuild failed for @${voter}:`, err);
+      for (const { voter } of users) {
+        try {
+          const report = await rebuildVoteOutcomes(voter, log);
+          log.info(`[PayoutSync] @${voter}: matched=${report.matched} pending=${report.pending}`);
+        } catch (err) {
+          log.warn({ err }, `[PayoutSync] rebuild failed for @${voter}`);
+        }
       }
+    } else {
+      log.info("[PayoutSync] Skipping chain scan (startup run) — scheduled run handles it");
     }
 
     // ── A→C) Cross-update vb_global_vote_outcomes from vb_vote_outcomes ─────
@@ -120,7 +129,10 @@ export async function runPayoutSync(log: typeof console = console): Promise<void
     let finalUpdated = 0;
     for (const { author, permlink } of unpaid) {
       try {
-        const post = await client.database.call("get_content", [author, permlink]) as {
+        const post = await Promise.race([
+          client.database.call("get_content", [author, permlink]),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("get_content timeout")), 8_000)),
+        ]) as {
           author?:               string;
           total_payout_value?:   string;    // author payout (SBD) — non-zero after payout
           curator_payout_value?: string;    // curator payout (SP expressed as SBD) — non-zero after payout
@@ -166,7 +178,7 @@ export async function runPayoutSync(log: typeof console = console): Promise<void
         const result = await enrichCurationEstimates(voter, log);
         log.info(`[PayoutSync] estimates @${voter}: updated=${result.updated} skipped=${result.skipped}`);
       } catch (err) {
-        log.warn(`[PayoutSync] enrichEstimates failed for @${voter}:`, err);
+        log.warn({ err }, `[PayoutSync] enrichEstimates failed for @${voter}`);
       }
     }
 
@@ -193,13 +205,19 @@ export function startPayoutSync(log: typeof console = console): void {
   const schedule = () => {
     const delay = msUntilNextRun();
     _timer = setTimeout(async () => {
-      try { await runPayoutSync(log); } catch (e) { log.warn("[PayoutSync] error:", e); }
+      try { await runPayoutSync(log); } catch (e) { log.warn({ err: e }, "[PayoutSync] error"); }
       schedule();
     }, delay);
     log.info(`[PayoutSync] Next run in ${(delay / 3_600_000).toFixed(1)}h`);
   };
 
-  runPayoutSync(log).catch(e => log.warn("[PayoutSync] initial run error:", e));
+  // Delay startup run by 120s — after Docker's health check start_period (90s).
+  // The SQLite cross-update queries and Steem API calls in runPayoutSync block
+  // the Node.js event loop; running them at startup would cause health check
+  // failures. Scheduled 04:00 UTC run covers all data freshness requirements.
+  setTimeout(() => {
+    runPayoutSync(log, { chainScan: false }).catch(e => log.warn({ err: e }, "[PayoutSync] initial run error"));
+  }, 120_000);
   schedule();
 }
 

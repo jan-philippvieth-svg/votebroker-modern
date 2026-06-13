@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from "react";
+import { todayString } from "../utils/timezone";
 import {
   captureScreenshots, ContentValidationError, deleteDraft, editDraftContent, fixScreenshotUrls,
   generateDevlogContent, generatePromoPost, getAdminCockpit, getContentDrafts, getContentPreview,
   injectScreenshots, listScreenshots, publishDraft, triggerFeePost, updateDraftStatus,
+  fetchLiveVoteReport,
   type AdminCockpit, type AuthSession, type BroadcastEntry,
   type ContentDraft, type ContentListResponse, type ContentQueueItem,
   type DraftStatus, type FeePostLogEntry, type PromoLocale, type PublishResult, type ScreenshotFile,
+  type LiveVoteReport, type ModelErrorMetrics, type DelayVsPostBucket,
   PROMO_LOCALES,
 } from "../api";
 
@@ -416,7 +419,7 @@ function SystemSection({ d, session }: { d: AdminCockpit; session: AuthSession }
               type="date"
               value={retroDate}
               onChange={e => setRetroDate(e.target.value)}
-              max={new Date().toISOString().slice(0, 10)}
+              max={todayString()}
               style={{ background: C.bg2, border: `1px solid ${C.border}`, borderRadius: "4px", color: C.text, fontSize: "0.75rem", padding: "0.2rem 0.4rem" }}
             />
             <button
@@ -520,7 +523,7 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
   }, []);
 
   // Today's date string YYYY-MM-DD (UTC)
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = todayString();
   const todayDevlog  = data?.drafts.find(d => d.dateStr === todayStr && d.type === "devlog-post");
   const hasTodayDraft = !!todayDevlog;
 
@@ -1145,9 +1148,283 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
   );
 }
 
+// ── Research Lab ─────────────────────────────────────────────────────────────
+
+function computeDataQuality(r: LiveVoteReport): { score: number; factors: Array<{ label: string; pts: number; max: number }> } {
+  const daysSince = r.firstVotedAt
+    ? Math.round((Date.now() - Date.parse(r.firstVotedAt)) / 86_400_000)
+    : 0;
+
+  const votePts = r.realized >= 500 ? 40 : r.realized >= 200 ? 35 : r.realized >= 100 ? 25 : r.realized >= 50 ? 15 : 0;
+  const authPts = r.distinctAuthors >= 20 ? 25 : r.distinctAuthors >= 10 ? 18 : r.distinctAuthors >= 5 ? 10 : r.distinctAuthors >= 1 ? 4 : 0;
+  const commPts = r.distinctCommunities >= 15 ? 15 : r.distinctCommunities >= 8 ? 10 : r.distinctCommunities >= 3 ? 5 : 0;
+  const timePts = daysSince >= 90 ? 20 : daysSince >= 30 ? 14 : daysSince >= 7 ? 8 : 0;
+
+  return {
+    score: votePts + authPts + commPts + timePts,
+    factors: [
+      { label: `${r.realized} realisierte Votes`,        pts: votePts, max: 40 },
+      { label: `${r.distinctAuthors} Autoren`,           pts: authPts, max: 25 },
+      { label: `${r.distinctCommunities} Communities`,   pts: commPts, max: 15 },
+      { label: `${daysSince} Tage Beobachtungszeitraum`, pts: timePts, max: 20 },
+    ],
+  };
+}
+
+function modelWinner(mc: NonNullable<LiveVoteReport["modelComparison"]>): string | null {
+  if (mc.n < 50) return null;
+  let wWins = 0, rWins = 0;
+  if (mc.weight.mae  < mc.rshares.mae)  wWins++; else rWins++;
+  if (mc.weight.rmse < mc.rshares.rmse) wWins++; else rWins++;
+  if (mc.weight.mape !== null && mc.rshares.mape !== null) {
+    if (mc.weight.mape < mc.rshares.mape) wWins++; else rWins++;
+  }
+  if (wWins > rWins) return "Weight";
+  if (rWins > wWins) return "Rshares";
+  return "Unentschieden";
+}
+
+function MetricCell({ value }: { value: string | number | null }) {
+  return (
+    <td style={{ padding: "0.3rem 0.6rem", fontSize: "0.8rem", color: value === null ? C.dim : C.text, textAlign: "right" as const }}>
+      {value === null ? "–" : value}
+    </td>
+  );
+}
+
+function ResearchLabSection({ session }: { session: AuthSession }) {
+  const [report, setReport]   = useState<LiveVoteReport | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchLiveVoteReport(session.token)
+      .then(r => { setReport(r); setLoading(false); })
+      .catch(e => { setError(e instanceof Error ? e.message : "Fehler beim Laden"); setLoading(false); });
+  }, [session.token]);
+
+  if (loading) return <p style={{ color: C.dim, padding: "2rem", textAlign: "center" }}>Lade Research Lab…</p>;
+  if (error || !report) return <p style={{ color: C.err, padding: "1rem" }}>{error ?? "Keine Daten"}</p>;
+
+  const quality    = computeDataQuality(report);
+  const qualColor  = quality.score >= 70 ? C.ok : quality.score >= 40 ? C.warn : C.err;
+  const totalDelay = report.byDelay.reduce((s, b) => s + b.votes, 0);
+  const mc         = report.modelComparison;
+  const winner     = mc ? modelWinner(mc) : null;
+
+  // Discovery Window: best delay bucket by Ø SP
+  const bestDelay = report.byDelay
+    .filter(b => b.avgCurationSp !== null)
+    .sort((a, b) => (b.avgCurationSp ?? 0) - (a.avgCurationSp ?? 0))[0] ?? null;
+  const avgSpAll  = report.avgCurationSp;
+  const discoveryPct = bestDelay && avgSpAll && avgSpAll > 0
+    ? Math.round(((bestDelay.avgCurationSp! - avgSpAll) / avgSpAll) * 100)
+    : null;
+
+  const thStyle: React.CSSProperties = { textAlign: "right", padding: "0.3rem 0.6rem", color: C.dim, fontWeight: 600, fontSize: "0.72rem" };
+  const thLeft:  React.CSSProperties = { textAlign: "left",  padding: "0.3rem 0.6rem", color: C.dim, fontWeight: 600, fontSize: "0.72rem" };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+
+      {/* A: Datenstand + Datenqualität */}
+      <div style={card}>
+        <p style={{ ...lbl, margin: "0 0 0.75rem" }}>A — Datenstand & Datenqualität</p>
+        <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
+          <KpiCard label="Realisiert"   value={report.realized}          color={C.ok}     />
+          <KpiCard label="Pending"      value={report.pending}           color={C.warn}   />
+          <KpiCard label="Gesamt Live"  value={report.totalLive}         color={C.info}   />
+          <KpiCard label="Autoren"      value={report.distinctAuthors}   color={C.purple} />
+          <KpiCard label="Communities"  value={report.distinctCommunities} color={C.purple} />
+          {report.avgCurationSp !== null && (
+            <KpiCard label="Ø SP" value={report.avgCurationSp.toFixed(4)} color={C.ok} />
+          )}
+        </div>
+
+        {/* Quality score bar */}
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.4rem" }}>
+          <span style={{ ...lbl, margin: 0 }}>Datenqualität</span>
+          <div style={{ flex: 1, height: "6px", background: C.border, borderRadius: "3px" }}>
+            <div style={{ width: `${quality.score}%`, height: "100%", background: qualColor, borderRadius: "3px", transition: "width 0.4s" }} />
+          </div>
+          <span style={{ fontWeight: 700, fontSize: "0.85rem", color: qualColor, minWidth: "2.5rem", textAlign: "right" }}>
+            {quality.score} %
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.5rem" }}>
+          {quality.factors.map(f => (
+            <span key={f.label} style={{ ...tagStyle(f.pts > 0 ? C.ok : C.dim), fontSize: "0.7rem" }}>
+              {f.label} · {f.pts}/{f.max}
+            </span>
+          ))}
+        </div>
+        <p style={{ fontSize: "0.73rem", color: C.dim, margin: 0 }}>
+          Die Modellentscheidung wird erst belastbar, wenn genügend realisierte Votes vorliegen.
+        </p>
+      </div>
+
+      {/* B: Weight vs. Rshares Modellvergleich */}
+      <div style={card}>
+        <p style={{ ...lbl, margin: "0 0 0.75rem" }}>B — Weight vs. Rshares Modellvergleich</p>
+        {!mc ? (
+          <p style={{ color: C.dim, fontSize: "0.82rem" }}>Noch keine Vergleichsdaten (beide Schätzwerte + realisierter SP nötig).</p>
+        ) : (
+          <>
+            {/* Winner banner */}
+            {winner && mc.n >= 50 ? (
+              <div style={{ background: C.ok + "18", border: `1px solid ${C.ok}44`, borderRadius: "6px", padding: "0.4rem 0.75rem", marginBottom: "0.6rem", display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                <span style={{ color: C.ok, fontWeight: 700, fontSize: "0.82rem" }}>
+                  {winner === "Unentschieden" ? "⚖ Unentschieden" : `✓ Aktueller Sieger: ${winner}`}
+                </span>
+                <span style={{ color: C.dim, fontSize: "0.72rem" }}>· Mehrheit der Kennzahlen gewinnt · n={mc.n}</span>
+              </div>
+            ) : mc.n < 50 ? (
+              <div style={{ background: C.warn + "18", border: `1px solid ${C.warn}44`, borderRadius: "6px", padding: "0.4rem 0.75rem", marginBottom: "0.6rem" }}>
+                <span style={{ color: C.warn, fontSize: "0.78rem" }}>Noch keine belastbare Entscheidung — n={mc.n}, mind. 50 benötigt</span>
+              </div>
+            ) : null}
+            <p style={{ fontSize: "0.73rem", color: C.dim, marginBottom: "0.5rem" }}>n = {mc.n} Votes mit Schätzung + realisiertem SP · Niedrigerer Wert = besseres Modell</p>
+            <table style={{ borderCollapse: "collapse", width: "100%", fontSize: "0.8rem" }}>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <th style={thLeft}>Modell</th>
+                  <th style={thStyle}>MAE</th>
+                  <th style={thStyle}>RMSE</th>
+                  <th style={thStyle}>MAPE</th>
+                </tr>
+              </thead>
+              <tbody>
+                {([["Weight", mc.weight], ["Rshares", mc.rshares]] as const).map(([name, m]) => {
+                  const isWinner = winner === name;
+                  return (
+                    <tr key={name} style={{ borderBottom: `1px solid ${C.border}44`, background: isWinner ? C.ok + "0e" : undefined }}>
+                      <td style={{ padding: "0.3rem 0.6rem", fontWeight: 600, color: isWinner ? C.ok : C.text }}>
+                        {isWinner ? "✓ " : ""}{name}
+                      </td>
+                      <MetricCell value={m.mae.toFixed(4)} />
+                      <MetricCell value={m.rmse.toFixed(4)} />
+                      <MetricCell value={m.mape !== null ? (m.mape * 100).toFixed(1) + "%" : null} />
+                    </tr>
+                  );
+                })}
+                <tr>
+                  <td style={{ padding: "0.3rem 0.6rem", color: C.dim, fontSize: "0.75rem" }}>Δ Weight−Rshares</td>
+                  <MetricCell value={(mc.weight.mae  - mc.rshares.mae ).toFixed(4)} />
+                  <MetricCell value={(mc.weight.rmse - mc.rshares.rmse).toFixed(4)} />
+                  <MetricCell value={mc.weight.mape !== null && mc.rshares.mape !== null
+                    ? ((mc.weight.mape - mc.rshares.mape) * 100).toFixed(1) + "%" : null} />
+                </tr>
+              </tbody>
+            </table>
+          </>
+        )}
+      </div>
+
+      {/* C: Vote-Delay Bucket Analyse */}
+      <div style={card}>
+        <p style={{ ...lbl, margin: "0 0 0.75rem" }}>C — Vote-Delay: Ø Curation-SP unseres Votes</p>
+
+        {/* Discovery Window highlight */}
+        {bestDelay && (
+          <div style={{ background: C.info + "18", border: `1px solid ${C.info}44`, borderRadius: "6px", padding: "0.5rem 0.75rem", marginBottom: "0.75rem" }}>
+            <span style={{ color: C.info, fontWeight: 700, fontSize: "0.82rem" }}>Bestes Discovery-Fenster: {bestDelay.label}</span>
+            <span style={{ color: C.dim, fontSize: "0.77rem", marginLeft: "0.6rem" }}>
+              Ø {bestDelay.avgCurationSp!.toFixed(4)} SP
+              {discoveryPct !== null && discoveryPct > 0 && (
+                <span style={{ color: C.ok, fontWeight: 600, marginLeft: "0.4rem" }}>+{discoveryPct}% ggü. Gesamt-Ø</span>
+              )}
+            </span>
+          </div>
+        )}
+
+        {report.byDelay.length === 0 ? (
+          <p style={{ color: C.dim, fontSize: "0.82rem" }}>Noch keine realisierten Votes mit Delay-Daten.</p>
+        ) : (
+          <table style={{ borderCollapse: "collapse", width: "100%", fontSize: "0.8rem" }}>
+            <thead>
+              <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                <th style={thLeft}>Delay</th>
+                <th style={thStyle}>Votes</th>
+                <th style={thStyle}>Anteil</th>
+                <th style={thStyle}>Ø SP</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.byDelay.map(b => {
+                const isBest = b.label === bestDelay?.label;
+                return (
+                  <tr key={b.label} style={{ borderBottom: `1px solid ${C.border}44`, background: isBest ? C.info + "0e" : undefined }}>
+                    <td style={{ padding: "0.3rem 0.6rem", color: isBest ? C.info : C.text, fontWeight: isBest ? 600 : undefined }}>
+                      {isBest ? "★ " : ""}{b.label}
+                    </td>
+                    <td style={{ padding: "0.3rem 0.6rem", textAlign: "right", color: C.text }}>{b.votes}</td>
+                    <td style={{ padding: "0.3rem 0.6rem", textAlign: "right", color: C.dim }}>
+                      {totalDelay > 0 ? Math.round(b.votes / totalDelay * 100) + "%" : "–"}
+                    </td>
+                    <td style={{ padding: "0.3rem 0.6rem", textAlign: "right", color: b.avgCurationSp !== null ? C.ok : C.dim }}>
+                      {b.avgCurationSp !== null ? b.avgCurationSp.toFixed(4) : "–"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* D: Delay vs. Post-Gesamtperformance */}
+      <div style={card}>
+        <p style={{ ...lbl, margin: "0 0 0.4rem" }}>D — Delay vs. Post-Gesamtperformance</p>
+        <p style={{ fontSize: "0.73rem", color: C.dim, margin: "0 0 0.75rem" }}>
+          Fragestellung: Werden gute Posts früh gefunden, oder ist unser Vote selbst der Grund für den Erfolg?
+          Ø/Median <em>post_final_payout_sbd</em> beschreibt den Post, nicht unseren Vote.
+        </p>
+        {report.byDelayVsPost.length === 0 ? (
+          <p style={{ color: C.dim, fontSize: "0.82rem" }}>Noch keine Daten (post_final_payout_sbd + delay + realisierter SP benötigt).</p>
+        ) : (
+          <table style={{ borderCollapse: "collapse", width: "100%", fontSize: "0.8rem" }}>
+            <thead>
+              <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                <th style={thLeft}>Delay</th>
+                <th style={thStyle}>Votes</th>
+                <th style={thStyle}>Ø Post-Payout (SBD)</th>
+                <th style={thStyle}>Median Post-Payout</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.byDelayVsPost.map((b: DelayVsPostBucket) => {
+                const maxAvg = Math.max(...report.byDelayVsPost.map(x => x.avgFinalPayoutSbd ?? 0));
+                const isBest = b.avgFinalPayoutSbd !== null && b.avgFinalPayoutSbd === maxAvg && maxAvg > 0;
+                return (
+                  <tr key={b.label} style={{ borderBottom: `1px solid ${C.border}44`, background: isBest ? C.ok + "0e" : undefined }}>
+                    <td style={{ padding: "0.3rem 0.6rem", color: isBest ? C.ok : C.text, fontWeight: isBest ? 600 : undefined }}>
+                      {isBest ? "★ " : ""}{b.label}
+                    </td>
+                    <td style={{ padding: "0.3rem 0.6rem", textAlign: "right", color: C.text }}>{b.votes}</td>
+                    <td style={{ padding: "0.3rem 0.6rem", textAlign: "right", color: b.avgFinalPayoutSbd !== null ? C.text : C.dim }}>
+                      {b.avgFinalPayoutSbd !== null ? b.avgFinalPayoutSbd.toFixed(3) : "–"}
+                    </td>
+                    <td style={{ padding: "0.3rem 0.6rem", textAlign: "right", color: b.medianFinalPayoutSbd !== null ? C.dim : C.dim }}>
+                      {b.medianFinalPayoutSbd !== null ? b.medianFinalPayoutSbd.toFixed(3) : "–"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+        <p style={{ fontSize: "0.73rem", color: C.dim, marginTop: "0.5rem", marginBottom: 0 }}>
+          ★ = Delay-Bucket mit dem höchsten Ø Post-Payout. Interpretation: Je früher der Vote, desto höher der finale Post-Payout? → Datenbasis prüfen.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ── Main AdminDashboard ───────────────────────────────────────────────────────
 
-type Tab = "overview" | "votes" | "users" | "content" | "system" | "alerts";
+type Tab = "overview" | "votes" | "users" | "content" | "system" | "alerts" | "research";
 
 export function AdminDashboard(props: { session: AuthSession }) {
   const [data, setData]       = useState<AdminCockpit | null>(null);
@@ -1166,12 +1443,13 @@ export function AdminDashboard(props: { session: AuthSession }) {
   useEffect(() => { void load(); }, []);
 
   const tabs: Array<{ id: Tab; label: string; badge?: number }> = [
-    { id: "overview", label: "📊 Overview" },
-    { id: "votes",    label: "🗳 Votes",   badge: data?.broadcasts.filter(b => b.status === "blocked").length },
-    { id: "users",    label: "👥 Users",   badge: data?.users.total },
-    { id: "content",  label: "📝 Content", badge: data?.kpis.content.openDrafts },
-    { id: "system",   label: "⚙ System" },
-    { id: "alerts",   label: "🔔 Alerts",  badge: data?.health.warnings.length },
+    { id: "overview",  label: "📊 Overview" },
+    { id: "votes",     label: "🗳 Votes",        badge: data?.broadcasts.filter(b => b.status === "blocked").length },
+    { id: "users",     label: "👥 Users",         badge: data?.users.total },
+    { id: "content",   label: "📝 Content",       badge: data?.kpis.content.openDrafts },
+    { id: "system",    label: "⚙ System" },
+    { id: "alerts",    label: "🔔 Alerts",         badge: data?.health.warnings.length },
+    { id: "research",  label: "🔬 Research Lab" },
   ];
 
   const warnings = data?.health.warnings ?? [];
@@ -1229,6 +1507,7 @@ export function AdminDashboard(props: { session: AuthSession }) {
           {tab === "users"    && <div style={card}><UsersTable users={data.users.users} /></div>}
           {tab === "content"  && <ContentSection session={props.session} queueItems={data.contentQueue} />}
           {tab === "system"   && <SystemSection d={data} session={props.session} />}
+          {tab === "research" && <ResearchLabSection session={props.session} />}
           {tab === "alerts"   && (
             <div style={card}>
               <p style={{ ...lbl, margin: "0 0 0.6rem" }}>Recent Notifications</p>

@@ -4,7 +4,7 @@ import swaggerUi from "@fastify/swagger-ui";
 import Fastify from "fastify";
 import { registerAuthRoutes } from "./auth/routes.js";
 import { registerConsentRoutes } from "./consent/routes.js";
-import { registerCurationRoutes } from "./curation/routes.js";
+import { registerCurationRoutes, registerUserSettingsRoutes } from "./curation/routes.js";
 import { getDb } from "./db/index.js";
 import { registerOperatorRoutes } from "./operator/routes.js";
 import { registerRoutes, registerTodayVotesRoute } from "./routes.js";
@@ -59,6 +59,7 @@ await app.register(swaggerUi, {
 await registerAuthRoutes(app);
 await registerConsentRoutes(app);
 await registerCurationRoutes(app);
+registerUserSettingsRoutes(app);
 await registerOperatorRoutes(app);
 await registerAdminRoutes(app);
 await registerContentRoutes(app);
@@ -71,31 +72,23 @@ const host = process.env.HOST ?? "0.0.0.0";
 
 await app.listen({ port, host });
 
-// Start daily fee post scheduler after server is listening
-// Runs at 01:00 UTC every day — idempotent, safe to call multiple times
-startDailyFeePostScheduler(app.log as unknown as typeof console);
-
-// Start daily devlog draft generator — runs at 22:00 UTC, writes to CONTENT_DIR
-startDailyDevlogScheduler(app.log as unknown as typeof console);
-
-// Start VP time-series sampler — samples VP for all active sessions every 15 min
-startVpSampler(app.log as unknown as typeof console);
-
-// Start daily price sampler — fetches STEEM/SBD USD prices from CoinGecko (fallback: Steem feed)
-startPriceSampler(app.log as unknown as typeof console);
-
-// Daily payout sync: rebuild curation rewards for all users + post final payout
-startPayoutSync(app.log as unknown as typeof console);
-
-// Signal Layer: historical whale scan → enrichment → nightly signal compute
-// Scan runs in background (rate-limited, can take minutes); non-blocking
 const log = app.log as unknown as typeof console;
-scanWhaleHistory(log).catch(e => log.warn("[WhaleHistory] startup scan error:", e));
-startWhaleEnrichment(log);
-startSignalCompute(log);
 
-// CoPilot Shadow Mode — evaluates candidates every 30 min, writes to vb_copilot_shadow_runs, no broadcast
-startCopilotShadow(log);
+// Schedulers that only register a setTimeout (no immediate I/O) — safe to start now.
+// startPayoutSync's immediate run is delayed 120s internally.
+startDailyFeePostScheduler(log);
+startDailyDevlogScheduler(log);
+startPayoutSync(log);
 
-// Growth snapshot sampler — captures pending_payout_value at T+0/15m/1h/6h/24h/72h/final
-startGrowthSnapshotSampler(log);
+// Jobs that make immediate Steem/external API calls are delayed 30s so Docker's
+// health check (start_period 90s, first check at 15s) can succeed before we
+// saturate the event loop with external API calls.
+setTimeout(() => {
+  startVpSampler(log);
+  startPriceSampler(log);
+  startWhaleEnrichment(log);
+  startCopilotShadow(log);
+  startGrowthSnapshotSampler(log);
+  startSignalCompute(log);
+  scanWhaleHistory(log).catch(e => log.warn("[WhaleHistory] startup scan error:", e));
+}, 30_000);

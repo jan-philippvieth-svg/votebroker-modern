@@ -1,4 +1,5 @@
 import { getDb } from "../db/index.js";
+import { todayString, yesterdayString, utcOffsetMinutes, DEFAULT_TIMEZONE, startOfLocalDay, localDateString } from "../utils/timezone.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -35,13 +36,15 @@ interface DayRow    { day: string }
 
 // ── Service ───────────────────────────────────────────────────────────────────
 
-export function getGrowthData(username: string, period: "30d" | "90d" | "all"): GrowthData {
+export function getGrowthData(username: string, period: "30d" | "90d" | "all", timezone: string = DEFAULT_TIMEZONE): GrowthData {
   const db    = getDb();
-  const today = new Date().toISOString().slice(0, 10);
+  const today  = todayString(timezone);
+  const offsetMin = utcOffsetMinutes(timezone);
 
+  const todayStartMs = startOfLocalDay(new Date(), timezone).getTime();
   const cutoff: Record<string, string> = {
-    "30d": new Date(Date.now() -  30 * 86_400_000).toISOString().slice(0, 10),
-    "90d": new Date(Date.now() -  90 * 86_400_000).toISOString().slice(0, 10),
+    "30d": localDateString(new Date(todayStartMs -  29 * 86_400_000), timezone),
+    "90d": localDateString(new Date(todayStartMs -  89 * 86_400_000), timezone),
     "all": "2000-01-01",
   };
   const since = cutoff[period];
@@ -55,13 +58,16 @@ export function getGrowthData(username: string, period: "30d" | "90d" | "all"): 
     GROUP  BY author
   `).all(username) as AuthorRow[];
 
-  // ── Daily vote counts within the period ──────────────────────────────────
+  // ── Daily vote counts within the period (Europe/Berlin calendar day) ────────
+  // offsetMin is the current Berlin UTC offset (60 in winter, 120 in summer).
+  // Applying it via SQLite datetime() shifts UTC timestamps to local time before
+  // extracting the date — correct for all historical votes regardless of DST.
   const dailyVoteRows = db.prepare(`
-    SELECT DATE(created_at) AS day, COUNT(*) AS votes
+    SELECT DATE(datetime(created_at, '+${offsetMin} minutes')) AS day, COUNT(*) AS votes
     FROM   audit_events
     WHERE  type = 'vote_broadcast_success'
       AND  username = ?
-      AND  DATE(created_at) >= ?
+      AND  DATE(datetime(created_at, '+${offsetMin} minutes')) >= ?
     GROUP  BY day
     ORDER  BY day ASC
   `).all(username, since) as VoteRow[];
@@ -129,7 +135,7 @@ export function getGrowthData(username: string, period: "30d" | "90d" | "all"): 
   // ── Streak calculation from all-time active days ──────────────────────────
 
   const activeDaysSorted = (db.prepare(`
-    SELECT DISTINCT DATE(created_at) AS day
+    SELECT DISTINCT DATE(datetime(created_at, '+${offsetMin} minutes')) AS day
     FROM   audit_events
     WHERE  type = 'vote_broadcast_success' AND username = ?
     ORDER  BY day ASC
@@ -155,7 +161,7 @@ export function getGrowthData(username: string, period: "30d" | "90d" | "all"): 
   let currentStreak = 0;
   if (activeDaysSorted.length > 0) {
     const lastDay   = activeDaysSorted[activeDaysSorted.length - 1];
-    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    const yesterday = yesterdayString(timezone);
     if (lastDay === today || lastDay === yesterday) {
       currentStreak = 1;
       for (let i = activeDaysSorted.length - 2; i >= 0; i--) {

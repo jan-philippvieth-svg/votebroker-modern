@@ -11,6 +11,7 @@
 
 import { createSteemClient } from "./steemBroadcaster.js";
 import { getDb } from "../db/index.js";
+import { localDateString, DEFAULT_TIMEZONE, startOfLocalDay } from "../utils/timezone.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -48,8 +49,9 @@ function parseAmount(v: unknown): number {
 export async function fetchVBEarnings(
   username: string,
   period: "7d" | "30d" | "90d" | "all",
+  timezone: string = DEFAULT_TIMEZONE,
 ): Promise<VBEarningsResult> {
-  const cacheKey = `${username}:${period}`;
+  const cacheKey = `${username}:${period}:${timezone}`;
   const cached = cache.get(cacheKey);
   if (cached && Date.now() < cached.expiresAt) return cached.result;
 
@@ -81,12 +83,14 @@ export async function fetchVBEarnings(
   const vbVoteSet = new Map<string, { date: string; weightBps: number }>();
   for (const r of vbVoteRows) {
     vbVoteSet.set(`${r.author}/${r.permlink}`, {
-      date:      r.created_at.slice(0, 10),
+      date:      localDateString(new Date(r.created_at), timezone),
       weightBps: r.weight_bps,
     });
   }
 
-  const attributionStart = vbVoteRows.length > 0 ? vbVoteRows[0].created_at.slice(0, 10) : null;
+  const attributionStart = vbVoteRows.length > 0
+    ? localDateString(new Date(vbVoteRows[0].created_at), timezone)
+    : null;
 
   // Period cutoff
   const days: Record<string, number> = { "7d": 7, "30d": 30, "90d": 90 };
@@ -118,7 +122,7 @@ export async function fetchVBEarnings(
         const postKey = `${opData["comment_author"]}/${opData["comment_permlink"]}`;
         rewardsByPost.set(postKey, {
           rewarded_vests: parseAmount(opData["reward"]),
-          date:           entry[1].timestamp.slice(0, 10),
+          date:           localDateString(new Date(entry[1].timestamp + "Z"), timezone),
         });
       }
     }
@@ -191,8 +195,8 @@ export async function fetchVBEarnings(
   // Uses raw vbVoteRows so duplicate votes on the same post are counted separately,
   // consistent with how Heute-Kachel counts (audit_events rows, not unique posts).
   for (const row of vbVoteRows) {
-    const date = row.created_at.slice(0, 10);
-    if (date < cutoffIso.slice(0, 10)) continue;
+    const date = localDateString(new Date(row.created_at), timezone);
+    if (date < localDateString(new Date(cutoffIso), timezone)) continue;
     const existing = perDay.get(date) ?? { sp: 0, votes: 0 };
     perDay.set(date, { sp: existing.sp, votes: existing.votes + 1 });
   }
@@ -200,11 +204,12 @@ export async function fetchVBEarnings(
   // ── 5. Build ordered daily array with cumulative SP ───────────────────────
   const allDates = [...new Set([
     ...Array.from(perDay.keys()),
-    // Fill in zero-vote days if period ≤ 30d
+    // Fill in zero-vote days if period ≤ 30d (using local day boundaries)
     ...(period === "7d" || period === "30d"
       ? Array.from({ length: days[period] }, (_, i) => {
-          const d = new Date(nowMs - (days[period] - 1 - i) * 24 * 3600 * 1000);
-          return d.toISOString().slice(0, 10);
+          const todayStart = startOfLocalDay(new Date(), timezone);
+          const d = new Date(todayStart.getTime() - (days[period] - 1 - i) * 86_400_000);
+          return localDateString(d, timezone);
         })
       : []),
   ])].sort();

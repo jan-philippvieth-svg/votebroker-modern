@@ -134,6 +134,24 @@ function initSchema(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_vb_outcomes_date   ON vb_vote_outcomes(voted_at);
     CREATE INDEX IF NOT EXISTS idx_vb_outcomes_author ON vb_vote_outcomes(author);
 
+    CREATE TABLE IF NOT EXISTS vb_rebuild_checkpoint (
+      voter          TEXT PRIMARY KEY,
+      from_index     INTEGER NOT NULL,
+      last_updated   TEXT    NOT NULL DEFAULT (datetime('now')),
+      status         TEXT    NOT NULL DEFAULT 'in_progress'
+    );
+
+    -- Per-user preferences: timezone, locale, currency, date format
+    -- All columns have safe defaults; add new columns via runMigrations.
+    CREATE TABLE IF NOT EXISTS user_settings (
+      username     TEXT PRIMARY KEY,
+      timezone     TEXT NOT NULL DEFAULT 'Europe/Berlin',
+      locale       TEXT,           -- future: 'de' | 'en' | ... (null = inherit from app)
+      currency     TEXT,           -- future: 'USD' | 'EUR' | 'SBD' (null = USD)
+      date_format  TEXT,           -- future: 'ISO' | 'EU' | 'US' (null = ISO)
+      updated_at   TEXT DEFAULT (datetime('now'))
+    );
+
     -- Feature knowledge base: tracks which cluster-stories were communicated
     -- and in which context. This is the shared truth for devlogs, product posts
     -- and fee reports — cluster (not commit) is the unit.

@@ -18,6 +18,7 @@ import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { localDateString } from "../utils/timezone.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -523,7 +524,7 @@ HINWEIS:    Draft-Template — Inhalt für die Zielsprache vor Veröffentlichung
 
   return `---
 title: "${title}"
-date: ${new Date().toISOString().slice(0, 10)}
+date: ${localDateString()}
 type: promo-post
 locale: ${locale}
 ---
@@ -606,7 +607,7 @@ export async function generatePromoPost(
   const draftContent = generatePromoDraft(locale, analysis);
 
   // Save to content_drafts
-  const date = new Date().toISOString().slice(0, 10);
+  const date = localDateString();
   const filename = `${date}-promo-${locale}.md`;
   const filepath = join(contentDir, filename);
 

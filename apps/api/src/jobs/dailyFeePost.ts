@@ -3,6 +3,7 @@ import { getDb } from "../db/index.js";
 import { ensureDailyFeePost } from "../chain/steemFeePost.js";
 import { writeAuditEvent } from "../audit/auditLog.js";
 import { broadcastConfig } from "../config.js";
+import { localDateString } from "../utils/timezone.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -92,7 +93,7 @@ export async function runDailyFeePost(
   forceUpdate?: boolean,
 ): Promise<FeePostLogEntry> {
   const now     = date ?? new Date();
-  const dateStr = now.toISOString().slice(0, 10);
+  const dateStr = localDateString(now);
   const nextRun = nextRunTime();
   const account = broadcastConfig.account;
 

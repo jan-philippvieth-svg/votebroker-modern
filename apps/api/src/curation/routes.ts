@@ -8,6 +8,8 @@ import { getSession } from "../auth/sessionStore.js";
 import { getGrowthData } from "./growthService.js";
 import { getDb } from "../db/index.js";
 import { operatorConfig } from "../config.js";
+import { getUserSettings, saveUserSettings, isValidTimezone } from "../settings/settingsStore.js";
+import { utcOffsetMinutes } from "../utils/timezone.js";
 
 // ── Shared schemas ────────────────────────────────────────────────────────────
 
@@ -367,6 +369,12 @@ async function fetchAllPosts(authors: string[], voter: string): Promise<Map<stri
 
 export async function registerCurationRoutes(app: FastifyInstance): Promise<void> {
 
+  app.get("/api/curation/constants", {
+    schema: { tags: ["Curation"], summary: "Planner-Konstanten: Dust-Floors und Kategorie-Grenzen" }
+  }, async () => ({
+    categoryDustBps: CATEGORY_DUST_BPS,
+  }));
+
   app.get("/api/curation/dna", {
     schema: { tags: ["Curation"], summary: "Curation-DNA eines Accounts analysieren", querystring: zodToJsonSchema(dnaQuerySchema) }
   }, async (request, reply) => {
@@ -677,8 +685,9 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
     const period    = (["7d", "30d", "90d", "all"] as const).find(p => p === rawPeriod) ?? "30d";
 
     try {
+      const tz = getUserSettings(session.user.username).timezone;
       const { fetchVBEarnings } = await import("../chain/voteBrokerEarnings.js");
-      return await fetchVBEarnings(session.user.username, period);
+      return await fetchVBEarnings(session.user.username, period, tz);
     } catch (err) {
       return reply.code(502).send({ error: "earnings_fetch_failed",
         detail: err instanceof Error ? err.message : "unknown" });
@@ -700,7 +709,8 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
       ? rawPeriod as "30d" | "90d" | "all"
       : "30d";
 
-    return getGrowthData(session.user.username, period);
+    const tz = getUserSettings(session.user.username).timezone;
+    return getGrowthData(session.user.username, period, tz);
   });
 
   // ── GET /api/me/daily-history — last N days, votes + authors + weight ──────
@@ -717,16 +727,21 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
     const db = getDb();
     const since = days - 1;
 
+    // Use user's timezone offset so DATE() groups by local calendar day, not UTC.
+    const tz = getUserSettings(session.user.username).timezone;
+    const offsetMin = utcOffsetMinutes(tz);
+
     const rows = db.prepare(`
       SELECT
-        DATE(created_at)         AS day,
+        DATE(datetime(created_at, '+${offsetMin} minutes')) AS day,
         COUNT(*)                 AS votes,
         COUNT(DISTINCT author)   AS unique_authors,
         COALESCE(SUM(ABS(weight_bps)), 0) AS total_weight_bps
       FROM audit_events
       WHERE type = 'vote_broadcast_success'
         AND username = ?
-        AND DATE(created_at) >= DATE('now', '-' || ? || ' days')
+        AND DATE(datetime(created_at, '+${offsetMin} minutes'))
+              >= DATE(datetime('now', '+${offsetMin} minutes'), '-' || ? || ' days')
       GROUP BY day
       ORDER BY day DESC
     `).all(session.user.username, since) as Array<{
@@ -741,7 +756,8 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
       FROM audit_events
       WHERE type = 'vote_broadcast_success'
         AND username = ?
-        AND DATE(created_at) >= DATE('now', '-' || ? || ' days')
+        AND DATE(datetime(created_at, '+${offsetMin} minutes'))
+              >= DATE(datetime('now', '+${offsetMin} minutes'), '-' || ? || ' days')
     `).get(session.user.username, since) as {
       total_votes: number; total_unique_authors: number; total_weight_bps: number;
     };
@@ -773,16 +789,21 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
     const db = getDb();
     const username = session.user.username;
 
-    // Last 7 days of votes: daily weight sum
+    // Use user's timezone for all daily groupings
+    const tz = getUserSettings(username).timezone;
+    const offsetMin = utcOffsetMinutes(tz);
+
+    // Last 7 days of votes: daily weight sum grouped by local calendar day
     const dailyVotes = db.prepare(`
       SELECT
-        DATE(created_at)              AS day,
+        DATE(datetime(created_at, '+${offsetMin} minutes')) AS day,
         COUNT(*)                      AS votes,
         COALESCE(SUM(ABS(weight_bps)), 0) AS weight_bps
       FROM audit_events
       WHERE type = 'vote_broadcast_success'
         AND username = ?
-        AND DATE(created_at) >= DATE('now', '-7 days')
+        AND DATE(datetime(created_at, '+${offsetMin} minutes'))
+              >= DATE(datetime('now', '+${offsetMin} minutes'), '-7 days')
       GROUP BY day
       ORDER BY day DESC
     `).all(username) as Array<{ day: string; votes: number; weight_bps: number }>;
@@ -792,15 +813,16 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
       "SELECT vp_bps FROM vb_vp_snapshots WHERE username = ? ORDER BY sampled_at DESC LIMIT 1"
     ).get(username) as { vp_bps: number } | undefined;
 
-    // VP time-series: min vp_bps per day for last 7 days
+    // VP time-series: min vp_bps per day for last 7 days, grouped by local calendar day
     const vpTrend = db.prepare(`
       SELECT
-        DATE(sampled_at) AS day,
-        MIN(vp_bps)      AS min_vp_bps,
-        MAX(vp_bps)      AS max_vp_bps
+        DATE(datetime(sampled_at, '+${offsetMin} minutes')) AS day,
+        MIN(vp_bps) AS min_vp_bps,
+        MAX(vp_bps) AS max_vp_bps
       FROM vb_vp_snapshots
       WHERE username = ?
-        AND DATE(sampled_at) >= DATE('now', '-7 days')
+        AND DATE(datetime(sampled_at, '+${offsetMin} minutes'))
+              >= DATE(datetime('now', '+${offsetMin} minutes'), '-7 days')
       GROUP BY day
       ORDER BY day ASC
     `).all(username) as Array<{ day: string; min_vp_bps: number; max_vp_bps: number }>;
@@ -847,5 +869,36 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
       activeDaysIn7d:       activeDays,
       vpTrend,
     };
+  });
+}
+
+// ── User Settings routes ───────────────────────────────────────────────────────
+
+export function registerUserSettingsRoutes(app: FastifyInstance): void {
+  // GET /api/me/settings
+  app.get("/api/me/settings", {
+    schema: { tags: ["Account"], summary: "User-Einstellungen (Zeitzone etc.)", security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
+    const token = (request.headers as Record<string, string>)["session"];
+    const session = token ? getSession(token) : null;
+    if (!session) return reply.code(401).send({ error: "unauthorized" });
+    return getUserSettings(session.user.username);
+  });
+
+  // PATCH /api/me/settings
+  app.patch("/api/me/settings", {
+    schema: { tags: ["Account"], summary: "User-Einstellungen speichern", security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
+    const token = (request.headers as Record<string, string>)["session"];
+    const session = token ? getSession(token) : null;
+    if (!session) return reply.code(401).send({ error: "unauthorized" });
+
+    const body = request.body as Record<string, unknown>;
+    if (body.timezone !== undefined && !isValidTimezone(body.timezone)) {
+      return reply.code(400).send({ error: "invalid_timezone", message: "Unbekannte IANA-Zeitzone" });
+    }
+    return saveUserSettings(session.user.username, {
+      timezone: typeof body.timezone === "string" ? body.timezone : undefined,
+    });
   });
 }

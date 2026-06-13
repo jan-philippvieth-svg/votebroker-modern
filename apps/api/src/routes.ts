@@ -27,6 +27,8 @@ import { fetchPendingCuration } from "./chain/steemPendingCuration.js";
 import { getAccount, getCommunityPool, saveAccount } from "./mockStore.js";
 import { getInvoice, listInvoices, saveInvoice, saveBillingAccount, loadBillingAccount } from "./billing/billingStore.js";
 import { voteBrokerWorkflow } from "./workflows.js";
+import { todayBoundsUtc } from "./utils/timezone.js";
+import { getUserTimezone } from "./settings/settingsStore.js";
 
 const quoteSchema = z.object({
   username: z.string().min(1),
@@ -848,15 +850,17 @@ export function registerTodayVotesRoute(app: FastifyInstance): void {
     if (!session) return reply.code(401).send({ error: "unauthorized" });
 
     const db = getDb();
+    const tz = getUserTimezone(session.user.username);
+    const { startIso, endIso } = todayBoundsUtc(tz);
     type VoteRow = { author: string; permlink: string; weight_bps: number; transaction_id: string; created_at: string };
     const rows = db.prepare(`
       SELECT author, permlink, weight_bps, transaction_id, created_at
       FROM audit_events
       WHERE type = 'vote_broadcast_success'
         AND username = ?
-        AND date(created_at) = date('now')
+        AND created_at >= ? AND created_at < ?
       ORDER BY created_at ASC
-    `).all(session.user.username) as VoteRow[];
+    `).all(session.user.username, startIso, endIso) as VoteRow[];
 
     // Group votes into runs (gap > 120s = new run)
     type Run = { votes: VoteRow[]; startedAt: string; endedAt: string };

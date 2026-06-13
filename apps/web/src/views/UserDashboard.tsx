@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Users, Dna, Target, type LucideIcon } from "lucide-react";
+import { todayString, startOfLocalDay, localDateString } from "../utils/timezone";
 import type {
   AuthSession, CurationProfile, DailyEarnings, DailyHistoryPoint, DailyHistoryResult,
   DailyHistorySummary, GrowthAnalytics, GrowthBucket, GrowthData, OpportunitiesMeta,
@@ -104,13 +105,17 @@ function sortRules(r: StrategyRuleLite[]) {
   return [...r].filter(x => x.enabled && x.category !== "ignorieren")
     .sort((a, b) => (CAT_DEF[b.category]?.pri ?? 0) - (CAT_DEF[a.category]?.pri ?? 0));
 }
-function votesPerDay7(votes: RecentVote[]): Array<{ short: string; count: number }> {
+function votesPerDay7(votes: RecentVote[], tz?: string): Array<{ short: string; count: number }> {
   const result: Record<string, number> = {};
+  const todayStart = startOfLocalDay(new Date(), tz);
   for (let i = 6; i >= 0; i--) {
-    const d = new Date(); d.setUTCDate(d.getUTCDate() - i);
-    result[d.toISOString().slice(0, 10)] = 0;
+    const d = new Date(todayStart.getTime() - i * 86_400_000);
+    result[localDateString(d, tz)] = 0;
   }
-  for (const v of votes) { const day = v.votedAt.slice(0, 10); if (day in result) result[day]++; }
+  for (const v of votes) {
+    const day = localDateString(new Date(v.votedAt), tz);
+    if (day in result) result[day]++;
+  }
   const labels = ["Su","Mo","Tu","We","Th","Fr","Sa"];
   return Object.entries(result).map(([day, count]) => ({ count, short: labels[new Date(day+"T12:00:00Z").getUTCDay()] }));
 }
@@ -918,12 +923,13 @@ function VpBudgetRow({ budget, todayWeightBps, t }: {
   );
 }
 
-function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, pendingLoading, dailyHistory, dailyHistoryLoading, lifetimeEarnings, t }: {
+function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, pendingLoading, dailyHistory, dailyHistoryLoading, lifetimeEarnings, timezone, t }: {
   snapshot: SteemAccountSnapshot|null;
   todayStats: TodayStats|null; todayLoading: boolean;
   pendingCuration: PendingCuration|null; pendingLoading: boolean;
   dailyHistory: DailyHistoryResult|null; dailyHistoryLoading: boolean;
   lifetimeEarnings: VBEarningsResult|null;
+  timezone?: string;
   t: ReturnType<typeof createTranslator>;
 }) {
   const voteUsd          = snapshot?.currentVoteUsd ?? 0;
@@ -997,7 +1003,7 @@ function CurationTriple({ snapshot, todayStats, todayLoading, pendingCuration, p
           <div style={{ color:C.dim, fontSize:"0.88rem" }}>{t("emptyNoVotesToday")}</div>
         ) : (() => {
           const { days: pts, summary: sum } = dailyHistory;
-          const today = new Date().toISOString().slice(0, 10);
+          const today = todayString(timezone);
           const totalCur = (sum.totalWeightBps / 10000) * voteUsd * 0.25;
           const avgCurPerVote = sum.totalVotes > 0 ? totalCur / sum.totalVotes : 0;
           return (
@@ -2174,6 +2180,7 @@ export function UserDashboard(props: {
         pendingCuration={pendingCuration} pendingLoading={pendingLoading}
         dailyHistory={dailyHistory} dailyHistoryLoading={dailyHistoryLoading}
         lifetimeEarnings={lifetimeEarnings}
+        timezone={props.timezone}
         t={t}
       />
 
