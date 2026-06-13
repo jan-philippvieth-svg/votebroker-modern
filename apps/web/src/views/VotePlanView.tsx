@@ -266,7 +266,6 @@ export function VotePlanSection(props: {
       setPhase("generated");
       setConfirmed(false); setExecLog([]); setExecIndex(0); setAborted(false);
       setOverrides(new Map());
-      setExcluded(new Set());
 
       // Auto-fill: add fitting candidates from pre-scanned opportunities into the plan.
       // The server plan only fetches independently — remaining budget often goes unused.
@@ -284,6 +283,14 @@ export function VotePlanSection(props: {
         }
       }
       setAdditions(autoAdded);
+
+      // Preserve exclusions for author/permlink combos still present in the refreshed plan.
+      // Drops exclusions for entries that no longer appear (post expired, voted, etc.).
+      const newKeys = new Set([
+        ...plan.plan.map(e => `${e.author}/${e.permlink}`),
+        ...autoAdded.map(e => `${e.author}/${e.permlink}`),
+      ]);
+      setExcluded(prev => prev.size === 0 ? prev : new Set([...prev].filter(k => newKeys.has(k))));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan]);
@@ -478,15 +485,14 @@ export function VotePlanSection(props: {
                   const isExcluded = excluded.has(key);
                   return (
                     <div key={key} style={{
-                      background: isAdded ? "#f0fdf4" : isEdited ? "#f8faff" : "#ffffff",
-                      border: `1px solid ${isAdded ? "#86efac" : isEdited ? "#93c5fd" : e.warning ? "#fde68a" : "#e5e7eb"}`,
+                      background: isExcluded ? "#f8fafc" : isAdded ? "#f0fdf4" : isEdited ? "#f8faff" : "#ffffff",
+                      border: `1px solid ${isExcluded ? "#d1d5db" : isAdded ? "#86efac" : isEdited ? "#93c5fd" : e.warning ? "#fde68a" : "#e5e7eb"}`,
                       borderLeft: `4px solid ${isExcluded ? "#d1d5db" : isAdded ? "#16a34a" : color}`,
                       borderRadius: "10px", padding: "0.65rem 0.85rem",
                       display: "flex", gap: "0.75rem", alignItems: "center",
-                      opacity: isExcluded ? 0.45 : 1,
-                      transition: "opacity 0.15s",
+                      transition: "background 0.15s, border-color 0.15s",
                     }}>
-                      {/* Deaktivierungs-Checkbox */}
+                      {/* Deaktivierungs-Checkbox — immer volle Opazität */}
                       <label title={isExcluded ? "Vote aktivieren" : "Vote aus Plan entfernen"} style={{ flexShrink: 0, display: "flex", alignItems: "center", cursor: "pointer" }}>
                         <input
                           type="checkbox"
@@ -495,21 +501,25 @@ export function VotePlanSection(props: {
                           style={{ width: "15px", height: "15px", cursor: "pointer", accentColor: "#16a34a", flexShrink: 0 }}
                         />
                       </label>
+
+                      {/* Card-Inhalt — bei deaktiviert ausgegraut */}
+                      <div style={{ display: "flex", flex: 1, gap: "0.75rem", alignItems: "center", opacity: isExcluded ? 0.45 : 1, transition: "opacity 0.15s", minWidth: 0 }}>
+
                       {/* Score-Badge (hinzugefügte: grünes +) */}
-                      <div style={{ flexShrink: 0, width: "40px", height: "40px", borderRadius: "9px", background: isAdded ? "#dcfce7" : scoreBg, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column" as const, position: "relative" as const }}>
+                      <div style={{ flexShrink: 0, width: "40px", height: "40px", borderRadius: "9px", background: isExcluded ? "#e5e7eb" : isAdded ? "#dcfce7" : scoreBg, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column" as const, position: "relative" as const }}>
                         {isAdded && <span style={{ position: "absolute" as const, top: "-5px", right: "-5px", background: "#16a34a", color: "#fff", borderRadius: "50%", width: "14px", height: "14px", fontSize: "0.65rem", fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>+</span>}
-                        <span style={{ color: isAdded ? "#15803d" : scoreColor, fontSize: "0.95rem", fontWeight: 900, lineHeight: 1 }}>{e.postScore}</span>
-                        <span style={{ color: isAdded ? "#15803d" : scoreColor, fontSize: "0.52rem", fontWeight: 700, opacity: 0.6 }}>score</span>
+                        <span style={{ color: isExcluded ? "#9ca3af" : isAdded ? "#15803d" : scoreColor, fontSize: "0.95rem", fontWeight: 900, lineHeight: 1 }}>{e.postScore}</span>
+                        <span style={{ color: isExcluded ? "#9ca3af" : isAdded ? "#15803d" : scoreColor, fontSize: "0.52rem", fontWeight: 700, opacity: 0.6 }}>score</span>
                       </div>
 
                       {/* Titel + Metadaten */}
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ color: "#111827", fontSize: "0.91rem", fontWeight: 700, margin: "0 0 0.18rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, textDecoration: isExcluded ? "line-through" : "none" }}>
+                        <p style={{ color: isExcluded ? "#9ca3af" : "#111827", fontSize: "0.91rem", fontWeight: 700, margin: "0 0 0.18rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, textDecoration: isExcluded ? "line-through" : "none" }}>
                           {e.title || `${e.author}/${e.permlink}`}
                           {isAdded && <span style={{ marginLeft: "0.5rem", background: "#dcfce7", color: "#15803d", borderRadius: "4px", padding: "0.05rem 0.35rem", fontSize: "0.65rem", fontWeight: 700 }}>hinzugefügt</span>}
                         </p>
                         <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.73rem", color: "#9ca3af" }}>
-                          <span style={{ color: "#2563eb", fontWeight: 600 }}>@{e.author}</span>
+                          <span style={{ color: isExcluded ? "#9ca3af" : "#2563eb", fontWeight: 600 }}>@{e.author}</span>
                           <span>·</span><span>{formatAge(e.ageMinutes)}</span>
                           {e.remainingHours < 48 && <><span>·</span><span style={{ color: e.remainingHours < 24 ? "#d97706" : "#9ca3af" }}>{e.remainingHours.toFixed(0)}h</span></>}
                         </div>
@@ -544,6 +554,8 @@ export function VotePlanSection(props: {
                           </button>
                         )}
                       </div>
+
+                      </div>{/* end card-content wrapper */}
                     </div>
                   );
                 })}
