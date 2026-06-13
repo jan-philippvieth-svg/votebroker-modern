@@ -217,9 +217,48 @@ export function VotePlanSection(props: {
   // Active = all entries that haven't been manually deactivated
   const activePlanEntries = allPlanEntries.filter(e => !excluded.has(`${e.author}/${e.permlink}`));
 
+  // ── VP Redistribution ────────────────────────────────────────────────────────
+  // When votes are excluded, their freed VP is distributed proportionally to the
+  // remaining active entries (skipping manually-overridden ones, which stay fixed).
+  // redistMap: key → delta_bps added by redistribution (for ▲ indicator in UI).
+  const { redistributedEntries, redistMap } = (() => {
+    const freedBps = allPlanEntries
+      .filter(e => excluded.has(`${e.author}/${e.permlink}`))
+      .reduce((s, e) => s + e.suggestedWeightBps, 0);
+
+    const noBoost = { redistributedEntries: activePlanEntries, redistMap: new Map<string, number>() };
+    if (freedBps === 0 || activePlanEntries.length === 0) return noBoost;
+
+    // Entries without a manual override are eligible to receive boosted weight
+    const eligibleTotal = activePlanEntries
+      .filter(e => !overrides.has(`${e.author}/${e.permlink}`))
+      .reduce((s, e) => s + e.suggestedWeightBps, 0);
+    if (eligibleTotal === 0) return noBoost;
+
+    const deltas = new Map<string, number>();
+    const boosted = activePlanEntries.map(e => {
+      const key = `${e.author}/${e.permlink}`;
+      if (overrides.has(key)) { deltas.set(key, 0); return e; }
+      const share = Math.round(freedBps * (e.suggestedWeightBps / eligibleTotal));
+      const delta = Math.max(0, Math.min(share, 10_000 - e.suggestedWeightBps));
+      deltas.set(key, delta);
+      if (delta === 0) return e;
+      const newBps = e.suggestedWeightBps + delta;
+      const newPct = Math.round(newBps / 100 * 10) / 10;
+      const newUsd = currentVoteUsd > 0
+        ? Math.round((newBps / 10_000) * currentVoteUsd * 10_000) / 10_000
+        : e.expectedVoteUsd * (newBps / Math.max(1, e.suggestedWeightBps));
+      return { ...e, suggestedWeightBps: newBps, suggestedWeightPct: newPct, expectedVoteUsd: newUsd };
+    });
+    return { redistributedEntries: boosted, redistMap: deltas };
+  })();
+
+  // Lookup map for card rendering — active entries use redistributed weights
+  const redistByKey = new Map(redistributedEntries.map(e => [`${e.author}/${e.permlink}`, e]));
+
   const vpNowPct     = plan?.summary.currentVpPct ?? 0;
   const origVpCost   = entries.reduce((s, e) => s + e.suggestedWeightBps / MANA_DIV, 0);
-  const effVpCost    = activePlanEntries.reduce((s, e) => s + e.suggestedWeightBps / MANA_DIV, 0);
+  const effVpCost    = redistributedEntries.reduce((s, e) => s + e.suggestedWeightBps / MANA_DIV, 0);
   const origVpMorgen = Math.min(100, Math.round((vpNowPct - origVpCost + 20) * 10) / 10);
   const effVpMorgen  = Math.min(100, Math.round((vpNowPct - effVpCost  + 20) * 10) / 10);
   const savedVpPct   = Math.round((origVpCost - effVpCost) * 100) / 100;
@@ -228,7 +267,7 @@ export function VotePlanSection(props: {
   // Which additional candidates actually fit in the remaining budget?
   const dynamicBudget  = plan?.report.dynamicBudgetPct ?? 0;
   const addedKeys      = new Set(additions.map(e => `${e.author}/${e.permlink}`));
-  let remainBudget     = Math.max(0, dynamicBudget - activePlanEntries.reduce((s, e) => s + e.suggestedWeightBps / MANA_DIV, 0));
+  let remainBudget     = Math.max(0, dynamicBudget - redistributedEntries.reduce((s, e) => s + e.suggestedWeightBps / MANA_DIV, 0));
   const fittingCandidates: VotePlanEntry[] = [];
   for (const c of (props.additionalCandidates ?? [])) {
     const key = `${c.author}/${c.permlink}`;
@@ -250,9 +289,11 @@ export function VotePlanSection(props: {
   }
 
   function adjustWeight(key: string, deltaBps: number) {
-    const entry = entries.find(e => `${e.author}/${e.permlink}` === key);
-    if (!entry) return;
-    const current = overrides.get(key) ?? entry.suggestedWeightBps;
+    // Use the redistributed weight as baseline so +/- starts from the current auto-suggested value
+    const base = redistByKey.get(key)
+      ?? entries.find(e => `${e.author}/${e.permlink}` === key);
+    if (!base) return;
+    const current = overrides.get(key) ?? base.suggestedWeightBps;
     const next = Math.max(500, Math.min(10_000, current + deltaBps));
     setOverrides(prev => new Map(prev).set(key, next));
   }
@@ -321,16 +362,16 @@ export function VotePlanSection(props: {
   }
 
   async function startExecution() {
-    if (!confirmed || activePlanEntries.length === 0) return;
+    if (!confirmed || redistributedEntries.length === 0) return;
     setPhase("executing");
     setExecLog([]);
     setAborted(false);
     const log: VoteLogEntry[] = [];
 
-    for (let i = 0; i < activePlanEntries.length; i++) {
+    for (let i = 0; i < redistributedEntries.length; i++) {
       if (aborted) break;
       setExecIndex(i);
-      const e = activePlanEntries[i];
+      const e = redistributedEntries[i];
       try {
         // Direct call — throws VoteBroadcastError on any failure
         const result = await props.onExecuteSingle({
@@ -429,6 +470,9 @@ export function VotePlanSection(props: {
                     {excluded.size > 0 && (
                       <span style={{ color: "#6b7280", fontSize: "0.78rem" }}>
                         {excluded.size} Vote{excluded.size > 1 ? "s" : ""} deaktiviert
+                        {redistMap.size > 0 && [...redistMap.values()].some(d => d > 0) && (
+                          <> · VP umverteilt auf {redistributedEntries.length} verbleibende Votes</>
+                        )}
                       </span>
                     )}
                     {plan?.report.dynamicBudgetPct !== undefined && (
@@ -472,22 +516,30 @@ export function VotePlanSection(props: {
 
               {/* ── Plan-Karten mit Inline-Controls ── */}
               <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", marginBottom: "0.75rem" }}>
-                {allPlanEntries.map(e => {
-                  const key = `${e.author}/${e.permlink}`;
+                {allPlanEntries.map(rawE => {
+                  const key = `${rawE.author}/${rawE.permlink}`;
+                  const isExcluded = excluded.has(key);
+                  // Active entries use the redistributed version (may have boosted weight)
+                  const e          = isExcluded ? rawE : (redistByKey.get(key) ?? rawE);
+                  const redistDelta = redistMap.get(key) ?? 0;
+                  const isRedist   = !isExcluded && redistDelta > 0 && !overrides.has(key);
+
                   const color = PLAN_CATEGORY_COLOR[e.category] ?? "#607078";
                   const isAdded   = addedKeys.has(key);
                   const isEdited  = overrides.has(key);
+                  // origBps: server's raw suggestion (before redistribution) for the reset label
                   const origBps   = isAdded
-                    ? (additions.find(x => `${x.author}/${x.permlink}` === key)?.suggestedWeightBps ?? e.suggestedWeightBps)
-                    : (entries.find(x => `${x.author}/${x.permlink}` === key)?.suggestedWeightBps ?? e.suggestedWeightBps);
+                    ? (additions.find(x => `${x.author}/${x.permlink}` === key)?.suggestedWeightBps ?? rawE.suggestedWeightBps)
+                    : (entries.find(x => `${x.author}/${x.permlink}` === key)?.suggestedWeightBps ?? rawE.suggestedWeightBps);
                   const scoreBg    = e.postScore >= 80 ? "#dcfce7" : e.postScore >= 50 ? "#fef9c3" : "#f0f5f7";
                   const scoreColor = e.postScore >= 80 ? "#15803d" : e.postScore >= 50 ? "#a16207" : "#607078";
-                  const isExcluded = excluded.has(key);
+
+                  const borderColor = isExcluded ? "#d1d5db" : isRedist ? "#86efac" : isAdded ? "#86efac" : isEdited ? "#93c5fd" : e.warning ? "#fde68a" : "#e5e7eb";
                   return (
                     <div key={key} style={{
-                      background: isExcluded ? "#f8fafc" : isAdded ? "#f0fdf4" : isEdited ? "#f8faff" : "#ffffff",
-                      border: `1px solid ${isExcluded ? "#d1d5db" : isAdded ? "#86efac" : isEdited ? "#93c5fd" : e.warning ? "#fde68a" : "#e5e7eb"}`,
-                      borderLeft: `4px solid ${isExcluded ? "#d1d5db" : isAdded ? "#16a34a" : color}`,
+                      background: isExcluded ? "#f8fafc" : isRedist ? "#f0fdf4" : isAdded ? "#f0fdf4" : isEdited ? "#f8faff" : "#ffffff",
+                      border: `1px solid ${borderColor}`,
+                      borderLeft: `4px solid ${isExcluded ? "#d1d5db" : isRedist ? "#16a34a" : isAdded ? "#16a34a" : color}`,
                       borderRadius: "10px", padding: "0.65rem 0.85rem",
                       display: "flex", gap: "0.75rem", alignItems: "center",
                       transition: "background 0.15s, border-color 0.15s",
@@ -505,7 +557,7 @@ export function VotePlanSection(props: {
                       {/* Card-Inhalt — bei deaktiviert ausgegraut */}
                       <div style={{ display: "flex", flex: 1, gap: "0.75rem", alignItems: "center", opacity: isExcluded ? 0.45 : 1, transition: "opacity 0.15s", minWidth: 0 }}>
 
-                      {/* Score-Badge (hinzugefügte: grünes +) */}
+                      {/* Score-Badge */}
                       <div style={{ flexShrink: 0, width: "40px", height: "40px", borderRadius: "9px", background: isExcluded ? "#e5e7eb" : isAdded ? "#dcfce7" : scoreBg, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column" as const, position: "relative" as const }}>
                         {isAdded && <span style={{ position: "absolute" as const, top: "-5px", right: "-5px", background: "#16a34a", color: "#fff", borderRadius: "50%", width: "14px", height: "14px", fontSize: "0.65rem", fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>+</span>}
                         <span style={{ color: isExcluded ? "#9ca3af" : isAdded ? "#15803d" : scoreColor, fontSize: "0.95rem", fontWeight: 900, lineHeight: 1 }}>{e.postScore}</span>
@@ -527,27 +579,33 @@ export function VotePlanSection(props: {
 
                       {/* Inline-Gewichts-Editor */}
                       <div style={{ flexShrink: 0, display: "flex", flexDirection: "column" as const, alignItems: "flex-end", gap: "0.25rem", minWidth: "96px" }}>
-                        {/* Stepper mit modus-abhängiger Primärwert-Anzeige */}
+                        {/* Stepper */}
                         <div style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
                           <button onClick={() => adjustWeight(key, -500)} style={{ width: "26px", height: "26px", borderRadius: "7px", background: "#f1f5f9", border: "1px solid #e2e8f0", color: "#475569", cursor: "pointer", fontSize: "1.05rem", lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700 }}>−</button>
-                          <span style={{ color: isEdited ? "#2563eb" : color, fontSize: "1.1rem", fontWeight: 900, minWidth: "52px", textAlign: "center" as const }}>
+                          <span style={{ color: isEdited ? "#2563eb" : isRedist ? "#15803d" : color, fontSize: "1.1rem", fontWeight: 900, minWidth: "52px", textAlign: "center" as const }}>
                             {voteMode === "pct" && `${e.suggestedWeightPct}%`}
                             {voteMode === "usd" && (e.expectedVoteUsd > 0 ? `$${e.expectedVoteUsd.toFixed(3)}` : "—")}
                             {voteMode === "sp"  && (e.expectedVoteUsd > 0 ? `${(e.expectedVoteUsd / sbdPerSteem).toFixed(3)}` : "—")}
                           </span>
                           <button onClick={() => adjustWeight(key, +500)} style={{ width: "26px", height: "26px", borderRadius: "7px", background: "#f1f5f9", border: "1px solid #e2e8f0", color: "#475569", cursor: "pointer", fontSize: "1.05rem", lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700 }}>+</button>
                         </div>
-                        {/* Sekundärwert — das jeweils andere */}
+                        {/* Sekundärwert */}
                         <div style={{ textAlign: "center" as const, fontSize: "0.67rem", color: isEdited ? "#93c5fd" : "#9ca3af" }}>
                           {voteMode === "pct" && e.expectedVoteUsd > 0 && `≈$${e.expectedVoteUsd.toFixed(4)}`}
                           {voteMode === "usd" && `${e.suggestedWeightPct}% Vote`}
                           {voteMode === "sp"  && `${e.suggestedWeightPct}% · SP`}
                         </div>
-                        {/* VP-Kosten — immer sichtbar */}
+                        {/* VP-Kosten */}
                         <div style={{ textAlign: "center" as const, fontSize: "0.67rem", color: isEdited ? "#2563eb" : "#9ca3af" }}>
                           VP: {(e.suggestedWeightBps / 5000).toFixed(2)}%
                         </div>
-                        {/* Reset wenn editiert */}
+                        {/* Redistribution-Indikator */}
+                        {isRedist && (
+                          <div style={{ textAlign: "center" as const, fontSize: "0.63rem", color: "#16a34a", fontWeight: 700 }}>
+                            ▲ +{(redistDelta / 100).toFixed(1)}% umverteilt
+                          </div>
+                        )}
+                        {/* Reset wenn manuell editiert */}
                         {isEdited && (
                           <button onClick={() => resetWeight(key)} style={{ background: "none", border: "none", color: "#93c5fd", cursor: "pointer", fontSize: "0.65rem", padding: 0 }}>
                             ↩ {(origBps / 100).toFixed(1)}%
