@@ -434,6 +434,24 @@ function runMigrations(db: Database): void {
       if (!wvdCols.includes("curator_payout_sbd")) db.exec("ALTER TABLE vb_whale_vote_details ADD COLUMN curator_payout_sbd REAL");
       if (!wvdCols.includes("pending_payout_sbd")) db.exec("ALTER TABLE vb_whale_vote_details ADD COLUMN pending_payout_sbd REAL");
       if (!wvdCols.includes("post_community"))     db.exec("ALTER TABLE vb_whale_vote_details ADD COLUMN post_community TEXT");
+
+      // Indexes required by computeCommunitySignals CTE:
+      //   idx_whale_details_author_permlink — speeds up GROUP BY (author, permlink) in the CTE
+      //     and the subsequent LEFT JOIN lookup.
+      //   idx_whale_details_enriched — speeds up the outer WHERE enriched_at IS NOT NULL
+      //     filter (only 13k/456k rows are enriched; without an index SQLite does a full scan).
+      //   idx_whale_details_enriched_community — covers the additional community IS NOT NULL
+      //     filter in computeCommunitySignals.
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_whale_details_author_permlink
+          ON vb_whale_vote_details(author, permlink);
+        CREATE INDEX IF NOT EXISTS idx_whale_details_enriched
+          ON vb_whale_vote_details(enriched_at)
+          WHERE enriched_at IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_whale_details_enriched_community
+          ON vb_whale_vote_details(post_community)
+          WHERE enriched_at IS NOT NULL AND post_community IS NOT NULL;
+      `);
     }
 
     // vb_global_vote_outcomes: post-context columns for copilot training data

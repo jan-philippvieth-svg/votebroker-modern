@@ -673,6 +673,28 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
     }
   });
 
+  // ── GET /api/me/vote-outcomes/growth-analytics/version ────────────────────────
+  // Lightweight endpoint: returns only { dataVersion, n } — no computation.
+  // Frontend polls this cheaply and triggers a full refetch only when dataVersion changed.
+  app.get("/api/me/vote-outcomes/growth-analytics/version", {
+    schema: { tags: ["Account"], summary: "Growth-Analytics Datenstand (cheap version check)", security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
+    const token   = (request.headers as Record<string, string>)["session"];
+    const session = token ? getSession(token) : null;
+    if (!session) return reply.code(401).send({ error: "unauthorized" });
+
+    const db  = getDb();
+    const row = db.prepare(`
+      SELECT COUNT(*) as n, MAX(realized_at) as data_version
+      FROM vb_global_vote_outcomes
+      WHERE voter = ?
+        AND post_final_payout_sbd IS NOT NULL
+        AND post_pending_payout_sbd > 0.01
+    `).get(session.user.username) as { n: number; data_version: string | null };
+
+    return { dataVersion: row.data_version ?? null, n: row.n };
+  });
+
   // ── GET /api/me/votebroker-earnings — VoteBroker-attributed curation ────────
   app.get("/api/me/votebroker-earnings", {
     schema: { tags: ["Account"], summary: "VoteBroker-zugerechnete Curation-Earnings", security: [{ sessionToken: [] }] }

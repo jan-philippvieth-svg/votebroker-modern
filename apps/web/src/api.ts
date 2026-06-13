@@ -1300,6 +1300,7 @@ export interface GrowthBucket {
 export interface GrowthAnalytics {
   n:             number;          // posts with both pending + final payout stored
   avgGrowth:     number | null;
+  dataVersion:   string | null;   // MAX(realized_at) — opaque version token
   byDelay:       GrowthBucket[];
   byCategory:    GrowthBucket[];
   byPoolBucket:  GrowthBucket[];
@@ -1314,6 +1315,14 @@ export async function fetchGrowthAnalytics(token: string): Promise<GrowthAnalyti
     headers: { session: token },
   });
   if (!res.ok) throw new Error("Growth Analytics konnten nicht geladen werden.");
+  return res.json();
+}
+
+export async function fetchGrowthAnalyticsVersion(token: string): Promise<{ dataVersion: string | null; n: number }> {
+  const res = await fetch(`${API_BASE}/api/me/vote-outcomes/growth-analytics/version`, {
+    headers: { session: token },
+  });
+  if (!res.ok) throw new Error();
   return res.json();
 }
 

@@ -182,20 +182,25 @@ function computeCommunitySignals(log: typeof console): void {
     whale_count: number;
   };
 
+  // CTE pre-aggregates whale_count per post — avoids correlated subquery
+  // that would execute 13k+ times against a 450k-row table and block the event loop.
   const rows = db.prepare(`
+    WITH whale_counts AS (
+      SELECT author, permlink, COUNT(DISTINCT whale) AS whale_count
+      FROM vb_whale_vote_details
+      GROUP BY author, permlink
+    )
     SELECT
-      post_community AS community,
-      total_payout_sbd,
-      curator_payout_sbd,
-      permlink,
-      (SELECT COUNT(DISTINCT w2.whale)
-       FROM vb_whale_vote_details w2
-       WHERE w2.author = d.author AND w2.permlink = d.permlink
-      ) AS whale_count
+      d.post_community    AS community,
+      d.total_payout_sbd,
+      d.curator_payout_sbd,
+      d.permlink,
+      COALESCE(wc.whale_count, 0) AS whale_count
     FROM vb_whale_vote_details d
-    WHERE enriched_at IS NOT NULL
-      AND post_community IS NOT NULL
-      AND post_community != ''
+    LEFT JOIN whale_counts wc ON wc.author = d.author AND wc.permlink = d.permlink
+    WHERE d.enriched_at IS NOT NULL
+      AND d.post_community IS NOT NULL
+      AND d.post_community != ''
   `).all() as Row[];
 
   if (rows.length === 0) return;
@@ -282,8 +287,9 @@ export function startSignalCompute(log: typeof console = console): void {
     log.info(`[SignalCompute] Next run in ${(delay / 3_600_000).toFixed(1)}h`);
   };
 
-  // Initial computation on startup (non-blocking)
-  runSignalCompute(log).catch(e => log.warn("[SignalCompute] initial run error:", e));
+  // No immediate startup run — this is a nightly analytics job (02:30 UTC).
+  // Running it on startup would block the event loop with a full table scan
+  // against vb_whale_vote_details (450k+ rows) right as the server comes up.
   schedule();
 }
 

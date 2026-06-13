@@ -7,7 +7,7 @@ import type {
   PendingCuration, PendingDebugPost, PostOpportunity, SteemAccountSnapshot, TodayStats,
   VBEarningsResult, VotePlanResponse, VpBudget,
 } from "../api";
-import { fetchGrowthAnalytics, fetchVBEarnings, fetchVpBudget } from "../api";
+import { fetchGrowthAnalytics, fetchGrowthAnalyticsVersion, fetchVBEarnings, fetchVpBudget } from "../api";
 import { fetchDailyHistory, fetchGrowthData, fetchPendingCuration, fetchTodayStats } from "../api";
 import { createTranslator, type Locale, type TranslationKey } from "../i18n";
 
@@ -2073,6 +2073,29 @@ export function UserDashboard(props: {
   const [growthAnalytics,        setGrowthAnalytics]        = useState<GrowthAnalytics|null>(null);
   const [growthAnalyticsLoading, setGrowthAnalyticsLoading] = useState(false);
   const [growthAnalyticsFetched, setGrowthAnalyticsFetched] = useState(false);
+  const growthAnalyticsVersionRef = useRef<string | null>(null);
+
+  const loadGrowthAnalytics = (token: string) => {
+    setGrowthAnalyticsLoading(true);
+    fetchGrowthAnalytics(token)
+      .then(d => {
+        growthAnalyticsVersionRef.current = d.dataVersion ?? null;
+        setGrowthAnalytics(d);
+        setGrowthAnalyticsFetched(true);
+      })
+      .catch(()=> setGrowthAnalyticsFetched(true))
+      .finally(()=> setGrowthAnalyticsLoading(false));
+  };
+
+  const checkAndRefreshGrowthAnalytics = (token: string) => {
+    fetchGrowthAnalyticsVersion(token)
+      .then(({ dataVersion }) => {
+        if (dataVersion !== growthAnalyticsVersionRef.current) {
+          loadGrowthAnalytics(token);
+        }
+      })
+      .catch(() => {});
+  };
 
   // Lifetime VoteBroker earnings — fetched once, not period-dependent
   const [lifetimeEarnings, setLifetimeEarnings] =useState<VBEarningsResult|null>(null);
@@ -2110,12 +2133,15 @@ export function UserDashboard(props: {
       .then(setLifetimeEarnings).catch(()=>{});
     fetchVpBudget(props.session.token)
       .then(setVpBudget).catch(()=>{});
-    // Growth Analytics — lazy: fetched once on first mount, not re-fetched on vote
-    setGrowthAnalyticsLoading(true);
-    fetchGrowthAnalytics(props.session.token)
-      .then(d => { setGrowthAnalytics(d); setGrowthAnalyticsFetched(true); })
-      .catch(()=> setGrowthAnalyticsFetched(true))
-      .finally(()=> setGrowthAnalyticsLoading(false));
+    // Growth Analytics — fetched on mount, then on visibility-change (tab refocus)
+    // when the server reports a new dataVersion (payoutSync ran overnight).
+    loadGrowthAnalytics(props.session.token);
+    const token = props.session.token;
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") checkAndRefreshGrowthAnalytics(token);
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[props.session.token]);
 
@@ -2129,6 +2155,7 @@ export function UserDashboard(props: {
     loadTodayStats();
     loadPendingCuration();
     loadDailyHistory();
+    loadGrowthAnalytics(props.session.token);
     const t = setTimeout(() => {
       fetchVBEarnings(props.session.token, "all")
         .then(setLifetimeEarnings).catch(()=>{});

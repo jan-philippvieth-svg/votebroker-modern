@@ -738,6 +738,7 @@ export interface GrowthBucket {
 export interface GrowthAnalytics {
   n:             number;          // rows with both pending > 0 and final > 0
   avgGrowth:     number | null;
+  dataVersion:   string | null;   // MAX(realized_at) — changes only when payoutSync adds new rows
   byDelay:       GrowthBucket[];
   byCategory:    GrowthBucket[];
   byPoolBucket:  GrowthBucket[];
@@ -768,10 +769,12 @@ export function getGrowthAnalytics(username: string): GrowthAnalytics {
     }));
 
   const overview = db.prepare(`
-    SELECT COUNT(*) as n, AVG(post_final_payout_sbd / post_pending_payout_sbd) as avg_growth
+    SELECT COUNT(*) as n,
+           AVG(post_final_payout_sbd / post_pending_payout_sbd) as avg_growth,
+           MAX(realized_at) as data_version
     FROM vb_global_vote_outcomes
     WHERE ${BASE_FILTER}
-  `).get(username) as { n: number; avg_growth: number | null };
+  `).get(username) as { n: number; avg_growth: number | null; data_version: string | null };
 
   const byDelay = toBucket(db.prepare(`
     SELECT
@@ -892,6 +895,7 @@ export function getGrowthAnalytics(username: string): GrowthAnalytics {
   return {
     n:           overview.n,
     avgGrowth:   overview.avg_growth !== null ? Math.round(overview.avg_growth * 100) / 100 : null,
+    dataVersion: overview.data_version ?? null,
     byDelay,
     byCategory,
     byPoolBucket,
