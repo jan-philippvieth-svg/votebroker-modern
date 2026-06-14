@@ -1294,8 +1294,9 @@ export async function fetchVpBudget(token: string): Promise<VpBudget> {
 export interface GrowthBucket {
   label:         string;
   n:             number;
-  avgGrowth:     number | null;   // final_pool / pending_pool — null if n < 2
+  avgGrowth:     number | null;   // final_pool / pending_pool — null if n < 5 (zu wenig Daten)
   avgPendingSbd: number | null;
+  avgSpPerVp?:   number | null;   // nur bei byAuthor: realisierte Curation SP pro VP-Einsatz
 }
 
 export interface GrowthAnalytics {

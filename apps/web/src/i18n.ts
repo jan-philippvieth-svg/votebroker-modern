@@ -173,6 +173,17 @@ const translations = {
     growthCumAuthors:      "Kumulative Autoren",
     growthDailyVotes:      "Tägliche Votes",
 
+    // ── Autor-Ranking (Growth Analytics byAuthor-Tab) ─────────────────────────
+    autorRankingTitle:     "Autor-Ranking",
+    autorRankingColAuthor: "Autor",
+    autorRankingColVotes:  "Votes",
+    autorRankingColGf:     "Ø Wachstum",
+    autorRankingColSpPerVp:"Ø SP/VP",
+    autorRankingColPending:"Ø Pool (Vote)",
+    autorRankingGfInsuff:  "—",           // zu wenig Daten (<5 Votes)
+    autorRankingGfTooltip: "Zu wenig Daten (< 5 Votes)",
+    autorRankingNote:      "Wachstumsfaktor erst ab 5 Votes zuverlässig. SP/VP = realisierte Curation SP pro eingesetztem VP.",
+
     // ── Dashboard — Curator Levels ────────────────────────────────────────────
     levelNewCurator:         "Neuer Kurator",
     levelActiveSup:          "Aktiver Unterstützer",
@@ -880,6 +891,17 @@ const translations = {
     growthCumVotes:        "Cumulative votes",
     growthCumAuthors:      "Cumulative authors",
     growthDailyVotes:      "Daily votes",
+
+    // ── Author Ranking (Growth Analytics byAuthor tab) ───────────────────────
+    autorRankingTitle:     "Author Ranking",
+    autorRankingColAuthor: "Author",
+    autorRankingColVotes:  "Votes",
+    autorRankingColGf:     "Ø Growth",
+    autorRankingColSpPerVp:"Ø SP/VP",
+    autorRankingColPending:"Ø Pool (at vote)",
+    autorRankingGfInsuff:  "—",
+    autorRankingGfTooltip: "Insufficient data (< 5 votes)",
+    autorRankingNote:      "Growth factor reliable at 5+ votes. SP/VP = realized curation SP per VP used.",
 
     // ── Dashboard — Curator Levels ────────────────────────────────────────────
     levelNewCurator:         "New Curator",

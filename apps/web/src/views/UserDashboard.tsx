@@ -1186,6 +1186,54 @@ const GROWTH_DIM_LABELS: Record<GrowthDimension, string> = {
   weekday:   "Wochentag",
 };
 
+function AuthorRankingTable({ buckets }: { buckets: GrowthBucket[] }) {
+  if (buckets.length === 0)
+    return <p style={{ color: C.faint, fontSize: "0.8rem", margin: "0.5rem 0 0" }}>Keine Daten</p>;
+  return (
+    <>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.79rem" }}>
+        <thead>
+          <tr style={{ color: C.faint, textAlign: "left" }}>
+            <th style={{ padding: "0.2rem 0.4rem 0.2rem 0", fontWeight: 500 }}>Autor</th>
+            <th style={{ padding: "0.2rem 0.4rem", fontWeight: 500, textAlign: "right" }}>Votes</th>
+            <th style={{ padding: "0.2rem 0.4rem", fontWeight: 500, textAlign: "right" }}>Ø Wachstum</th>
+            <th style={{ padding: "0.2rem 0.4rem", fontWeight: 500, textAlign: "right" }}>Ø SP/VP</th>
+            <th style={{ padding: "0.2rem 0 0.2rem 0.4rem", fontWeight: 500, textAlign: "right" }}>Ø Pool</th>
+          </tr>
+        </thead>
+        <tbody>
+          {buckets.map(b => (
+            <tr key={b.label} style={{ borderTop: `1px solid ${C.border}` }}>
+              <td style={{ padding: "0.25rem 0.4rem 0.25rem 0", color: C.text, fontFamily: "monospace" }}>
+                @{b.label}
+              </td>
+              <td style={{ padding: "0.25rem 0.4rem", color: C.faint, textAlign: "right" }}>{b.n}</td>
+              <td style={{ padding: "0.25rem 0.4rem", textAlign: "right" }}>
+                {b.avgGrowth !== null
+                  ? <strong style={{ color: growthColor(b.avgGrowth) }}>{b.avgGrowth.toFixed(2)}×</strong>
+                  : <span style={{ color: C.faint, fontSize: "0.75rem" }} title="Zu wenig Daten (< 5 Votes)">—</span>}
+              </td>
+              <td style={{ padding: "0.25rem 0.4rem", textAlign: "right" }}>
+                {b.avgSpPerVp != null
+                  ? <span style={{ color: b.avgSpPerVp >= 0.10 ? C.ok : b.avgSpPerVp >= 0.07 ? C.dim : C.faint }}>
+                      {b.avgSpPerVp.toFixed(4)}
+                    </span>
+                  : <span style={{ color: C.faint }}>—</span>}
+              </td>
+              <td style={{ padding: "0.25rem 0 0.25rem 0.4rem", color: C.faint, textAlign: "right" }}>
+                {b.avgPendingSbd !== null ? `${b.avgPendingSbd.toFixed(2)} SBD` : "—"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p style={{ color: C.faint, fontSize: "0.71rem", marginTop: "0.6rem", marginBottom: 0 }}>
+        Wachstum erst ab 5 Votes zuverlässig · SP/VP = realisierte Curation SP pro eingesetztem VP
+      </p>
+    </>
+  );
+}
+
 function GrowthAnalyticsPanel({ data, loading }: {
   data: GrowthAnalytics | null;
   loading: boolean;
@@ -1267,11 +1315,17 @@ function GrowthAnalyticsPanel({ data, loading }: {
                 ))}
               </div>
 
-              <GrowthTable buckets={buckets[dim]} />
-
-              <p style={{ color: C.faint, fontSize: "0.72rem", marginTop: "0.75rem", marginBottom: 0 }}>
-                growth_factor = post_final_payout / pool_at_vote_time · Ø ≈ 2.5 bestätigt Faktor 0.20-Hypothese
-              </p>
+              {dim === "author"
+                ? <AuthorRankingTable buckets={buckets[dim]} />
+                : (
+                  <>
+                    <GrowthTable buckets={buckets[dim]} />
+                    <p style={{ color: C.faint, fontSize: "0.72rem", marginTop: "0.75rem", marginBottom: 0 }}>
+                      growth_factor = post_final_payout / pool_at_vote_time · Ø ≈ 2.5 bestätigt Faktor 0.20-Hypothese
+                    </p>
+                  </>
+                )
+              }
             </>
           )}
         </div>

@@ -731,9 +731,12 @@ export function getLiveVoteReport(username: string): LiveVoteReport {
 export interface GrowthBucket {
   label:         string;
   n:             number;
-  avgGrowth:     number | null;   // null if n < 2 (insufficient data)
+  avgGrowth:     number | null;   // null if n < MIN_GF_SAMPLE (insufficient data)
   avgPendingSbd: number | null;
+  avgSpPerVp?:   number | null;   // only populated for byAuthor
 }
+
+const MIN_GF_SAMPLE = 5; // minimum votes before avgGrowth is considered reliable
 
 export interface GrowthAnalytics {
   n:             number;          // rows with both pending > 0 and final > 0
@@ -764,7 +767,7 @@ export function getGrowthAnalytics(username: string): GrowthAnalytics {
     rows.map(r => ({
       label:         r.label,
       n:             r.n,
-      avgGrowth:     r.n >= 2 && r.avg_growth !== null ? Math.round(r.avg_growth * 100) / 100 : null,
+      avgGrowth:     r.n >= MIN_GF_SAMPLE && r.avg_growth !== null ? Math.round(r.avg_growth * 100) / 100 : null,
       avgPendingSbd: r.avg_pending !== null ? Math.round(r.avg_pending * 100) / 100 : null,
     }));
 
@@ -845,18 +848,27 @@ export function getGrowthAnalytics(username: string): GrowthAnalytics {
     LIMIT 15
   `).all(username) as any[]);
 
-  const byAuthor = toBucket(db.prepare(`
+  const byAuthor: GrowthBucket[] = (db.prepare(`
     SELECT
       author as label,
       COUNT(*) as n,
       AVG(post_final_payout_sbd / post_pending_payout_sbd) as avg_growth,
-      AVG(post_pending_payout_sbd) as avg_pending
+      AVG(post_pending_payout_sbd) as avg_pending,
+      AVG(CASE WHEN realized_curation_sp IS NOT NULL AND weight_bps > 0
+               THEN realized_curation_sp / (weight_bps / 10000.0) END) as avg_sp_per_vp
     FROM vb_global_vote_outcomes
     WHERE ${BASE_FILTER}
     GROUP BY label
     ORDER BY n DESC
     LIMIT 15
-  `).all(username) as any[]);
+  `).all(username) as Array<{ label: string; n: number; avg_growth: number | null; avg_pending: number | null; avg_sp_per_vp: number | null }>)
+    .map(r => ({
+      label:         r.label,
+      n:             r.n,
+      avgGrowth:     r.n >= MIN_GF_SAMPLE && r.avg_growth !== null ? Math.round(r.avg_growth * 100) / 100 : null,
+      avgPendingSbd: r.avg_pending !== null ? Math.round(r.avg_pending * 100) / 100 : null,
+      avgSpPerVp:    r.avg_sp_per_vp !== null ? Math.round(r.avg_sp_per_vp * 100_000) / 100_000 : null,
+    }));
 
   const byWeekday = toBucket(db.prepare(`
     SELECT
