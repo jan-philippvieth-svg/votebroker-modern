@@ -112,12 +112,12 @@ function getRecentlyVotedKeys(voter: string): Set<string> {
 
 // ── Whale signal lookup (optional enrichment) ─────────────────────────────────
 
-function getWhaleSignal(author: string): { whaleCount: number; avgPayoutSbd: number } | null {
+function getWhaleSignal(author: string): { whaleCount: number; avgPayoutSbd: number; avgGrowthFactor: number | null } | null {
   const row = getDb().prepare(`
-    SELECT whale_count, avg_payout_sbd FROM vb_signal_author WHERE author = ?
-  `).get(author) as { whale_count: number; avg_payout_sbd: number } | undefined;
+    SELECT whale_count, avg_payout_sbd, avg_growth_factor FROM vb_signal_author WHERE author = ?
+  `).get(author) as { whale_count: number; avg_payout_sbd: number; avg_growth_factor: number | null } | undefined;
   if (!row) return null;
-  return { whaleCount: row.whale_count ?? 0, avgPayoutSbd: row.avg_payout_sbd ?? 0 };
+  return { whaleCount: row.whale_count ?? 0, avgPayoutSbd: row.avg_payout_sbd ?? 0, avgGrowthFactor: row.avg_growth_factor ?? null };
 }
 
 // ── Author history lookup (sp_per_vp from realized votes) ─────────────────────

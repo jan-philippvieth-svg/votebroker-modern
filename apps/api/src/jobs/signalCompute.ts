@@ -166,6 +166,36 @@ function computeAuthorSignals(log: typeof console): void {
   });
 
   insert();
+
+  // Enrich with Growth Factor from vb_global_vote_outcomes (post-level metric, voter-independent)
+  // GF = post_final_payout_sbd / post_pending_payout_sbd — measures post growth after vote
+  // r(log_gf, sp_per_vp) = 0.868 (ADR-005) — strongest predictor we have
+  const gfRows = db.prepare(`
+    SELECT author,
+           AVG(post_final_payout_sbd / post_pending_payout_sbd) as avg_gf,
+           COUNT(*) as n
+    FROM vb_global_vote_outcomes
+    WHERE post_pending_payout_sbd > 0.01
+      AND post_final_payout_sbd IS NOT NULL
+      AND post_final_payout_sbd / post_pending_payout_sbd BETWEEN 0.1 AND 100
+    GROUP BY author
+    HAVING COUNT(*) >= 2
+  `).all() as Array<{ author: string; avg_gf: number; n: number }>;
+
+  if (gfRows.length > 0) {
+    const updateGf = db.prepare(`
+      UPDATE vb_signal_author
+      SET avg_growth_factor = ?, gf_sample_n = ?
+      WHERE author = ?
+    `);
+    db.transaction(() => {
+      for (const r of gfRows) {
+        updateGf.run(Math.round(r.avg_gf * 100) / 100, r.n, r.author);
+      }
+    })();
+    log.info(`[SignalCompute] Growth factor enriched for ${gfRows.length} authors`);
+  }
+
   log.info(`[SignalCompute] Author signals: ${byAuthor.size} authors processed`);
 }
 

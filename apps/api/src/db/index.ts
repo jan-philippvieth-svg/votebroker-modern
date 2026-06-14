@@ -271,6 +271,11 @@ function initSchema(db: Database): void {
       p50_delay_min       REAL,
       p75_delay_min       REAL,
       optimal_window      TEXT,          -- "5-30min" | "30-120min" | "2-6h" | "6h+" | "variabel"
+      -- CoPilot training data (from vb_global_vote_outcomes, per voter)
+      avg_sp_per_vp       REAL,          -- historical avg curation SP per full VP (realized votes)
+      sp_per_vp_cv        REAL,          -- coefficient of variation — consistency measure
+      avg_growth_factor   REAL,          -- avg post_final_payout / post_pending_payout_sbd
+      gf_sample_n         INTEGER,       -- number of votes with computable growth factor
       -- Meta
       sample_posts        INTEGER,
       data_days           INTEGER,       -- days of data this was computed from
@@ -461,6 +466,15 @@ function runMigrations(db: Database): void {
         CREATE INDEX IF NOT EXISTS idx_whale_details_whale
           ON vb_whale_vote_details(whale);
       `);
+    }
+
+    // vb_signal_author: CoPilot training columns (growth factor + sp/vp history)
+    const vsaCols = (db.prepare("PRAGMA table_info(vb_signal_author)").all() as Array<{name:string}>).map(c=>c.name);
+    if (vsaCols.length > 0) {
+      if (!vsaCols.includes("avg_sp_per_vp"))     db.exec("ALTER TABLE vb_signal_author ADD COLUMN avg_sp_per_vp REAL");
+      if (!vsaCols.includes("sp_per_vp_cv"))      db.exec("ALTER TABLE vb_signal_author ADD COLUMN sp_per_vp_cv REAL");
+      if (!vsaCols.includes("avg_growth_factor")) db.exec("ALTER TABLE vb_signal_author ADD COLUMN avg_growth_factor REAL");
+      if (!vsaCols.includes("gf_sample_n"))       db.exec("ALTER TABLE vb_signal_author ADD COLUMN gf_sample_n INTEGER");
     }
 
     // vb_global_vote_outcomes: post-context columns for copilot training data

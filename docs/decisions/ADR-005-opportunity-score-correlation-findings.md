@@ -98,6 +98,100 @@ Muster: Moderate–hohe Payout-Posts (10–25 SBD) mit frühem Timing (<2h). Die
 
 ---
 
+## Growth Factor — stärkste Korrelation (Claus-Input, 2026-06-14)
+
+### 0. Kernerkenntnis: Growth Factor = post_final_payout / post_pending_payout
+
+**r(log_gf, sp_per_vp) = 0.868** — mit Abstand stärkste Korrelation in der Analyse.
+Vergleich: delay r=−0.37, pending r=−0.27, whale_count r=−0.32.
+
+Growth Factor misst: "Wie stark ist der Post nach dem Vote gewachsen?"
+Ein Post mit 2 SBD pending → 20 SBD final (GF=10×) ist fundamental anders als
+2 SBD pending → 3 SBD final (GF=1.5×) — obwohl beide zum Vote-Zeitpunkt gleich aussehen.
+
+n=220 Votes mit berechenbarem GF (beide Spalten gefüllt, pending > 0.01 SBD).
+
+### Befunde Growth Factor
+
+**GF-Buckets vs. SP/VP:**
+
+| GF-Bucket | n | avg SP/VP | avg Pending | avg Final |
+|-----------|---|-----------|-------------|-----------|
+| >20× | 6 | **0.281** | 0.06 SBD | 5.11 SBD |
+| 10–20× | 7 | **0.160** | 0.20 SBD | 2.68 SBD |
+| 5–10× | 2 | 0.111 | 0.80 SBD | 4.23 SBD |
+| 3–5× | 3 | 0.090 | 1.28 SBD | 4.80 SBD |
+| 2–3× | 11 | 0.097 | 3.21 SBD | 8.37 SBD |
+| 1.5–2× | 14 | 0.070 | 31.04 SBD | 55.83 SBD |
+| 1–1.5× | 46 | 0.071 | 61.64 SBD | 64.37 SBD |
+| <1× (gefallen) | 131 | **0.060** | 73.94 SBD | 68.32 SBD |
+
+**Mechanismus:** Hoher GF = Pool wächst nach dem Vote → frühe Voter bekommen überproportionalen Anteil.
+Niedriger GF / schrumpfend = Post war bereits auf Peak, Payout-Pool schon voll konkurriert.
+
+### Pending Payout als Live-Prädiktor für Growth Factor
+
+Growth Factor ist eine Post-Hoc-Metrik (erst nach Auszahlung bekannt).
+Die beste live-verfügbare Annäherung zum Vote-Zeitpunkt ist Pending Payout:
+
+| Pending bei Vote | avg GF | avg SP/VP |
+|-----------------|--------|-----------|
+| < 0.5 SBD | **12.76×** | 0.1163 |
+| 0.5–2 SBD | 1.99× | 0.0853 |
+| 2–5 SBD | 1.77× | 0.0692 |
+| 5–10 SBD | 1.26× | 0.0674 |
+| 10+ SBD | **0.99×** | 0.0633 |
+
+**Konklusion:** Pending Payout (unser aktueller Score-Bestandteil "Payout Sweetspot") ist der optimale
+Live-Prädiktor für Growth Factor. Die Logik stimmt überein:
+Niedrig pending → Post noch nicht entdeckt → hohe Wachstumswahrscheinlichkeit.
+
+### Author-level Growth Factor (Stufe-2-Vorstufe)
+
+Erste Author-Level-Muster (≥3 Datenpunkte):
+
+| Autor | n | avg GF | min GF | max GF | avg Pending | avg SP/VP |
+|-------|---|--------|--------|--------|-------------|-----------|
+| @solperez | 4 | **10.27×** | 2.01 | 18.14 | 0.61 SBD | 0.1549 |
+| @realrobinhood | 3 | 2.82× | 1.94 | 3.79 | 4.80 SBD | 0.1074 |
+| @maxinpower | 3 | 2.02× | 1.78 | 2.17 | 0.62 SBD | 0.0833 |
+
+**Erkenntnis:** @solperez schreibt konsistent "Sleeper-Posts" (avg 0.61 SBD pending → avg 6.3 SBD final).
+Das wird die Basis für den Author-History-Score: nicht nur avg sp/vp, sondern auch avg_growth_factor.
+
+### vote_growth_snapshots — bereits vollständige Zeitreihen
+
+| Snapshot | Rows | avg Pending | Zeitraum |
+|----------|------|-------------|---------|
+| vote_time | 173 | 36.88 SBD | 2026-06-11 bis heute |
+| t15m | 190 | 35.86 SBD | |
+| t1h | 188 | 36.90 SBD | |
+| t6h | 174 | 39.59 SBD | |
+| t24h | 187 | 40.27 SBD | |
+| t72h | 272 | 38.43 SBD | |
+| final | 397 | 43.38 SBD | |
+
+Die Zeitreihen ermöglichen zukünftig: GF als `t72h / vote_time` (stabiler als final/pending),
+oder frühe Wachstumssignale (`t1h / vote_time > 2×` = Post zieht gerade an).
+
+### Paradigmenwechsel: Score → Expected SP/VP (Claus-Vision)
+
+Das Ziel des CoPilots sollte nicht sein: "Dieser Post hat 92 Punkte."
+Sondern: "Dieser Post hat erwartete **0.14 SP pro eingesetztem VP**."
+
+Dann wird VP-Allokation zu einem echten Optimierungsproblem:
+Maximiere Gesamt-SP aus verfügbarem VP-Budget.
+Ergebnis automatisch: Post A → 35%, Post B → 25%, Post C → 20%.
+
+**Trainingsziel (langfristig):** Lerne f(pending, delay, whale_count, author_history) → expected_sp_per_vp.
+Growth Factor ist dabei die wichtigste Zielgröße im Training — weil er misst was wirklich zählt:
+"Wie viel ist der Pool nach dem Vote gewachsen?"
+
+**Nächster Schritt:** `avg_growth_factor` pro Autor in `vb_signal_author` berechnen und speichern.
+Dann: Author History Score = f(avg_sp_per_vp, avg_growth_factor, cv) statt nur avg_sp_per_vp.
+
+---
+
 ## Erweiterte Befunde (Michelangelo3-Faktoren, 2026-06-14)
 
 ### 6. Signal-Kuratoren (whale_count) — überraschend negativ
