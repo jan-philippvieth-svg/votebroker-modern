@@ -69,9 +69,6 @@ import {
   signOut,
   type AuthSession,
   type CommunityPoolOverview,
-  type CommunityDiscovery,
-  type AuthorDiscoveryCard,
-  fetchCommunityDiscovery,
   type WhaleSignalsData,
   type WhaleSignalEntry,
   fetchWhaleSignals,
@@ -111,7 +108,6 @@ import {
 } from "./SettingsView";
 import {
   WhaleSignalSection,
-  CommunityDiscoverySection,
   AuthorIntelligenceSection,
 } from "./CommunityView";
 import {
@@ -161,8 +157,6 @@ export function App() {
   const [consentError, setConsentError] = useState<string | null>(null);
   const [communityOverview, setCommunityOverview] = useState<CommunityPoolOverview | null>(null);
   const [communityError, setCommunityError] = useState<string | null>(null);
-  const [communityDiscovery, setCommunityDiscovery] = useState<CommunityDiscovery | null>(null);
-  const [communityDiscoveryLoading, setCommunityDiscoveryLoading] = useState(false);
   const [whaleSignals, setWhaleSignals] = useState<WhaleSignalsData | null>(null);
   const [whaleSignalsLoading, setWhaleSignalsLoading] = useState(false);
   const [authorIntelligence, setAuthorIntelligence] = useState<AuthorIntelligenceData | null>(null);
@@ -289,13 +283,6 @@ export function App() {
   // Lazy-load community discovery + whale signals when community tab opens
   useEffect(() => {
     if (activeTab !== "community" || !session) return;
-    if (!communityDiscovery && !communityDiscoveryLoading) {
-      setCommunityDiscoveryLoading(true);
-      fetchCommunityDiscovery(session.token)
-        .then(setCommunityDiscovery)
-        .catch(() => setCommunityDiscovery(null))
-        .finally(() => setCommunityDiscoveryLoading(false));
-    }
     if (!whaleSignals && !whaleSignalsLoading) {
       setWhaleSignalsLoading(true);
       fetchWhaleSignals(session.token)
@@ -1152,21 +1139,13 @@ export function App() {
             loading={authorIntelligenceLoading}
             locale={locale}
           />
-          {/* Zweispaltiges Layout: Whale Discovery + Community Discovery */}
-          <div style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: "2rem", alignItems: "start", marginTop: "2.5rem" }}>
-            {/* Linke Spalte: Whale Discovery */}
+          {/* Signal-Kuratoren Radar */}
+          <div style={{ marginTop: "2.5rem" }}>
             <WhaleSignalSection
               data={whaleSignals}
               loading={whaleSignalsLoading}
               onAddToStrategy={addAuthorToStrategy}
               t={t}
-            />
-            {/* Rechte Spalte: Community Discovery */}
-            <CommunityDiscoverySection
-              discovery={communityDiscovery}
-              loading={communityDiscoveryLoading}
-              onAddToStrategy={addAuthorToStrategy}
-              locale={locale}
             />
           </div>
         </div>
