@@ -14,6 +14,11 @@ import { getDb } from "../db/index.js";
 const RUN_HOUR_UTC   = 2;
 const RUN_MINUTE_UTC = 30;
 
+// Minimum sample sizes before a metric is considered reliable enough to display/use.
+// Show "zu wenig Daten" in UI when below these thresholds.
+export const MIN_SP_PER_VP_SAMPLE  = 3;  // avg_sp_per_vp (from vb_global_vote_outcomes)
+export const MIN_GROWTH_FACTOR_SAMPLE = 5; // avg_growth_factor — GF can be very volatile at n<5
+
 let _timer: ReturnType<typeof setTimeout> | null = null;
 let _started = false;
 
@@ -179,7 +184,7 @@ function computeAuthorSignals(log: typeof console): void {
       AND post_final_payout_sbd IS NOT NULL
       AND post_final_payout_sbd / post_pending_payout_sbd BETWEEN 0.1 AND 100
     GROUP BY author
-    HAVING COUNT(*) >= 2
+    HAVING COUNT(*) >= 3
   `).all() as Array<{ author: string; avg_gf: number; n: number }>;
 
   if (gfRows.length > 0) {

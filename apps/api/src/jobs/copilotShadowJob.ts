@@ -18,6 +18,7 @@ import { hasConsent } from "../consent/consentStore.js";
 import { loadStrategy } from "../strategy/strategyStore.js";
 import { fetchRecentPostsWithVotes, type PostOpportunity } from "../chain/recentPosts.js";
 import { calcOpportunityScore, OPPORTUNITY_GATE } from "../chain/opportunityScore.js";
+import { MIN_GROWTH_FACTOR_SAMPLE } from "./signalCompute.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -114,10 +115,12 @@ function getRecentlyVotedKeys(voter: string): Set<string> {
 
 function getWhaleSignal(author: string): { whaleCount: number; avgPayoutSbd: number; avgGrowthFactor: number | null } | null {
   const row = getDb().prepare(`
-    SELECT whale_count, avg_payout_sbd, avg_growth_factor FROM vb_signal_author WHERE author = ?
-  `).get(author) as { whale_count: number; avg_payout_sbd: number; avg_growth_factor: number | null } | undefined;
+    SELECT whale_count, avg_payout_sbd, avg_growth_factor, gf_sample_n FROM vb_signal_author WHERE author = ?
+  `).get(author) as { whale_count: number; avg_payout_sbd: number; avg_growth_factor: number | null; gf_sample_n: number | null } | undefined;
   if (!row) return null;
-  return { whaleCount: row.whale_count ?? 0, avgPayoutSbd: row.avg_payout_sbd ?? 0, avgGrowthFactor: row.avg_growth_factor ?? null };
+  // Only expose growth factor when sample is large enough to be reliable
+  const reliableGf = (row.gf_sample_n ?? 0) >= MIN_GROWTH_FACTOR_SAMPLE ? row.avg_growth_factor : null;
+  return { whaleCount: row.whale_count ?? 0, avgPayoutSbd: row.avg_payout_sbd ?? 0, avgGrowthFactor: reliableGf };
 }
 
 // ── Author history lookup (sp_per_vp from realized votes) ─────────────────────
