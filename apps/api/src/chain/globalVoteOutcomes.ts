@@ -859,7 +859,10 @@ export function getGrowthAnalytics(username: string): GrowthAnalytics {
     FROM vb_global_vote_outcomes
     WHERE ${BASE_FILTER}
     GROUP BY label
-    ORDER BY n DESC
+    ORDER BY
+      CASE WHEN COUNT(*) >= 5 THEN 0 ELSE 1 END,
+      AVG(post_final_payout_sbd / post_pending_payout_sbd) DESC,
+      COUNT(*) DESC
     LIMIT 15
   `).all(username) as Array<{ label: string; n: number; avg_growth: number | null; avg_pending: number | null; avg_sp_per_vp: number | null }>)
     .map(r => ({

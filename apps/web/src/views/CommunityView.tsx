@@ -8,6 +8,8 @@ import type {
   CommunityDiscovery,
   WhaleSignalsData,
   WhaleSignalEntry,
+  AuthorIntelligenceData,
+  AuthorIntelligenceEntry,
 } from "../api";
 import { type StrategyCategory } from "./strategyTypes";
 
@@ -497,5 +499,138 @@ export function SummaryCard(props: { icon: React.ReactNode; label: string; value
       <strong>{props.value}</strong>
       <p>{props.detail}</p>
     </section>
+  );
+}
+
+// ── Author Intelligence Section ───────────────────────────────────────────────
+
+function gfColor(gf: number): string {
+  if (gf >= 2.0) return CD.ok;
+  if (gf >= 1.2) return CD.warn;
+  return CD.faint;
+}
+
+function spColor(sp: number): string {
+  if (sp >= 0.10) return CD.ok;
+  if (sp >= 0.07) return CD.warn;
+  return CD.faint;
+}
+
+function AuthorIntelligenceTable({
+  entries, t, showGf,
+}: {
+  entries: AuthorIntelligenceEntry[];
+  t: ReturnType<typeof createTranslator>;
+  showGf: boolean;
+}) {
+  if (entries.length === 0) return null;
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+        <thead>
+          <tr style={{ borderBottom: `2px solid ${CD.border}` }}>
+            <th style={{ textAlign: "left",   padding: "0.35rem 0.6rem", color: CD.dim, fontWeight: 600, fontSize: "0.72rem" }}>{t("aiColAuthor")}</th>
+            {showGf && (
+              <th style={{ textAlign: "right", padding: "0.35rem 0.6rem", color: CD.dim, fontWeight: 600, fontSize: "0.72rem" }} title={t("aiGfTooltip")}>{t("aiColGf")} ⓘ</th>
+            )}
+            <th style={{ textAlign: "right", padding: "0.35rem 0.6rem", color: CD.dim, fontWeight: 600, fontSize: "0.72rem" }} title={t("aiSpTooltip")}>{t("aiColSpPerVp")} ⓘ</th>
+            <th style={{ textAlign: "center", padding: "0.35rem 0.6rem", color: CD.dim, fontWeight: 600, fontSize: "0.72rem" }}>{t("aiColSamples")}</th>
+            <th style={{ textAlign: "center", padding: "0.35rem 0.6rem", color: CD.dim, fontWeight: 600, fontSize: "0.72rem" }}>{t("aiColWhales")}</th>
+            <th style={{ textAlign: "left",   padding: "0.35rem 0.6rem", color: CD.dim, fontWeight: 600, fontSize: "0.72rem" }}></th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map((e, i) => (
+            <tr key={e.author} style={{ borderBottom: `1px solid ${CD.border}`, background: i % 2 === 0 ? "transparent" : CD.tag }}>
+              <td style={{ padding: "0.4rem 0.6rem", fontWeight: 700 }}>
+                <a href={`https://steemit.com/@${e.author}`} target="_blank" rel="noreferrer"
+                  style={{ color: CD.info, textDecoration: "none" }}>
+                  @{e.author}
+                </a>
+              </td>
+              {showGf && (
+                <td style={{ textAlign: "right", padding: "0.4rem 0.6rem", fontWeight: 700, color: e.avgGrowthFactor != null ? gfColor(e.avgGrowthFactor) : CD.faint }}>
+                  {e.avgGrowthFactor != null ? `${e.avgGrowthFactor.toFixed(2)}×` : t("autorRankingGfInsuff")}
+                </td>
+              )}
+              <td style={{ textAlign: "right", padding: "0.4rem 0.6rem", fontWeight: e.avgSpPerVp != null ? 700 : 400, color: e.avgSpPerVp != null ? spColor(e.avgSpPerVp) : CD.faint }}>
+                {e.avgSpPerVp != null ? e.avgSpPerVp.toFixed(3) : "—"}
+              </td>
+              <td style={{ textAlign: "center", padding: "0.4rem 0.6rem", color: CD.dim }}>
+                {e.gfSampleN}
+              </td>
+              <td style={{ textAlign: "center", padding: "0.4rem 0.6rem", color: CD.dim }}>
+                {e.whaleCount > 0 ? e.whaleCount : "—"}
+              </td>
+              <td style={{ padding: "0.4rem 0.6rem", fontSize: "0.72rem" }}>
+                {e.inMyStrategy
+                  ? <span style={{ color: CD.ok, fontWeight: 600 }}>{t("aiInStrategy")}</span>
+                  : <span style={{ color: CD.faint }}>{t("aiNotInStrategy")}</span>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export function AuthorIntelligenceSection({ data, loading, locale }: {
+  data:    AuthorIntelligenceData | null;
+  loading: boolean;
+  locale?: Locale;
+}) {
+  const t = createTranslator(locale ?? "de");
+
+  return (
+    <div style={{ marginTop: "2rem" }}>
+      {/* Section Header */}
+      <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", marginBottom: "0.5rem", flexWrap: "wrap" as const }}>
+        <h2 style={{ fontSize: "1.15rem", fontWeight: 800, color: CD.text, margin: 0 }}>
+          {t("aiTitle")}
+        </h2>
+        {data && (
+          <span style={{ fontSize: "0.72rem", color: CD.dim }}>
+            {data.ranked.length + data.insufficient.length} Autoren
+          </span>
+        )}
+      </div>
+      <p style={{ fontSize: "0.78rem", color: CD.faint, margin: "0 0 1rem 0" }}>
+        {t("aiSubtitle")}
+      </p>
+
+      {loading && (
+        <div style={{ padding: "2rem", textAlign: "center", color: CD.dim, fontSize: "0.85rem" }}>
+          {t("aiLoading")}
+        </div>
+      )}
+
+      {!loading && (!data || (data.ranked.length === 0 && data.insufficient.length === 0)) && (
+        <div style={{ padding: "2rem", textAlign: "center", background: CD.card, border: `1px solid ${CD.border}`, borderRadius: "10px", color: CD.dim, fontSize: "0.82rem" }}>
+          {t("aiNoData")}
+        </div>
+      )}
+
+      {!loading && data && data.ranked.length > 0 && (
+        <div style={{ marginBottom: "1.5rem" }}>
+          <div style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.06em", color: CD.ok, marginBottom: "0.3rem" }}>
+            {t("aiRankedHeader")}
+          </div>
+          <p style={{ fontSize: "0.72rem", color: CD.faint, margin: "0 0 0.6rem 0" }}>{t("aiRankedSub")}</p>
+          <AuthorIntelligenceTable entries={data.ranked} t={t} showGf={true} />
+        </div>
+      )}
+
+      {!loading && data && data.insufficient.length > 0 && (
+        <div>
+          <div style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.06em", color: CD.warn, marginBottom: "0.3rem" }}>
+            {t("aiInsufHeader")}
+          </div>
+          <p style={{ fontSize: "0.72rem", color: CD.faint, margin: "0 0 0.6rem 0" }}>{t("aiInsufSub")}</p>
+          <AuthorIntelligenceTable entries={data.insufficient} t={t} showGf={false} />
+        </div>
+      )}
+    </div>
   );
 }

@@ -75,6 +75,10 @@ import {
   type WhaleSignalsData,
   type WhaleSignalEntry,
   fetchWhaleSignals,
+  type AuthorIntelligenceData,
+  fetchAuthorIntelligence,
+  type OpportunitiesData,
+  fetchTopOpportunities,
   type ConsentRecord,
   type ConsentState,
   type ConsentType,
@@ -108,11 +112,13 @@ import {
 import {
   WhaleSignalSection,
   CommunityDiscoverySection,
+  AuthorIntelligenceSection,
 } from "./CommunityView";
 import {
   type VoteBatchResult,
 } from "./VotePlanView";
 import { CurationDnaPanel } from "./DnaView";
+import { OpportunitiesView } from "./OpportunitiesView";
 
 export function App() {
   const [locale, setLocale] = useState<Locale>(() => (window.localStorage.getItem("votebroker.locale") as Locale | null) ?? "de");
@@ -159,6 +165,10 @@ export function App() {
   const [communityDiscoveryLoading, setCommunityDiscoveryLoading] = useState(false);
   const [whaleSignals, setWhaleSignals] = useState<WhaleSignalsData | null>(null);
   const [whaleSignalsLoading, setWhaleSignalsLoading] = useState(false);
+  const [authorIntelligence, setAuthorIntelligence] = useState<AuthorIntelligenceData | null>(null);
+  const [authorIntelligenceLoading, setAuthorIntelligenceLoading] = useState(false);
+  const [topOpportunities, setTopOpportunities] = useState<OpportunitiesData | null>(null);
+  const [topOpportunitiesLoading, setTopOpportunitiesLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [consentLoading, setConsentLoading] = useState<ConsentType | null>(null);
@@ -193,7 +203,7 @@ export function App() {
   const [strategyHydrated, setStrategyHydrated] = useState(false);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [curationConstants, setCurationConstants] = useState<CurationConstants | null>(null);
-  const [activeTab, setActiveTab] = useState<"dna" | "dashboard" | "community" | "billing" | "admin">("dna");
+  const [activeTab, setActiveTab] = useState<"dna" | "dashboard" | "community" | "opportunities" | "billing" | "admin">("dna");
   const t = createTranslator(locale);
 
   useEffect(() => {
@@ -292,6 +302,26 @@ export function App() {
         .then(setWhaleSignals)
         .catch(() => setWhaleSignals(null))
         .finally(() => setWhaleSignalsLoading(false));
+    }
+    if (!authorIntelligence && !authorIntelligenceLoading) {
+      setAuthorIntelligenceLoading(true);
+      fetchAuthorIntelligence(session.token)
+        .then(setAuthorIntelligence)
+        .catch(() => setAuthorIntelligence(null))
+        .finally(() => setAuthorIntelligenceLoading(false));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, session]);
+
+  // Lazy-load top-opportunities when Opportunities tab opens
+  useEffect(() => {
+    if (activeTab !== "opportunities" || !session) return;
+    if (!topOpportunities && !topOpportunitiesLoading) {
+      setTopOpportunitiesLoading(true);
+      fetchTopOpportunities(session.token)
+        .then(setTopOpportunities)
+        .catch(() => setTopOpportunities(null))
+        .finally(() => setTopOpportunitiesLoading(false));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, session]);
@@ -1016,11 +1046,12 @@ export function App() {
 
       {/* Tab navigation */}
       <nav style={{ display: "flex", borderBottom: "1px solid #21262d", background: "#ffffff", padding: "0 1.5rem" }}>
-        {(["dna", "dashboard", "community", "billing"] as const).map((tab) => {
+        {(["dna", "dashboard", "community", "opportunities", "billing"] as const).map((tab) => {
           const labels: Record<string, string> = {
             dna: t("tabDna"),
             dashboard: t("tabDashboard"),
             community: t("tabCommunity"),
+            opportunities: t("tabOpportunities"),
             billing: t("tabSettings"),
           };
           return (
@@ -1112,10 +1143,17 @@ export function App() {
         />
       )}
 
-      {/* Tab: Community — Zwei-Spalten-Layout */}
+      {/* Tab: Community */}
       {activeTab === "community" && (
         <div style={{ padding: "1.25rem 1.5rem" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: "2rem", alignItems: "start" }}>
+          {/* Author Intelligence — full width, top section */}
+          <AuthorIntelligenceSection
+            data={authorIntelligence}
+            loading={authorIntelligenceLoading}
+            locale={locale}
+          />
+          {/* Zweispaltiges Layout: Whale Discovery + Community Discovery */}
+          <div style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: "2rem", alignItems: "start", marginTop: "2.5rem" }}>
             {/* Linke Spalte: Whale Discovery */}
             <WhaleSignalSection
               data={whaleSignals}
@@ -1132,6 +1170,15 @@ export function App() {
             />
           </div>
         </div>
+      )}
+
+      {/* Tab: Opportunities */}
+      {activeTab === "opportunities" && (
+        <OpportunitiesView
+          data={topOpportunities}
+          loading={topOpportunitiesLoading}
+          locale={locale}
+        />
       )}
 
       {/* Tab: Billing / Einstellungen */}

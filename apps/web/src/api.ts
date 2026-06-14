@@ -1170,6 +1170,75 @@ export async function fetchWhaleSignals(token: string): Promise<WhaleSignalsData
   return res.json();
 }
 
+// ── Opportunities ─────────────────────────────────────────────────────────────
+
+export interface OpportunityComponents {
+  payoutSweetspot: number;
+  timing:          number;
+  signalCurators:  number;
+  discovery:       number;
+  authorHistory:   number;
+}
+
+export interface OpportunityEntry {
+  author:           string;
+  permlink:         string;
+  title:            string;
+  ageMinutes:       number;
+  remainingHours:   number;
+  pendingPayoutSbd: number;
+  community:        string | null;
+  whaleCount:       number;
+  authorAvgGf:      number | null;
+  authorGfSampleN:  number;
+  opportunityScore: number;
+  components:       OpportunityComponents;
+  inMyStrategy:     boolean;
+  myCategory:       string | null;
+  alreadyVoted:     boolean;
+  cachedAt:         string;
+}
+
+export interface OpportunitiesData {
+  opportunities:   OpportunityEntry[];
+  cacheAgeMinutes: number | null;
+  totalInCache:    number;
+  refreshedAt:     string | null;
+}
+
+export async function fetchTopOpportunities(token: string): Promise<OpportunitiesData> {
+  const res = await fetch(`${API_BASE}/api/opportunities/top`, {
+    headers: { session: token },
+  });
+  if (!res.ok) throw new Error("Opportunities konnten nicht geladen werden.");
+  return res.json();
+}
+
+export interface AuthorIntelligenceEntry {
+  author:          string;
+  avgGrowthFactor: number | null;
+  gfSampleN:       number;
+  avgSpPerVp:      number | null;
+  spSampleN:       number;
+  whaleCount:      number;
+  inMyStrategy:    boolean;
+  myCategory:      string | null;
+}
+
+export interface AuthorIntelligenceData {
+  ranked:      AuthorIntelligenceEntry[];
+  insufficient: AuthorIntelligenceEntry[];
+  computedAt:  string;
+}
+
+export async function fetchAuthorIntelligence(token: string): Promise<AuthorIntelligenceData> {
+  const res = await fetch(`${API_BASE}/api/community/author-intelligence`, {
+    headers: { session: token },
+  });
+  if (!res.ok) throw new Error("Author Intelligence konnte nicht geladen werden.");
+  return res.json();
+}
+
 // ── Devlog generation (admin-session auth) ────────────────────────────────────
 
 export interface DevlogGenerateResult {

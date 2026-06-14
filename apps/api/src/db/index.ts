@@ -402,6 +402,31 @@ function initSchema(db: Database): void {
         ELSE 'unknown'
       END AS trajectory_class
     FROM pivoted;
+
+    -- Opportunity cache — top-N scored posts from blockchain, refreshed every 30 min.
+    -- Source: top whale-signal authors; score computed without user context (category='normal').
+    -- Endpoint enriches per-user (in_strategy, already_voted) at query time.
+    CREATE TABLE IF NOT EXISTS vb_opportunity_cache (
+      author              TEXT    NOT NULL,
+      permlink            TEXT    NOT NULL,
+      title               TEXT,
+      age_minutes         REAL,
+      remaining_hours     REAL,
+      pending_payout_sbd  REAL,
+      community           TEXT,
+      whale_count         INTEGER,
+      author_avg_gf       REAL,
+      author_gf_sample_n  INTEGER,
+      opportunity_score   INTEGER NOT NULL,
+      score_payout        INTEGER,
+      score_timing        INTEGER,
+      score_signal        INTEGER,
+      score_discovery     INTEGER,
+      score_author        INTEGER,
+      cached_at           TEXT    NOT NULL,
+      PRIMARY KEY (author, permlink)
+    );
+    CREATE INDEX IF NOT EXISTS idx_opp_cache_score ON vb_opportunity_cache(opportunity_score DESC);
   `);
 }
 

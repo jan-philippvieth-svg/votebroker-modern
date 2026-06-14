@@ -523,7 +523,21 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       runSignalCompute(console).catch(e => console.warn("[SignalCompute] triggered error:", e))
     ).catch(() => {});
 
-    return { status: "started", message: "Whale scan + enrichment + signal compute running in background" };
+    import("../jobs/opportunityRefreshJob.js").then(({ runOpportunityRefresh }) =>
+      runOpportunityRefresh(console).catch(e => console.warn("[OpportunityRefresh] triggered error:", e))
+    ).catch(() => {});
+
+    return { status: "started", message: "Whale scan + enrichment + signal compute + opportunity refresh running in background" };
+  });
+
+  app.post("/api/admin/opportunity-refresh", { schema: { tags: ["Admin"], summary: "Opportunity Cache manuell neu befüllen" } }, async (request, reply) => {
+    if (!requireAdmin(request)) return reply.code(403).send({ error: "forbidden" });
+    import("../jobs/opportunityRefreshJob.js").then(({ runOpportunityRefresh }) =>
+      runOpportunityRefresh(console)
+        .then(r => console.info("[OpportunityRefresh] manual run result:", r))
+        .catch(e => console.warn("[OpportunityRefresh] manual error:", e))
+    ).catch(() => {});
+    return { status: "started", message: "Opportunity refresh running in background" };
   });
 
   app.get("/api/admin/signal-authors", { schema: { tags: ["Admin"], summary: "Top Autoren nach Signal Layer Score" } }, async (request, reply) => {

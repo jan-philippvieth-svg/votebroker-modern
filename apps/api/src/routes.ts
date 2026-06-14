@@ -730,6 +730,162 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
+  // ── GET /api/community/author-intelligence — GF + SP/VP ranking from vb_signal_author ──
+  app.get("/api/community/author-intelligence", {
+    schema: { tags: ["Community"], summary: "Author Intelligence — Growth Factor & SP/VP Ranking", security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
+    const token   = (request.headers as Record<string, string>)["session"];
+    const session = token ? getSession(token) : null;
+    if (!session) return reply.code(401).send({ error: "unauthorized" });
+
+    const db = getDb();
+
+    const rulesRow = db.prepare("SELECT rules_json FROM strategy_rules WHERE username = ?")
+      .get(session.user.username) as { rules_json: string } | undefined;
+    const myStrategy = new Map<string, string>(
+      rulesRow ? (JSON.parse(rulesRow.rules_json) as Array<{ username: string; category: string }>)
+        .map(r => [r.username, r.category]) : []
+    );
+
+    type AuthorRow = {
+      author: string;
+      avg_growth_factor: number | null;
+      gf_sample_n: number | null;
+      whale_count: number | null;
+      avg_sp_per_vp: number | null;
+      sp_sample_n: number;
+    };
+
+    const rows = db.prepare(`
+      SELECT
+        sa.author,
+        sa.avg_growth_factor,
+        COALESCE(sa.gf_sample_n, 0) AS gf_sample_n,
+        sa.whale_count,
+        AVG(CASE WHEN gvo.realized_curation_sp IS NOT NULL AND gvo.weight_bps > 0
+                 THEN gvo.realized_curation_sp / (gvo.weight_bps / 10000.0) END) AS avg_sp_per_vp,
+        COUNT(CASE WHEN gvo.realized_curation_sp IS NOT NULL AND gvo.weight_bps > 0
+                   THEN 1 END) AS sp_sample_n
+      FROM vb_signal_author sa
+      LEFT JOIN vb_global_vote_outcomes gvo ON gvo.author = sa.author
+      WHERE sa.gf_sample_n IS NOT NULL OR (gvo.realized_curation_sp IS NOT NULL AND gvo.weight_bps > 0)
+      GROUP BY sa.author
+    `).all() as AuthorRow[];
+
+    const MIN_GF = 5;
+    const MIN_SP = 3;
+
+    const toEntry = (r: AuthorRow) => ({
+      author:          r.author,
+      avgGrowthFactor: r.avg_growth_factor,
+      gfSampleN:       r.gf_sample_n ?? 0,
+      avgSpPerVp:      r.sp_sample_n >= MIN_SP ? (r.avg_sp_per_vp ?? null) : null,
+      spSampleN:       r.sp_sample_n,
+      whaleCount:      r.whale_count ?? 0,
+      inMyStrategy:    myStrategy.has(r.author),
+      myCategory:      myStrategy.get(r.author) ?? null,
+    });
+
+    const ranked = rows
+      .filter(r => (r.gf_sample_n ?? 0) >= MIN_GF)
+      .sort((a, b) => {
+        const gfDiff = (b.avg_growth_factor ?? 0) - (a.avg_growth_factor ?? 0);
+        if (Math.abs(gfDiff) > 0.001) return gfDiff;
+        return (b.avg_sp_per_vp ?? 0) - (a.avg_sp_per_vp ?? 0);
+      })
+      .map(toEntry);
+
+    const insufficient = rows
+      .filter(r => (r.gf_sample_n ?? 0) < MIN_GF)
+      .sort((a, b) => (b.gf_sample_n ?? 0) - (a.gf_sample_n ?? 0))
+      .map(toEntry);
+
+    return { ranked, insufficient, computedAt: new Date().toISOString() };
+  });
+
+  // ── GET /api/opportunities/top — top-N scored posts from blockchain ──────────
+  app.get("/api/opportunities/top", {
+    schema: { tags: ["Opportunities"], summary: "Top-Opportunities aus vb_opportunity_cache", security: [{ sessionToken: [] }] }
+  }, async (request, reply) => {
+    const token   = (request.headers as Record<string, string>)["session"];
+    const session = token ? getSession(token) : null;
+    if (!session) return reply.code(401).send({ error: "unauthorized" });
+
+    const db  = getDb();
+    const usr = session.user.username;
+
+    // User's strategy map for in_strategy enrichment
+    const rulesRow = db.prepare("SELECT rules_json FROM strategy_rules WHERE username = ?").get(usr) as { rules_json: string } | undefined;
+    const myStrategy = new Map<string, string>(
+      rulesRow ? (JSON.parse(rulesRow.rules_json) as Array<{ username: string; category: string }>)
+        .map(r => [r.username, r.category]) : []
+    );
+
+    // Recent votes by this user (last 7 days) — to mark already_voted
+    const recentVotes = new Set<string>(
+      (db.prepare(`
+        SELECT author || '/' || permlink as key
+        FROM audit_events
+        WHERE username = ? AND type = 'vote_broadcast_success'
+          AND created_at >= datetime('now', '-7 days')
+      `).all(usr) as Array<{ key: string }>).map(r => r.key)
+    );
+
+    type CacheRow = {
+      author: string; permlink: string; title: string;
+      age_minutes: number; remaining_hours: number; pending_payout_sbd: number;
+      community: string | null; whale_count: number;
+      author_avg_gf: number | null; author_gf_sample_n: number;
+      opportunity_score: number;
+      score_payout: number; score_timing: number; score_signal: number;
+      score_discovery: number; score_author: number;
+      cached_at: string;
+    };
+
+    const rows = db.prepare(`
+      SELECT * FROM vb_opportunity_cache
+      WHERE cached_at >= datetime('now', '-1 hour')
+      ORDER BY opportunity_score DESC
+      LIMIT 20
+    `).all() as CacheRow[];
+
+    const cacheAge = rows.length > 0
+      ? Math.round((Date.now() - new Date(rows[0].cached_at).getTime()) / 60_000)
+      : null;
+
+    const totalInCache = (db.prepare("SELECT COUNT(*) as n FROM vb_opportunity_cache WHERE cached_at >= datetime('now', '-1 hour')").get() as { n: number }).n;
+
+    return {
+      opportunities: rows.map(r => ({
+        author:          r.author,
+        permlink:        r.permlink,
+        title:           r.title,
+        ageMinutes:      r.age_minutes,
+        remainingHours:  r.remaining_hours,
+        pendingPayoutSbd: r.pending_payout_sbd,
+        community:       r.community,
+        whaleCount:      r.whale_count,
+        authorAvgGf:     r.author_avg_gf,
+        authorGfSampleN: r.author_gf_sample_n,
+        opportunityScore: r.opportunity_score,
+        components: {
+          payoutSweetspot: r.score_payout,
+          timing:          r.score_timing,
+          signalCurators:  r.score_signal,
+          discovery:       r.score_discovery,
+          authorHistory:   r.score_author,
+        },
+        inMyStrategy: myStrategy.has(r.author),
+        myCategory:   myStrategy.get(r.author) ?? null,
+        alreadyVoted: recentVotes.has(`${r.author}/${r.permlink}`),
+        cachedAt:     r.cached_at,
+      })),
+      cacheAgeMinutes: cacheAge,
+      totalInCache,
+      refreshedAt: rows.length > 0 ? rows[0].cached_at : null,
+    };
+  });
+
   app.get("/api/community/overview", {
     schema: { tags: ["Community"], summary: "Community-Pool-Übersicht" }
   }, async (request, reply) => {

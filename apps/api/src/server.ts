@@ -17,6 +17,7 @@ import { startWhaleEnrichment } from "./jobs/whaleEnrichment.js";
 import { startPayoutSync } from "./jobs/payoutSync.js";
 import { startSignalCompute } from "./jobs/signalCompute.js";
 import { startCopilotShadow } from "./jobs/copilotShadowJob.js";
+import { startOpportunityRefresh } from "./jobs/opportunityRefreshJob.js";
 import { startGrowthSnapshotSampler } from "./jobs/growthSnapshotSampler.js";
 import { scanWhaleHistory } from "./chain/whaleHistoryScanner.js";
 import { registerContentRoutes } from "./admin/contentRoutes.js";
@@ -90,5 +91,6 @@ setTimeout(() => {
   startCopilotShadow(log);
   startGrowthSnapshotSampler(log);
   startSignalCompute(log);
+  startOpportunityRefresh(log);
   scanWhaleHistory(log).catch(e => log.warn("[WhaleHistory] startup scan error:", e));
 }, 30_000);
