@@ -113,6 +113,93 @@
 
 ---
 
+---
+
+## Phase 8: Curation Intelligence System 📋
+*Strategie-Input von Michelangelo3, 2026-06-14*
+
+**Kernthese:** VoteBroker entwickelt sich vom Vote-Manager zum Curation Intelligence System.
+Die entscheidende Frage ist nicht "Wer hat wen gevoted?" sondern "Wo bekomme ich morgen die beste Rendite?"
+
+**Zukünftige Navigation (langfristig):**
+Dashboard · Vote DNA · Opportunities · CoPilot · Analytics
+
+---
+
+### Stufe 1: Top Opportunities 📋
+*Voraussetzung: belastbarer Opportunity-Score*
+
+Nicht: "Top-Autoren anzeigen"
+Sondern: "Top Opportunities — beste Posts die gerade gevoted werden können"
+
+| Feature | Status | Priorität |
+|---------|--------|-----------|
+| Composite Opportunity Score definieren | 📋 | **Hoch** |
+| Growth Score | 📋 | Hoch |
+| Signal Score | 📋 | Hoch |
+| Timing Score | 📋 | Hoch (bereits teilweise vorhanden) |
+| Discovery Score | 📋 | Mittel |
+| Historische Validierung: Korrelation mit Curation-Rewards | 📋 | **Hoch** |
+| `GET /api/me/opportunities` Endpoint | 📋 | Mittel |
+| Opportunities View (UI) | 📋 | Mittel |
+
+**Beispiel-Output:**
+```
+Autor    Score    Grund
+user1    92       3 Signal-Kuratoren · frühe Phase
+user2    87       Community-Wachstum
+user3    84       Whale-Muster erkannt
+```
+
+**Wichtig:** Opportunity View erst bauen, wenn Score historisch validiert ist.
+Ein Tab ohne belastbaren Score ist nur eine hübsche Liste.
+
+---
+
+### Stufe 2: Autoren-Ranking nach Curation-Rendite 📋
+*Nicht nach Reputation oder Followern — nach historischem SP-Return*
+
+| Feature | Status | Priorität |
+|---------|--------|-----------|
+| Growth-Analyse aus `vb_global_vote_outcomes` | 📋 | Hoch |
+| SP-Rendite pro Autor (normiert auf VP) | 📋 | Hoch |
+| Ranking: welche Autoren liefern regelmäßig gute Curation? | 📋 | Mittel |
+
+**Beispiel:**
+```
+userA    +320%    ▲
+userB    +280%    ▲
+userC    +240%    ▲
+```
+(Rendite relativ zum Durchschnitt des Curators)
+
+---
+
+### Stufe 3: CoPilot — vollautonome Curation 📋
+*Nutzer setzt nur Ziel-VP morgen + Max Votes. Rest läuft automatisch.*
+
+| Feature | Status | Priorität |
+|---------|--------|-----------|
+| Vote-Weight-Optimizer | 📋 | **Hoch** |
+| Scoring → Weight-Mapping: Score 96 → 35%, Score 88 → 25% | 📋 | Hoch |
+| Opportunity-Score als CoPilot-Entscheidungsbasis | 📋 | Hoch |
+| Autonomous execution (kein manueller Plan-Confirm) | 📋 | Mittel |
+
+**Schlüsselunterschied zum Status quo:**
+Nicht: 20 Posts × jeweils 10%
+Sondern: Score A=96 → 35%, B=88 → 25%, C=84 → 20%, D=70 → 10%, E=62 → 10%
+
+---
+
+### Priorisierung der nächsten Entwicklungsschritte
+
+1. **Opportunity-Score definieren** (Growth + Signal + Timing + Discovery)
+2. **Historische Validierung** — `vb_global_vote_outcomes` auswerten: welche Faktoren korrelieren tatsächlich mit Curation-Rewards? Welche nur scheinbar?
+3. **Vote-Weight-Optimizer vorbereiten** — Score-zu-Weight-Mapping aus realen Daten ableiten
+4. **Dann:** Opportunities View bauen (UI)
+
+---
+
 ## Verworfen
 
 | Feature | Grund |

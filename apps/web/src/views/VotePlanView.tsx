@@ -79,6 +79,24 @@ function RecoveryBanner({ report, t }: { report: ConstraintReport; t: ReturnType
   );
 }
 
+function MinweightBanner({ report }: { report: ConstraintReport }) {
+  const n = report.filteredByMinWeight;
+  if (!n || n === 0) return null;
+  return (
+    <div style={{
+      background: "#f0f9ff", border: "1px solid #38bdf844", borderRadius: "12px",
+      padding: "0.85rem 1.1rem", marginBottom: "0.85rem",
+    }}>
+      <div style={{ color: "#0369a1", fontWeight: 800, fontSize: "0.88rem", marginBottom: "0.25rem" }}>
+        {n} {n === 1 ? "Vote" : "Votes"} wegen Mindestvote entfernt
+      </div>
+      <div style={{ color: "#0c4a6e", fontSize: "0.82rem", lineHeight: 1.55 }}>
+        Die frei gewordene VP wurde auf die verbleibenden Votes verteilt.
+      </div>
+    </div>
+  );
+}
+
 function ConstraintBadge(props: { report: ConstraintReport }) {
   const r = props.report;
   const stopColor = r.stoppedBy === "none" ? "#16a34a" : "#d97706";
@@ -435,6 +453,9 @@ export function VotePlanSection(props: {
 
               {/* Recovery banner */}
               {plan?.report && <RecoveryBanner report={plan.report} t={t} />}
+
+              {/* Mindestvote-Filter banner */}
+              {plan?.report && <MinweightBanner report={plan.report} />}
 
               {/* Transparenz: gefunden vs. im Plan */}
               {plan?.report && plan.report.excludedVotes > 0 && (

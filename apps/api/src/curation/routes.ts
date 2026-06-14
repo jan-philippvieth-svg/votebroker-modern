@@ -113,6 +113,7 @@ interface ConstraintReport {
   minVpPct:               number;   // kept for backward-compat display
   includedVotes:          number;
   excludedVotes:          number;
+  filteredByMinWeight:    number;   // votes removed because weight fell below category minimum
   stoppedBy:              StopReason;
   stoppedByLabel:         string;
   vpAfterPlanPct:         number;
@@ -247,7 +248,7 @@ function buildVotePlan(params: {
           suggestedWeightBps: newBps,
           suggestedWeightPct: Math.round(newBps / 100 * 10) / 10,
           expectedVoteUsd:    Math.round((newBps / 10_000) * params.currentVoteUsd * 10_000) / 10_000,
-          reasons: buildReasons({ username: e.author, category: cat, maxWeightPct: 0, minWeightPct: 0, enabled: true, selectionReasons: [] }, { author: e.author, permlink: e.permlink, title: e.title, ageMinutes: e.ageMinutes, remainingHours: e.remainingHours, postScore: e.postScore, eligible: true, alreadyVoted: false, isSelfPost: false, warning: e.warning, activeVotesCount: 0, community: null }, true),
+          reasons: buildReasons({ username: e.author, category: cat, maxWeightPct: 0, minWeightPct: 0, enabled: true, selectionReasons: [] }, { author: e.author, permlink: e.permlink, title: e.title, ageMinutes: e.ageMinutes, remainingHours: e.remainingHours, postScore: e.postScore, pendingPayoutSbd: 0, eligible: true, alreadyVoted: false, isSelfPost: false, warning: e.warning, activeVotesCount: 0, community: null }, true),
         };
       });
     } else {
@@ -258,7 +259,7 @@ function buildVotePlan(params: {
           suggestedWeightBps: dustBps,
           suggestedWeightPct: Math.round(dustBps / 100 * 10) / 10,
           expectedVoteUsd:    Math.round((dustBps / 10_000) * params.currentVoteUsd * 10_000) / 10_000,
-          reasons: buildReasons({ username: e.author, category: cat, maxWeightPct: 0, minWeightPct: 0, enabled: true, selectionReasons: [] }, { author: e.author, permlink: e.permlink, title: e.title, ageMinutes: e.ageMinutes, remainingHours: e.remainingHours, postScore: e.postScore, eligible: true, alreadyVoted: false, isSelfPost: false, warning: e.warning, activeVotesCount: 0, community: null }, true),
+          reasons: buildReasons({ username: e.author, category: cat, maxWeightPct: 0, minWeightPct: 0, enabled: true, selectionReasons: [] }, { author: e.author, permlink: e.permlink, title: e.title, ageMinutes: e.ageMinutes, remainingHours: e.remainingHours, postScore: e.postScore, pendingPayoutSbd: 0, eligible: true, alreadyVoted: false, isSelfPost: false, warning: e.warning, activeVotesCount: 0, community: null }, true),
         };
       });
     }
@@ -268,6 +269,58 @@ function buildVotePlan(params: {
   for (const cat of REDUCTION_ORDER) {
     if (totalSpend(working) <= dynamicBudgetPct) break;
     working = working.filter(e => e.category !== cat);
+  }
+
+  // Phase A.5 — Mindestvote-Filter: Votes unterhalb des konfigurierten Minimums entfernen
+  // und frei werdende VP proportional auf verbleibende Votes verteilen
+  const rulesMap = new Map(params.rules.map(r => [r.username, r]));
+  let filteredByMinWeight = 0;
+  const preMinFilter = working;
+
+  working = working.filter(e => {
+    const rule = rulesMap.get(e.author);
+    const minBps = rule ? Math.round(rule.minWeightPct * 100) : 0;
+    if (minBps > 0 && e.suggestedWeightBps < minBps) {
+      filteredByMinWeight++;
+      return false;
+    }
+    return true;
+  });
+
+  // Frei gewordene VP auf verbleibende Votes verteilen (bis zu deren maxWeightPct)
+  if (filteredByMinWeight > 0 && working.length > 0) {
+    const removedKeys = new Set(
+      preMinFilter
+        .filter(e => !working.some(w => w.author === e.author && w.permlink === e.permlink))
+        .map(e => `${e.author}/${e.permlink}`)
+    );
+    const freedBps = preMinFilter
+      .filter(e => removedKeys.has(`${e.author}/${e.permlink}`))
+      .reduce((s, e) => s + e.suggestedWeightBps, 0);
+
+    if (freedBps > 0) {
+      const headrooms = working.map(e => {
+        const rule = rulesMap.get(e.author);
+        const maxBps = rule ? Math.round(rule.maxWeightPct * 100) : e.suggestedWeightBps;
+        return Math.max(0, maxBps - e.suggestedWeightBps);
+      });
+      const totalHeadroom = headrooms.reduce((a, b) => a + b, 0);
+
+      if (totalHeadroom > 0) {
+        working = working.map((e, i) => {
+          if (headrooms[i] === 0) return e;
+          const addBps = Math.min(headrooms[i], Math.round(freedBps * headrooms[i] / totalHeadroom));
+          if (addBps === 0) return e;
+          const newBps = e.suggestedWeightBps + addBps;
+          return {
+            ...e,
+            suggestedWeightBps: newBps,
+            suggestedWeightPct: Math.round(newBps / 100 * 10) / 10,
+            expectedVoteUsd:    Math.round((newBps / 10_000) * params.currentVoteUsd * 10_000) / 10_000,
+          };
+        });
+      }
+    }
   }
 
   // ── 4. Apply vote count cap ────────────────────────────────────────────────
@@ -307,6 +360,7 @@ function buildVotePlan(params: {
     minVpPct:              Math.round((vpTomorrow - dynamicBudgetPct) * 10) / 10,
     includedVotes:         included.length,
     excludedVotes:         excluded,
+    filteredByMinWeight,
     stoppedBy,
     stoppedByLabel:        STOP_LABELS[stoppedBy],
     vpAfterPlanPct:        Math.round((currentVpPct - spentPct) * 10) / 10,

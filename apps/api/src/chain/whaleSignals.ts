@@ -61,12 +61,18 @@ type SteemPost = {
 // ── Auto-discover top voters from post feeds ──────────────────────────────────
 // Finds accounts appearing most often with high rshares — the actual active whales.
 
+// Payout-Obergrenze für Auto-Discovery: Voter die überwiegend hochpreisige Posts voten
+// sind meist Bots/Vote-Services (tipu, upvu etc.) — kein echtes Qualitätssignal.
+const PAYOUT_CEILING_SBD = 12;
+const MIN_PAYOUT_SAMPLE   = 5;
+
 export async function discoverTopVoters(
   topN = 20,
   log: typeof console = console,
 ): Promise<string[]> {
   const client = createSteemClient();
-  const voterRshares = new Map<string, bigint>();
+  const voterRshares  = new Map<string, bigint>();
+  const voterPayouts  = new Map<string, number[]>();
 
   for (const feed of ["get_discussions_by_trending", "get_discussions_by_hot"] as const) {
     let posts: SteemPost[] = [];
@@ -75,15 +81,27 @@ export async function discoverTopVoters(
     } catch { continue; }
 
     for (const post of posts) {
+      const postPayout =
+        parseFloat((post.pending_payout_value ?? "0 SBD").split(" ")[0]) +
+        parseFloat((post.total_payout_value   ?? "0 SBD").split(" ")[0]);
+
       for (const vote of post.active_votes ?? []) {
         const rs = BigInt(Math.abs(Number(vote.rshares ?? 0)));
         if (rs < BigInt(MIN_RSHARES_FOR_WHALE)) continue;
         voterRshares.set(vote.voter, (voterRshares.get(vote.voter) ?? 0n) + rs);
+        if (!voterPayouts.has(vote.voter)) voterPayouts.set(vote.voter, []);
+        voterPayouts.get(vote.voter)!.push(postPayout);
       }
     }
   }
 
   const sorted = [...voterRshares.entries()]
+    .filter(([voter]) => {
+      const payouts = voterPayouts.get(voter) ?? [];
+      if (payouts.length < MIN_PAYOUT_SAMPLE) return true; // zu wenig Daten → nicht filtern
+      const avg = payouts.reduce((a, b) => a + b, 0) / payouts.length;
+      return avg <= PAYOUT_CEILING_SBD;
+    })
     .sort((a, b) => (b[1] > a[1] ? 1 : -1))
     .slice(0, topN)
     .map(([voter]) => voter);
@@ -186,6 +204,25 @@ export function getWhaleSignals(
 ): WhaleSignalsResult {
   const db = getDb();
 
+  // ── Community-Relevanz: Curatoren filtern die keinen der Strategie-Autoren gevoted haben ──
+  // Nur relevant wenn der Nutzer eine Strategie hat — sonst werden alle Curatoren angezeigt.
+  let whaleFilter = "";
+  let whaleFilterParams: string[] = [];
+
+  if (userStrategyAuthors.size > 0) {
+    const placeholders = [...userStrategyAuthors].map(() => "?").join(",");
+    const relevantWhales = (db.prepare(`
+      SELECT DISTINCT whale FROM vb_whale_author_signals WHERE author IN (${placeholders})
+    `).all([...userStrategyAuthors]) as Array<{ whale: string }>).map(r => r.whale);
+
+    if (relevantWhales.length > 0) {
+      const whalePlaceholders = relevantWhales.map(() => "?").join(",");
+      whaleFilter = `AND whale IN (${whalePlaceholders})`;
+      whaleFilterParams = relevantWhales;
+    }
+    // Kein Overlap gefunden → kein Filter (Fallback auf alle Curatoren)
+  }
+
   const rows = db.prepare(`
     SELECT
       author,
@@ -195,20 +232,23 @@ export function getWhaleSignals(
       MAX(last_voted_at)      as last_voted,
       MAX(computed_at)        as computed_at
     FROM vb_whale_author_signals
+    ${whaleFilter}
     GROUP BY author
     HAVING SUM(vote_count) >= ?
+      AND MAX(last_voted_at) >= datetime('now', '-60 days')
     ORDER BY whale_count DESC, total_votes DESC
     LIMIT ?
-  `).all(minWhaleVotes, limit) as Array<{
+  `).all([...whaleFilterParams, minWhaleVotes, limit]) as Array<{
     author: string; whale_count: number; whales_csv: string;
     total_votes: number; last_voted: string | null; computed_at: string;
   }>;
 
   const computedAt = rows[0]?.computed_at ?? null;
 
-  const trackedWhales = (db.prepare(
-    "SELECT DISTINCT whale FROM vb_whale_author_signals"
-  ).all() as Array<{ whale: string }>).map(r => r.whale);
+  // trackedWhales: aktive Curatoren aus dem gefilterten Signal-Pool
+  const trackedWhales = whaleFilterParams.length > 0
+    ? whaleFilterParams
+    : (db.prepare("SELECT DISTINCT whale FROM vb_whale_author_signals").all() as Array<{ whale: string }>).map(r => r.whale);
 
   const periodDays = (db.prepare(
     "SELECT period_days FROM vb_whale_author_signals LIMIT 1"

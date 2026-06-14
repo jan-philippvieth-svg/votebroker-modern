@@ -188,20 +188,35 @@ export async function registerStrategyRoutes(app: FastifyInstance): Promise<void
       strategy_category: string; vp_at_vote_bps: number | null;
       estimated_vote_value_sbd: number | null; realized_curation_sp: number | null;
       is_self_post: number;
-      whale_follow_rate: number | null; whale_count: number | null;
+      whale_count: number | null;
+      post_pending_payout_sbd: number | null;
     };
 
     const votes = db.prepare(`
       SELECT gvo.author, gvo.permlink, gvo.voted_at, gvo.vote_delay_minutes, gvo.weight_bps,
              gvo.strategy_category, gvo.vp_at_vote_bps, gvo.estimated_vote_value_sbd,
              gvo.realized_curation_sp, gvo.is_self_post,
-             sa.whale_follow_rate, sa.whale_count
+             gvo.post_pending_payout_sbd,
+             sa.whale_count
       FROM vb_global_vote_outcomes gvo
       LEFT JOIN vb_signal_author sa ON gvo.author = sa.author
       WHERE gvo.voter = ? AND gvo.voted_at >= ? AND gvo.strategy_category IS NOT NULL
         AND gvo.vote_delay_minutes IS NOT NULL
       ORDER BY gvo.voted_at DESC
     `).all(username, since) as VoteRow[];
+
+    // Author historical avg sp/vp — computed once for all authors in the window
+    const authorSpPerVp = new Map<string, number>();
+    const spRows = db.prepare(`
+      SELECT author,
+             AVG(realized_curation_sp / (weight_bps / 10000.0)) as avg_sp_per_vp,
+             COUNT(*) as n
+      FROM vb_global_vote_outcomes
+      WHERE voter = ? AND realized_curation_sp IS NOT NULL AND weight_bps > 0
+      GROUP BY author
+      HAVING COUNT(*) >= 3
+    `).all(username) as Array<{ author: string; avg_sp_per_vp: number; n: number }>;
+    for (const r of spRows) authorSpPerVp.set(r.author, r.avg_sp_per_vp);
 
     const PAYOUT_WINDOW_HOURS = 7 * 24;
 
@@ -211,17 +226,14 @@ export async function registerStrategyRoutes(app: FastifyInstance): Promise<void
       const rule          = strategyMap.get(v.author);
       const copilotWeightBps = rule ? Math.round(rule.maxWeightPct * 100) : null;
 
-      // Composite opportunity score — same logic as shadow job
-      const whaleFollowRate = v.whale_follow_rate != null
-        ? Math.min(1, (v.whale_count ?? 0) / 10)
-        : undefined;
-
       const opp = calcOpportunityScore({
-        ageMinutes:      delay,
+        ageMinutes:       delay,
         remainingHours,
-        category:        v.strategy_category,
-        whaleFollowRate,
-        isSelfPost:      v.is_self_post === 1,
+        category:         v.strategy_category,
+        pendingPayoutSbd: v.post_pending_payout_sbd ?? undefined,
+        whaleCount:       v.whale_count ?? undefined,
+        authorAvgSpPerVp: authorSpPerVp.get(v.author),
+        isSelfPost:       v.is_self_post === 1,
       });
 
       const wouldCopilotVote = opp.wouldAct && rule !== undefined;
@@ -270,7 +282,8 @@ export async function registerStrategyRoutes(app: FastifyInstance): Promise<void
 
         // Context
         remainingHoursAtVote: Math.round(remainingHours * 10) / 10,
-        whaleFollowRate:      v.whale_follow_rate,
+        whaleCount:           v.whale_count,
+        pendingPayoutSbd:     v.post_pending_payout_sbd,
 
         // Outcome
         vpAtVote:             v.vp_at_vote_bps,
@@ -401,23 +414,23 @@ export async function registerStrategyRoutes(app: FastifyInstance): Promise<void
     // ── Fetch realized votes with whale signal ────────────────────────────────
 
     type RealizedRow = {
-      author:               string;
-      voted_at:             string;
-      vote_delay_minutes:   number;
-      weight_bps:           number;
-      vp_at_vote_bps:       number | null;
-      realized_curation_sp: number;
-      strategy_category:    string;
-      is_self_post:         number;
-      whale_follow_rate:    number | null;
-      whale_count:          number | null;
+      author:                  string;
+      voted_at:                string;
+      vote_delay_minutes:      number;
+      weight_bps:              number;
+      vp_at_vote_bps:          number | null;
+      realized_curation_sp:    number;
+      strategy_category:       string;
+      is_self_post:            number;
+      whale_count:             number | null;
+      post_pending_payout_sbd: number | null;
     };
 
     const rows = db.prepare(`
       SELECT gvo.author, gvo.voted_at, gvo.vote_delay_minutes, gvo.weight_bps,
              gvo.vp_at_vote_bps, gvo.realized_curation_sp, gvo.strategy_category,
-             gvo.is_self_post,
-             sa.whale_follow_rate, sa.whale_count
+             gvo.is_self_post, gvo.post_pending_payout_sbd,
+             sa.whale_count
       FROM vb_global_vote_outcomes gvo
       LEFT JOIN vb_signal_author sa ON gvo.author = sa.author
       WHERE gvo.voter = ?
@@ -427,6 +440,17 @@ export async function registerStrategyRoutes(app: FastifyInstance): Promise<void
         AND gvo.vote_delay_minutes IS NOT NULL
       ORDER BY gvo.voted_at DESC
     `).all(username, since) as RealizedRow[];
+
+    // Author avg sp/vp across all time (for authorHistory score component)
+    const analyticsSpPerVp = new Map<string, number>();
+    const analyticsSpRows = db.prepare(`
+      SELECT author,
+             AVG(realized_curation_sp / (weight_bps / 10000.0)) as avg_sp_per_vp
+      FROM vb_global_vote_outcomes
+      WHERE voter = ? AND realized_curation_sp IS NOT NULL AND weight_bps > 0
+      GROUP BY author HAVING COUNT(*) >= 3
+    `).all(username) as Array<{ author: string; avg_sp_per_vp: number }>;
+    for (const r of analyticsSpRows) analyticsSpPerVp.set(r.author, r.avg_sp_per_vp);
 
     if (rows.length === 0) {
       return {
@@ -491,14 +515,14 @@ export async function registerStrategyRoutes(app: FastifyInstance): Promise<void
 
     const enriched: Enriched[] = rows.map(r => {
       const spPerVp = r.realized_curation_sp / (r.weight_bps / 10_000);
-      const whaleFollowRate = r.whale_follow_rate != null
-        ? Math.min(1, (r.whale_count ?? 0) / 10) : undefined;
       const opp = calcOpportunityScore({
-        ageMinutes:      r.vote_delay_minutes,
-        remainingHours:  Math.max(0, (7 * 24 * 60 - r.vote_delay_minutes) / 60),
-        category:        r.strategy_category,
-        whaleFollowRate,
-        isSelfPost:      r.is_self_post === 1,
+        ageMinutes:       r.vote_delay_minutes,
+        remainingHours:   Math.max(0, (7 * 24 * 60 - r.vote_delay_minutes) / 60),
+        category:         r.strategy_category,
+        pendingPayoutSbd: r.post_pending_payout_sbd ?? undefined,
+        whaleCount:       r.whale_count ?? undefined,
+        authorAvgSpPerVp: analyticsSpPerVp.get(r.author),
+        isSelfPost:       r.is_self_post === 1,
       });
       return {
         ...r,

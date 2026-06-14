@@ -573,6 +573,7 @@ export interface ConstraintReport {
   minVpPct:               number;
   includedVotes:          number;
   excludedVotes:          number;
+  filteredByMinWeight:    number;
   stoppedBy:              StopReason;
   stoppedByLabel:         string;
   vpAfterPlanPct:         number;

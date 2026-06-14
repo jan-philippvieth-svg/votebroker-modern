@@ -6,18 +6,19 @@ const MIN_AGE_MS       = 5 * 60 * 1000;   // 5 min curation minimum
 const WARN_EXPIRY_H    = 24;              // warn when < 24h remaining
 
 export interface PostOpportunity {
-  author:          string;
-  permlink:        string;
-  title:           string;
-  ageMinutes:      number;
-  remainingHours:  number;
-  postScore:       number;
-  alreadyVoted:    boolean;
-  eligible:        boolean;
-  isSelfPost:      boolean;   // author === voterUsername → visibility vote, skip curation timing
-  warning:         string | null;
-  activeVotesCount: number;   // number of existing votes — high counts may cause node issues
-  community:       string | null; // parent_permlink if it looks like a community (hive-XXXXXX)
+  author:            string;
+  permlink:          string;
+  title:             string;
+  ageMinutes:        number;
+  remainingHours:    number;
+  postScore:         number;
+  pendingPayoutSbd:  number;  // pending payout at fetch time — key signal for payout sweetspot
+  alreadyVoted:      boolean;
+  eligible:          boolean;
+  isSelfPost:        boolean;   // author === voterUsername → visibility vote, skip curation timing
+  warning:           string | null;
+  activeVotesCount:  number;   // number of existing votes — high counts may cause node issues
+  community:         string | null; // parent_permlink if it looks like a community (hive-XXXXXX)
 }
 
 export interface PostDebugEntry {
@@ -35,12 +36,13 @@ export interface PostDebugEntry {
 const HIGH_VOTE_WARN_THRESHOLD = 150; // posts with >150 votes may cause node issues
 
 interface RawPost {
-  author:          string;
-  permlink:        string;
-  title:           string;
-  created:         string;
-  parent_permlink?: string;  // community name if community post (e.g. "hive-129948")
-  active_votes?:   Array<{ voter: string; weight: number }>;
+  author:                string;
+  permlink:              string;
+  title:                 string;
+  created:               string;
+  pending_payout_value?: string;  // e.g. "1.234 SBD"
+  parent_permlink?:      string;  // community name if community post (e.g. "hive-129948")
+  active_votes?:         Array<{ voter: string; weight: number }>;
 }
 
 function calcPostScore(ageMinutes: number, remainingHours: number): number {
@@ -203,11 +205,15 @@ function mapPost(post: RawPost, voterUsername: string, nowMs: number): PostOppor
     warning = warning ? `${warning} · ${extra}` : extra;
   }
 
+  const pendingPayoutSbd = parseFloat(
+    (post.pending_payout_value ?? "0 SBD").split(" ")[0]
+  ) || 0;
+
   return {
     author:   post.author,
     permlink: post.permlink,
     title:    post.title || `${post.author}/${post.permlink}`,
-    ageMinutes, remainingHours, postScore,
+    ageMinutes, remainingHours, postScore, pendingPayoutSbd,
     alreadyVoted, isSelfPost, eligible, warning,
     activeVotesCount, community,
   };
