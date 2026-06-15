@@ -359,10 +359,12 @@ function initSchema(db: Database): void {
       collocated         INTEGER NOT NULL DEFAULT 0,
       -- Whale/vote signal enrichment — causal chain data from active_votes[] in get_content
       -- NULL for 'final' snapshots (active_votes is empty after payout)
-      whale_count        INTEGER,  -- known whales in active_votes at snapshot time
-      new_whale_votes    INTEGER,  -- delta vs previous snapshot (NULL if first snapshot for this post)
-      top_voter_account  TEXT,     -- voter with highest rshares at snapshot time
-      top_voter_rshares  REAL,     -- their rshares value
+      whale_count           INTEGER,  -- known whales in active_votes at snapshot time
+      new_whale_votes       INTEGER,  -- delta vs previous snapshot (NULL if first snapshot for this post)
+      top_voter_account     TEXT,     -- voter with highest rshares at snapshot time
+      top_voter_rshares     REAL,     -- their rshares value
+      first_whale_delay_min REAL,     -- minutes between post creation and first whale vote (NULL until first whale)
+      time_since_last_vote_min REAL,  -- minutes since most recent vote at snapshot time (momentum signal)
       PRIMARY KEY (voter, author, permlink, snapshot_type)
     );
     CREATE INDEX IF NOT EXISTS idx_vgs_vote ON vote_growth_snapshots(voter, author, permlink);
@@ -669,10 +671,12 @@ function runMigrations(db: Database): void {
       }
 
       // Add whale signal columns if missing (existing DBs)
-      if (!vgsCols.includes("whale_count"))       db.exec("ALTER TABLE vote_growth_snapshots ADD COLUMN whale_count INTEGER");
-      if (!vgsCols.includes("new_whale_votes"))   db.exec("ALTER TABLE vote_growth_snapshots ADD COLUMN new_whale_votes INTEGER");
-      if (!vgsCols.includes("top_voter_account")) db.exec("ALTER TABLE vote_growth_snapshots ADD COLUMN top_voter_account TEXT");
-      if (!vgsCols.includes("top_voter_rshares")) db.exec("ALTER TABLE vote_growth_snapshots ADD COLUMN top_voter_rshares REAL");
+      if (!vgsCols.includes("whale_count"))              db.exec("ALTER TABLE vote_growth_snapshots ADD COLUMN whale_count INTEGER");
+      if (!vgsCols.includes("new_whale_votes"))          db.exec("ALTER TABLE vote_growth_snapshots ADD COLUMN new_whale_votes INTEGER");
+      if (!vgsCols.includes("top_voter_account"))        db.exec("ALTER TABLE vote_growth_snapshots ADD COLUMN top_voter_account TEXT");
+      if (!vgsCols.includes("top_voter_rshares"))        db.exec("ALTER TABLE vote_growth_snapshots ADD COLUMN top_voter_rshares REAL");
+      if (!vgsCols.includes("first_whale_delay_min"))    db.exec("ALTER TABLE vote_growth_snapshots ADD COLUMN first_whale_delay_min REAL");
+      if (!vgsCols.includes("time_since_last_vote_min")) db.exec("ALTER TABLE vote_growth_snapshots ADD COLUMN time_since_last_vote_min REAL");
 
       // Add t5m/t10m to view if missing (existing DBs where source+collocated already present)
       const existingViewSql = (db.prepare(

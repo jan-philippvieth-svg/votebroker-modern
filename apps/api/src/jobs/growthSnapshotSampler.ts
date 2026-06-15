@@ -36,19 +36,42 @@ function toUtcMs(iso: string): number {
 interface ActiveVoteRaw {
   voter:   string;
   rshares: string | number;
+  time?:   string;
 }
 
 function processActiveVotes(
   activeVotes: unknown[],
   whaleSet: Set<string>,
-): { whaleCount: number; topVoterAccount: string | null; topVoterRshares: number | null } {
-  let whaleCount       = 0;
-  let topVoterAccount: string | null = null;
-  let topVoterRshares: number | null = null;
+  postCreatedMs: number,
+  nowMs: number,
+): {
+  whaleCount:           number;
+  topVoterAccount:      string | null;
+  topVoterRshares:      number | null;
+  firstWhaleDelayMin:   number | null;
+  timeSinceLastVoteMin: number | null;
+} {
+  let whaleCount         = 0;
+  let topVoterAccount:  string | null = null;
+  let topVoterRshares:  number | null = null;
+  let firstWhaleTimeMs: number | null = null;
+  let lastVoteTimeMs:   number | null = null;
 
   for (const v of activeVotes as ActiveVoteRaw[]) {
     if (!v?.voter) continue;
-    if (whaleSet.has(v.voter)) whaleCount++;
+
+    const voteTimeMs = v.time ? toUtcMs(v.time) : null;
+
+    if (whaleSet.has(v.voter)) {
+      whaleCount++;
+      if (voteTimeMs !== null && (firstWhaleTimeMs === null || voteTimeMs < firstWhaleTimeMs)) {
+        firstWhaleTimeMs = voteTimeMs;
+      }
+    }
+
+    if (voteTimeMs !== null && (lastVoteTimeMs === null || voteTimeMs > lastVoteTimeMs)) {
+      lastVoteTimeMs = voteTimeMs;
+    }
 
     const rshares = typeof v.rshares === "string" ? parseFloat(v.rshares) : (v.rshares ?? 0);
     if (rshares > (topVoterRshares ?? -Infinity)) {
@@ -57,7 +80,14 @@ function processActiveVotes(
     }
   }
 
-  return { whaleCount, topVoterAccount, topVoterRshares };
+  const firstWhaleDelayMin   = firstWhaleTimeMs !== null
+    ? (firstWhaleTimeMs - postCreatedMs) / 60_000
+    : null;
+  const timeSinceLastVoteMin = lastVoteTimeMs !== null
+    ? (nowMs - lastVoteTimeMs) / 60_000
+    : null;
+
+  return { whaleCount, topVoterAccount, topVoterRshares, firstWhaleDelayMin, timeSinceLastVoteMin };
 }
 
 let _timer: ReturnType<typeof setTimeout> | null = null;
@@ -116,8 +146,9 @@ export async function runGrowthSnapshotSampler(log: typeof console = console): P
     INSERT OR IGNORE INTO vote_growth_snapshots
       (voter, author, permlink, snapshot_type, target_minutes, pending_payout_sbd,
        active_votes_count, measured_at, actual_delta_min, source, collocated,
-       whale_count, new_whale_votes, top_voter_account, top_voter_rshares)
-    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?)
+       whale_count, new_whale_votes, top_voter_account, top_voter_rshares,
+       first_whale_delay_min, time_since_last_vote_min)
+    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   let liveFetched = 0;
@@ -127,6 +158,7 @@ export async function runGrowthSnapshotSampler(log: typeof console = console): P
       const content = await client.database.call("get_content", [entry.author, entry.permlink]) as {
         pending_payout_value?: string;
         active_votes?:         unknown[];
+        created?:              string;
       };
 
       const pendingSbd  = parseSbd(content.pending_payout_value);
@@ -137,7 +169,9 @@ export async function runGrowthSnapshotSampler(log: typeof console = console): P
       // Don't store zeros as timed snapshots; the 'final' snapshot handles post-payout state.
       if (pendingSbd <= 0) continue;
 
-      const { whaleCount, topVoterAccount, topVoterRshares } = processActiveVotes(activeVotes, whaleSet);
+      const postCreatedMs = content.created ? toUtcMs(content.created) : toUtcMs(entry.voted_at);
+      const { whaleCount, topVoterAccount, topVoterRshares, firstWhaleDelayMin, timeSinceLastVoteMin } =
+        processActiveVotes(activeVotes, whaleSet, postCreatedMs, now);
 
       // Delta vs most recent prior snapshot to reveal whale arrival timing.
       const prevRow = prevWhaleStmt.get(entry.voter, entry.author, entry.permlink) as
@@ -158,6 +192,7 @@ export async function runGrowthSnapshotSampler(log: typeof console = console): P
             pendingSbd, voteCount,
             actualDelta, source, collocated,
             whaleCount, newWhaleVotes, topVoterAccount, topVoterRshares,
+            firstWhaleDelayMin, timeSinceLastVoteMin,
           );
         }
       })();
@@ -204,6 +239,7 @@ export async function runGrowthSnapshotSampler(log: typeof console = console): P
         (realizedMs - votedMs) / 60_000,
         "native", 0,  // final: always accurate, never collocated with timed checkpoints
         null, null, null, null,
+        null, null,
       );
     }
   })();
