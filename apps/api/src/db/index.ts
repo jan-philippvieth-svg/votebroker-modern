@@ -365,6 +365,7 @@ function initSchema(db: Database): void {
       top_voter_rshares     REAL,     -- their rshares value
       first_whale_delay_min REAL,     -- minutes between post creation and first whale vote (NULL until first whale)
       time_since_last_vote_min REAL,  -- minutes since most recent vote at snapshot time (momentum signal)
+      total_rshares_sum     REAL,     -- sum of all rshares across active_votes (denominator for dominance_ratio)
       PRIMARY KEY (voter, author, permlink, snapshot_type)
     );
     CREATE INDEX IF NOT EXISTS idx_vgs_vote ON vote_growth_snapshots(voter, author, permlink);
@@ -677,6 +678,7 @@ function runMigrations(db: Database): void {
       if (!vgsCols.includes("top_voter_rshares"))        db.exec("ALTER TABLE vote_growth_snapshots ADD COLUMN top_voter_rshares REAL");
       if (!vgsCols.includes("first_whale_delay_min"))    db.exec("ALTER TABLE vote_growth_snapshots ADD COLUMN first_whale_delay_min REAL");
       if (!vgsCols.includes("time_since_last_vote_min")) db.exec("ALTER TABLE vote_growth_snapshots ADD COLUMN time_since_last_vote_min REAL");
+      if (!vgsCols.includes("total_rshares_sum"))        db.exec("ALTER TABLE vote_growth_snapshots ADD COLUMN total_rshares_sum REAL");
 
       // Add t5m/t10m to view if missing (existing DBs where source+collocated already present)
       const existingViewSql = (db.prepare(
