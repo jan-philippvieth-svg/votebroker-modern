@@ -1499,23 +1499,58 @@ function VpGraphToday({ todayStats, snapshot, timezone, locale }: {
   }
   vpEvents.sort((a, b) => a.timeMs - b.timeMs);
 
-  const N = vpEvents.length;
-  if (N === 0) return null;
+  if (vpEvents.length === 0) return null;
 
-  // EKG layout: each individual vote = one peak→valley drop.
-  // X-axis = vote index, not time. Recovery between votes is a diagonal.
-  // DROP=1 (steep downstroke), SLOT=2 (drop + short recovery per vote).
+  // Group votes into Durchgänge: gap > 120s = new run.
+  type VpRun = {
+    vpBefore: number; vpAfter: number; cost: number;
+    voteCount: number; timeStart: number;
+    authors: string[]; totalWeightBps: number;
+  };
+  const vpRuns: VpRun[] = [];
+  let curGroup: typeof vpEvents[number][] = [];
+  for (const ev of vpEvents) {
+    if (curGroup.length === 0 || ev.timeMs - curGroup[curGroup.length - 1].timeMs <= 120_000) {
+      curGroup.push(ev);
+    } else {
+      const first = curGroup[0];
+      vpRuns.push({
+        vpBefore: first.vpBefore,
+        vpAfter:  curGroup[curGroup.length - 1].vpAfter,
+        cost: curGroup.reduce((s, e) => s + (e.vpBefore - e.vpAfter), 0),
+        voteCount: curGroup.length, timeStart: first.timeMs,
+        authors: [...new Set(curGroup.map(e => e.author))],
+        totalWeightBps: curGroup.reduce((s, e) => s + e.weightBps, 0),
+      });
+      curGroup = [ev];
+    }
+  }
+  if (curGroup.length > 0) {
+    const first = curGroup[0];
+    vpRuns.push({
+      vpBefore: first.vpBefore,
+      vpAfter:  curGroup[curGroup.length - 1].vpAfter,
+      cost: curGroup.reduce((s, e) => s + (e.vpBefore - e.vpAfter), 0),
+      voteCount: curGroup.length, timeStart: first.timeMs,
+      authors: [...new Set(curGroup.map(e => e.author))],
+      totalWeightBps: curGroup.reduce((s, e) => s + e.weightBps, 0),
+    });
+  }
+  const NR = vpRuns.length;
+
+  // EKG layout: each Durchgang = one peak→valley drop.
+  // DROP=1 (steep downstroke), SLOT=2 (drop + recovery per run).
   const SLOT  = 2;
   const DROP  = 1;
   const xPeak   = (i: number) => i * SLOT;
   const xValley = (i: number) => i * SLOT + DROP;
-  const totalX  = (N - 1) * SLOT + DROP + 1;
+  const totalX  = (NR - 1) * SLOT + DROP + 1;
 
   // Chart dimensions
   const W = 400, H = 80;
   const pad = { l: 28, r: 8, t: 4, b: 4 };
 
-  const allVp = [...vpEvents.map(e => e.vpBefore), ...vpEvents.map(e => e.vpAfter), currentVp];
+  const allVp = [...vpRuns.map(r => r.vpBefore), ...vpRuns.map(r => r.vpAfter), currentVp];
   const vpMin = Math.max(0,   Math.min(...allVp) - 2);
   const vpMax = Math.min(100, Math.max(...allVp) + 1);
 
@@ -1524,9 +1559,9 @@ function VpGraphToday({ todayStats, snapshot, timezone, locale }: {
 
   // EKG path: peak[0]→valley[0]→peak[1]→valley[1]→…→currentVp
   const pts: { x: number; vp: number }[] = [];
-  for (let i = 0; i < N; i++) {
-    pts.push({ x: xPeak(i),   vp: vpEvents[i].vpBefore });
-    pts.push({ x: xValley(i), vp: vpEvents[i].vpAfter  });
+  for (let i = 0; i < NR; i++) {
+    pts.push({ x: xPeak(i),   vp: vpRuns[i].vpBefore });
+    pts.push({ x: xValley(i), vp: vpRuns[i].vpAfter  });
   }
   pts.push({ x: totalX, vp: currentVp });
 
@@ -1535,29 +1570,30 @@ function VpGraphToday({ todayStats, snapshot, timezone, locale }: {
     + ` L${xS(totalX).toFixed(1)},${(H-pad.b).toFixed(1)}`
     + ` L${xS(0).toFixed(1)},${(H-pad.b).toFixed(1)} Z`;
 
-  // Hover: snap to nearest vote valley
-  const hov = hoveredVoteIdx !== null ? vpEvents[hoveredVoteIdx] : null;
+  // Hover: snap to nearest run valley
+  const hov = hoveredVoteIdx !== null ? vpRuns[hoveredVoteIdx] : null;
 
-  function findClosestVote(mouseX: number): number | null {
+  function findClosestRun(mouseX: number): number | null {
     let best = 0, bestDist = Infinity;
-    for (let i = 0; i < N; i++) {
+    for (let i = 0; i < NR; i++) {
       const cx = xS(xValley(i));
       const d  = Math.abs(mouseX - cx);
       if (d < bestDist) { bestDist = d; best = i; }
     }
-    return bestDist < (W / Math.max(N, 1)) * 0.85 ? best : null;
+    return bestDist < (W / Math.max(NR, 1)) * 0.85 ? best : null;
   }
 
-  const vpAtStart = vpEvents[0].vpBefore;
-  const totalCost = vpAtStart - currentVp;
-  const lowestVp  = Math.min(...vpEvents.map(e => e.vpAfter), currentVp);
+  // totalCost = Summe echter VP-Kosten pro Vote (nicht vpAtStart−currentVp,
+  // weil currentVp bereits Regeneration seit dem letzten Vote enthält).
+  const totalCost = vpEvents.reduce((s, e) => s + (e.vpBefore - e.vpAfter), 0);
+  const lowestVp  = Math.min(...vpRuns.map(r => r.vpAfter), currentVp);
 
   return (
     <div style={{ ...card, paddingBottom: "0.5rem" }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"0.4rem" }}>
         <p style={{ ...lbl, margin:0 }}>{t("chartVpToday")}</p>
         <span style={{ color:C.dim, fontSize:"0.75rem", fontWeight:600 }}>
-          {N} Votes
+          {vpEvents.length} Votes · {NR} {NR===1?"Run":"Runs"}
           {" · "}
           <span style={{ color: C.warn }}>−{totalCost.toFixed(1)}%</span>
           {" · "}
@@ -1575,7 +1611,7 @@ function VpGraphToday({ todayStats, snapshot, timezone, locale }: {
             const rect = svgRef.current?.getBoundingClientRect();
             if (!rect) return;
             const mouseX = (e.clientX - rect.left) / rect.width * W;
-            setHoveredVoteIdx(findClosestVote(mouseX));
+            setHoveredVoteIdx(findClosestRun(mouseX));
           }}
         >
           <defs>
@@ -1596,11 +1632,11 @@ function VpGraphToday({ todayStats, snapshot, timezone, locale }: {
           {/* Full zigzag path — recovery segments in green */}
           <path d={pathD} fill="none" stroke={C.ok} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
 
-          {/* Drop segments (peak→valley) per vote — overlaid in orange */}
-          {vpEvents.map((ev, i) => (
+          {/* Drop segments (peak→valley) per Durchgang — overlaid in orange */}
+          {vpRuns.map((run, i) => (
             <line key={i}
-              x1={xS(xPeak(i)).toFixed(1)}   y1={yV(ev.vpBefore).toFixed(1)}
-              x2={xS(xValley(i)).toFixed(1)} y2={yV(ev.vpAfter).toFixed(1)}
+              x1={xS(xPeak(i)).toFixed(1)}   y1={yV(run.vpBefore).toFixed(1)}
+              x2={xS(xValley(i)).toFixed(1)} y2={yV(run.vpAfter).toFixed(1)}
               stroke={hoveredVoteIdx === i ? C.warn : C.warn + "cc"}
               strokeWidth={hoveredVoteIdx === i ? 2.5 : 2}
               strokeLinecap="round"
@@ -1608,17 +1644,17 @@ function VpGraphToday({ todayStats, snapshot, timezone, locale }: {
           ))}
 
           {/* Peak dots */}
-          {vpEvents.map((ev, i) => (
+          {vpRuns.map((run, i) => (
             <circle key={i}
-              cx={xS(xPeak(i)).toFixed(1)} cy={yV(ev.vpBefore).toFixed(1)}
+              cx={xS(xPeak(i)).toFixed(1)} cy={yV(run.vpBefore).toFixed(1)}
               r="2" fill={C.ok} stroke="none"
             />
           ))}
 
           {/* Valley dots */}
-          {vpEvents.map((ev, i) => (
+          {vpRuns.map((run, i) => (
             <circle key={i}
-              cx={xS(xValley(i)).toFixed(1)} cy={yV(ev.vpAfter).toFixed(1)}
+              cx={xS(xValley(i)).toFixed(1)} cy={yV(run.vpAfter).toFixed(1)}
               r={hoveredVoteIdx === i ? 4.5 : 3}
               fill={hoveredVoteIdx === i ? C.warn : C.warn + "cc"}
               stroke="#fff" strokeWidth="1.2"
@@ -1637,7 +1673,6 @@ function VpGraphToday({ todayStats, snapshot, timezone, locale }: {
 
         {/* Tooltip */}
         {hov !== null && hoveredVoteIdx !== null && (() => {
-          const cost = hov.vpBefore - hov.vpAfter;
           const xPct = Math.min(Math.max(xS(xValley(hoveredVoteIdx)) / W * 100, 18), 72);
           return (
             <div style={{
@@ -1651,20 +1686,20 @@ function VpGraphToday({ todayStats, snapshot, timezone, locale }: {
               zIndex:10, minWidth:"170px",
             }}>
               <div style={{ fontWeight:800, color:"#fff", marginBottom:"0.15rem" }}>
-                {fmt.time(new Date(hov.timeMs).toISOString())} Uhr
+                {fmt.time(new Date(hov.timeStart).toISOString())} Uhr
               </div>
               <div style={{ color:"#94a3b8", fontSize:"0.72rem", marginBottom:"0.2rem" }}>
-                @{hov.author} · {(hov.weightBps / 100).toFixed(0)}%
+                {hov.voteCount} Votes · {hov.authors.slice(0,3).map(a => `@${a}`).join(", ")}{hov.authors.length > 3 ? ` +${hov.authors.length-3}` : ""}
               </div>
               <div style={{ color:"#fcd34d", fontWeight:700 }}>
                 {hov.vpBefore.toFixed(2)}% → {hov.vpAfter.toFixed(2)}%
               </div>
               <div style={{ color:C.warn, fontSize:"0.72rem", fontWeight:700 }}>
-                −{cost.toFixed(3)}% VP
+                −{hov.cost.toFixed(3)}% VP
               </div>
               {voteUsd > 0 && (
                 <div style={{ borderTop:"1px solid #1e293b", marginTop:"0.28rem", paddingTop:"0.28rem", color:"#6ee7b7", fontWeight:700, fontSize:"0.74rem" }}>
-                  ~{fmtUsd((hov.weightBps/10000)*voteUsd*0.25)} Est. Curation
+                  ~{fmtUsd((hov.totalWeightBps/10000)*voteUsd*0.25)} Est. Curation
                 </div>
               )}
             </div>
