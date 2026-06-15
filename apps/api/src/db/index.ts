@@ -338,7 +338,7 @@ function initSchema(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_gvo_realized    ON vb_global_vote_outcomes(realized_at);
 
     -- Growth snapshot time series — raw payout measurements at fixed intervals after vote cast.
-    -- Snapshot types: 'vote_time' | 't15m' | 't1h' | 't6h' | 't24h' | 't72h' | 'final'
+    -- Snapshot types: 'vote_time' | 't5m' | 't10m' | 't15m' | 't1h' | 't6h' | 't24h' | 't72h' | 'final'
     -- pending_payout_sbd: pending_payout_value from get_content (0 after payout; 'final' uses post_final_payout_sbd)
     -- actual_delta_min: real elapsed minutes since voted_at when the snapshot was captured
     CREATE TABLE IF NOT EXISTS vote_growth_snapshots (
@@ -370,6 +370,8 @@ function initSchema(db: Database): void {
       SELECT
         voter, author, permlink,
         MAX(CASE WHEN snapshot_type = 'vote_time' THEN pending_payout_sbd END) AS t0,
+        MAX(CASE WHEN snapshot_type = 't5m'       THEN pending_payout_sbd END) AS t5m,
+        MAX(CASE WHEN snapshot_type = 't10m'      THEN pending_payout_sbd END) AS t10m,
         MAX(CASE WHEN snapshot_type = 't15m'      THEN pending_payout_sbd END) AS t15m,
         MAX(CASE WHEN snapshot_type = 't1h'       THEN pending_payout_sbd END) AS t1h,
         MAX(CASE WHEN snapshot_type = 't6h'       THEN pending_payout_sbd END) AS t6h,
@@ -383,7 +385,7 @@ function initSchema(db: Database): void {
     )
     SELECT
       voter, author, permlink,
-      t0, t15m, t1h, t6h, t24h, t72h, t_final,
+      t0, t5m, t10m, t15m, t1h, t6h, t24h, t72h, t_final,
       snapshot_count,
       CASE WHEN timed_source_min = 'native' THEN 'native_growth_tracking'
            ELSE 'historical_backfill'
@@ -621,6 +623,8 @@ function runMigrations(db: Database): void {
             SELECT
               voter, author, permlink,
               MAX(CASE WHEN snapshot_type = 'vote_time' THEN pending_payout_sbd END) AS t0,
+              MAX(CASE WHEN snapshot_type = 't5m'       THEN pending_payout_sbd END) AS t5m,
+              MAX(CASE WHEN snapshot_type = 't10m'      THEN pending_payout_sbd END) AS t10m,
               MAX(CASE WHEN snapshot_type = 't15m'      THEN pending_payout_sbd END) AS t15m,
               MAX(CASE WHEN snapshot_type = 't1h'       THEN pending_payout_sbd END) AS t1h,
               MAX(CASE WHEN snapshot_type = 't6h'       THEN pending_payout_sbd END) AS t6h,
@@ -635,7 +639,58 @@ function runMigrations(db: Database): void {
           )
           SELECT
             voter, author, permlink,
-            t0, t15m, t1h, t6h, t24h, t72h, t_final,
+            t0, t5m, t10m, t15m, t1h, t6h, t24h, t72h, t_final,
+            snapshot_count,
+            CASE WHEN timed_source_min = 'native' THEN 'native_growth_tracking'
+                 ELSE 'historical_backfill'
+            END AS population,
+            COALESCE(any_collocated, 0) AS has_collocated,
+            CASE WHEN t0 > 0 THEN t1h / t0        END AS early_momentum,
+            CASE WHEN t0 IS NOT NULL AND t1h IS NOT NULL
+                 THEN (t1h - t0) / 60.0           END AS velocity_0_1h,
+            CASE WHEN t6h IS NOT NULL AND t24h IS NOT NULL
+                 THEN (t24h - t6h) / (18.0 * 60)  END AS velocity_6h_24h,
+            CASE WHEN t0 > 0 THEN t_final / t0    END AS growth_factor,
+            CASE
+              WHEN t_final IS NULL OR t0 IS NULL OR t0 = 0 THEN 'unknown'
+              WHEN t_final / t0 < 1.5                       THEN 'flat'
+              WHEN t1h IS NOT NULL AND t1h / t0 > 1.8 AND t_final / t0 < 4.0 THEN 'early_spike'
+              WHEN t1h IS NOT NULL AND t1h / t0 < 1.3 AND t_final / t0 > 3.0 THEN 'slow_burn'
+              ELSE 'unknown'
+            END AS trajectory_class
+          FROM pivoted
+        `);
+      }
+
+      // Add t5m/t10m to view if missing (existing DBs where source+collocated already present)
+      const existingViewSql = (db.prepare(
+        "SELECT sql FROM sqlite_master WHERE type='view' AND name='vw_growth_features'"
+      ).get() as { sql: string } | undefined)?.sql ?? '';
+      if (!existingViewSql.includes("t5m")) {
+        db.exec("DROP VIEW IF EXISTS vw_growth_features");
+        db.exec(`
+          CREATE VIEW vw_growth_features AS
+          WITH pivoted AS (
+            SELECT
+              voter, author, permlink,
+              MAX(CASE WHEN snapshot_type = 'vote_time' THEN pending_payout_sbd END) AS t0,
+              MAX(CASE WHEN snapshot_type = 't5m'       THEN pending_payout_sbd END) AS t5m,
+              MAX(CASE WHEN snapshot_type = 't10m'      THEN pending_payout_sbd END) AS t10m,
+              MAX(CASE WHEN snapshot_type = 't15m'      THEN pending_payout_sbd END) AS t15m,
+              MAX(CASE WHEN snapshot_type = 't1h'       THEN pending_payout_sbd END) AS t1h,
+              MAX(CASE WHEN snapshot_type = 't6h'       THEN pending_payout_sbd END) AS t6h,
+              MAX(CASE WHEN snapshot_type = 't24h'      THEN pending_payout_sbd END) AS t24h,
+              MAX(CASE WHEN snapshot_type = 't72h'      THEN pending_payout_sbd END) AS t72h,
+              MAX(CASE WHEN snapshot_type = 'final'     THEN pending_payout_sbd END) AS t_final,
+              COUNT(*) AS snapshot_count,
+              MIN(CASE WHEN snapshot_type != 'final' THEN source END)     AS timed_source_min,
+              MAX(CASE WHEN snapshot_type != 'final' THEN collocated END) AS any_collocated
+            FROM vote_growth_snapshots
+            GROUP BY voter, author, permlink
+          )
+          SELECT
+            voter, author, permlink,
+            t0, t5m, t10m, t15m, t1h, t6h, t24h, t72h, t_final,
             snapshot_count,
             CASE WHEN timed_source_min = 'native' THEN 'native_growth_tracking'
                  ELSE 'historical_backfill'

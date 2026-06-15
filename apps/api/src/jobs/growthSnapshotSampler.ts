@@ -15,6 +15,8 @@ interface SnapshotDef {
 // stale chain data labeled as T+0 would be worse than no data.
 const TIMED_SNAPSHOTS: SnapshotDef[] = [
   { type: "vote_time", targetMinutes: 0,    maxDelayMinutes: 60    },
+  { type: "t5m",       targetMinutes: 5,    maxDelayMinutes: 60    },
+  { type: "t10m",      targetMinutes: 10,   maxDelayMinutes: 90    },
   { type: "t15m",      targetMinutes: 15,   maxDelayMinutes: 240   },
   { type: "t1h",       targetMinutes: 60,   maxDelayMinutes: 360   },
   { type: "t6h",       targetMinutes: 360,  maxDelayMinutes: 720   },
