@@ -1544,26 +1544,25 @@ function VpGraphToday({ todayStats, snapshot, timezone, locale }: {
   const DROP  = 1;
   const xPeak   = (i: number) => i * SLOT;
   const xValley = (i: number) => i * SLOT + DROP;
-  const totalX  = (NR - 1) * SLOT + DROP + 1;
+  const totalX  = (NR - 1) * SLOT + DROP; // letztes Valley = rechter Rand
 
   // Chart dimensions
   const W = 400, H = 80;
   const pad = { l: 28, r: 8, t: 4, b: 4 };
 
-  const allVp = [...vpRuns.map(r => r.vpBefore), ...vpRuns.map(r => r.vpAfter), currentVp];
+  const allVp = [...vpRuns.map(r => r.vpBefore), ...vpRuns.map(r => r.vpAfter)];
   const vpMin = Math.max(0,   Math.min(...allVp) - 2);
   const vpMax = Math.min(100, Math.max(...allVp) + 1);
 
   const xS = (x: number) => pad.l + (x / totalX) * (W - pad.l - pad.r);
   const yV = (v: number) => H - pad.b - ((v - vpMin) / (vpMax - vpMin || 1)) * (H - pad.t - pad.b);
 
-  // EKG path: peak[0]→valley[0]→peak[1]→valley[1]→…→currentVp
+  // EKG path: peak[0]→valley[0]→peak[1]→valley[1]→… endet am letzten Valley.
   const pts: { x: number; vp: number }[] = [];
   for (let i = 0; i < NR; i++) {
     pts.push({ x: xPeak(i),   vp: vpRuns[i].vpBefore });
     pts.push({ x: xValley(i), vp: vpRuns[i].vpAfter  });
   }
-  pts.push({ x: totalX, vp: currentVp });
 
   const pathD = pts.map((p, i) => `${i===0?"M":"L"}${xS(p.x).toFixed(1)},${yV(p.vp).toFixed(1)}`).join(" ");
   const fillD = pathD
