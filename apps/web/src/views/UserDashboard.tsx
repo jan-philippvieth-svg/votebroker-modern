@@ -1539,11 +1539,13 @@ function VpGraphToday({ todayStats, snapshot, timezone, locale }: {
   }
   const NR = vpRuns.length;
 
-  // Layout: equal x-spacing, 2 points per run (before + after), then currentVp.
-  // xPeak(i) = i*2, xValley(i) = i*2+1, totalX = NR*2 (currentVp point).
-  const xPeak   = (i: number) => i * 2;
-  const xValley = (i: number) => i * 2 + 1;
-  const totalX  = NR * 2;
+  // EKG layout: narrow drop (1 unit), tight recovery (1 unit) per run.
+  // DROP=1 → steep downstroke; SLOT=2 → equal drop+recovery spacing.
+  const SLOT  = 2;
+  const DROP  = 1;
+  const xPeak   = (i: number) => i * SLOT;
+  const xValley = (i: number) => i * SLOT + DROP;
+  const totalX  = (NR - 1) * SLOT + DROP + 1;
 
   // Chart dimensions
   const W = 400, H = 80;
