@@ -49,6 +49,7 @@ function processActiveVotes(
   topVoterAccount:      string | null;
   topVoterRshares:      number | null;
   totalRsharesSum:      number | null;
+  medianRshares:        number | null;
   firstWhaleDelayMin:   number | null;
   timeSinceLastVoteMin: number | null;
 } {
@@ -58,6 +59,7 @@ function processActiveVotes(
   let totalRsharesSum   = 0;
   let firstWhaleTimeMs: number | null = null;
   let lastVoteTimeMs:   number | null = null;
+  const allRshares:     number[]      = [];
 
   for (const v of activeVotes as ActiveVoteRaw[]) {
     if (!v?.voter) continue;
@@ -66,6 +68,7 @@ function processActiveVotes(
     const rshares    = typeof v.rshares === "string" ? parseFloat(v.rshares) : (v.rshares ?? 0);
 
     totalRsharesSum += rshares;
+    allRshares.push(rshares);
 
     if (whaleSet.has(v.voter)) {
       whaleCount++;
@@ -84,6 +87,15 @@ function processActiveVotes(
     }
   }
 
+  let medianRshares: number | null = null;
+  if (allRshares.length > 0) {
+    allRshares.sort((a, b) => a - b);
+    const mid = Math.floor(allRshares.length / 2);
+    medianRshares = allRshares.length % 2 === 0
+      ? (allRshares[mid - 1] + allRshares[mid]) / 2
+      : allRshares[mid];
+  }
+
   const firstWhaleDelayMin   = firstWhaleTimeMs !== null
     ? (firstWhaleTimeMs - postCreatedMs) / 60_000
     : null;
@@ -93,7 +105,8 @@ function processActiveVotes(
 
   return {
     whaleCount, topVoterAccount, topVoterRshares,
-    totalRsharesSum: activeVotes.length > 0 ? totalRsharesSum : null,
+    totalRsharesSum: allRshares.length > 0 ? totalRsharesSum : null,
+    medianRshares,
     firstWhaleDelayMin, timeSinceLastVoteMin,
   };
 }
@@ -155,8 +168,8 @@ export async function runGrowthSnapshotSampler(log: typeof console = console): P
       (voter, author, permlink, snapshot_type, target_minutes, pending_payout_sbd,
        active_votes_count, measured_at, actual_delta_min, source, collocated,
        whale_count, new_whale_votes, top_voter_account, top_voter_rshares,
-       first_whale_delay_min, time_since_last_vote_min, total_rshares_sum)
-    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       first_whale_delay_min, time_since_last_vote_min, total_rshares_sum, median_rshares)
+    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   let liveFetched = 0;
@@ -178,7 +191,7 @@ export async function runGrowthSnapshotSampler(log: typeof console = console): P
       if (pendingSbd <= 0) continue;
 
       const postCreatedMs = content.created ? toUtcMs(content.created) : toUtcMs(entry.voted_at);
-      const { whaleCount, topVoterAccount, topVoterRshares, totalRsharesSum, firstWhaleDelayMin, timeSinceLastVoteMin } =
+      const { whaleCount, topVoterAccount, topVoterRshares, totalRsharesSum, medianRshares, firstWhaleDelayMin, timeSinceLastVoteMin } =
         processActiveVotes(activeVotes, whaleSet, postCreatedMs, now);
 
       // Delta vs most recent prior snapshot to reveal whale arrival timing.
@@ -200,7 +213,7 @@ export async function runGrowthSnapshotSampler(log: typeof console = console): P
             pendingSbd, voteCount,
             actualDelta, source, collocated,
             whaleCount, newWhaleVotes, topVoterAccount, topVoterRshares,
-            firstWhaleDelayMin, timeSinceLastVoteMin, totalRsharesSum,
+            firstWhaleDelayMin, timeSinceLastVoteMin, totalRsharesSum, medianRshares,
           );
         }
       })();
@@ -247,7 +260,7 @@ export async function runGrowthSnapshotSampler(log: typeof console = console): P
         (realizedMs - votedMs) / 60_000,
         "native", 0,  // final: always accurate, never collocated with timed checkpoints
         null, null, null, null,
-        null, null, null,
+        null, null, null, null,
       );
     }
   })();
