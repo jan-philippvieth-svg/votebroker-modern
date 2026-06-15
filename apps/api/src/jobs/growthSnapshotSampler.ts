@@ -33,12 +33,45 @@ function toUtcMs(iso: string): number {
   return new Date(iso.endsWith("Z") ? iso : iso + "Z").getTime();
 }
 
+interface ActiveVoteRaw {
+  voter:   string;
+  rshares: string | number;
+}
+
+function processActiveVotes(
+  activeVotes: unknown[],
+  whaleSet: Set<string>,
+): { whaleCount: number; topVoterAccount: string | null; topVoterRshares: number | null } {
+  let whaleCount       = 0;
+  let topVoterAccount: string | null = null;
+  let topVoterRshares: number | null = null;
+
+  for (const v of activeVotes as ActiveVoteRaw[]) {
+    if (!v?.voter) continue;
+    if (whaleSet.has(v.voter)) whaleCount++;
+
+    const rshares = typeof v.rshares === "string" ? parseFloat(v.rshares) : (v.rshares ?? 0);
+    if (rshares > (topVoterRshares ?? -Infinity)) {
+      topVoterRshares = rshares;
+      topVoterAccount = v.voter;
+    }
+  }
+
+  return { whaleCount, topVoterAccount, topVoterRshares };
+}
+
 let _timer: ReturnType<typeof setTimeout> | null = null;
 let _started = false;
 
 export async function runGrowthSnapshotSampler(log: typeof console = console): Promise<void> {
   const db  = getDb();
   const now = Date.now();
+
+  // Load known whale accounts once per run for whale signal enrichment.
+  const whaleSet = new Set(
+    (db.prepare("SELECT DISTINCT whale FROM vb_whale_author_signals").all() as Array<{ whale: string }>)
+      .map(r => r.whale),
+  );
 
   // Collect all due timed snapshots, grouped by (voter, author, permlink) to minimise chain calls.
   const dueMap = new Map<string, {
@@ -73,11 +106,18 @@ export async function runGrowthSnapshotSampler(log: typeof console = console): P
   // Fetch get_content for each unique post and insert all due snapshots in one transaction.
   const client = createSteemClient();
 
+  const prevWhaleStmt = db.prepare(`
+    SELECT whale_count FROM vote_growth_snapshots
+    WHERE voter=? AND author=? AND permlink=? AND whale_count IS NOT NULL
+    ORDER BY measured_at DESC LIMIT 1
+  `);
+
   const insertStmt = db.prepare(`
     INSERT OR IGNORE INTO vote_growth_snapshots
       (voter, author, permlink, snapshot_type, target_minutes, pending_payout_sbd,
-       active_votes_count, measured_at, actual_delta_min, source, collocated)
-    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?)
+       active_votes_count, measured_at, actual_delta_min, source, collocated,
+       whale_count, new_whale_votes, top_voter_account, top_voter_rshares)
+    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?)
   `);
 
   let liveFetched = 0;
@@ -89,18 +129,26 @@ export async function runGrowthSnapshotSampler(log: typeof console = console): P
         active_votes?:         unknown[];
       };
 
-      const pendingSbd = parseSbd(content.pending_payout_value);
-      const voteCount  = Array.isArray(content.active_votes) ? content.active_votes.length : null;
+      const pendingSbd  = parseSbd(content.pending_payout_value);
+      const activeVotes = Array.isArray(content.active_votes) ? content.active_votes : [];
+      const voteCount   = activeVotes.length || null;
 
       // Post already paid out — pending_payout_value is "0.000 SBD".
       // Don't store zeros as timed snapshots; the 'final' snapshot handles post-payout state.
       if (pendingSbd <= 0) continue;
 
+      const { whaleCount, topVoterAccount, topVoterRshares } = processActiveVotes(activeVotes, whaleSet);
+
+      // Delta vs most recent prior snapshot to reveal whale arrival timing.
+      const prevRow = prevWhaleStmt.get(entry.voter, entry.author, entry.permlink) as
+        { whale_count: number } | undefined;
+      const newWhaleVotes = prevRow != null ? Math.max(0, whaleCount - prevRow.whale_count) : null;
+
       const votedMs = toUtcMs(entry.voted_at);
 
       db.transaction(() => {
-        const actualDelta  = (now - votedMs) / 60_000;
-        const collocated   = entry.types.length > 1 ? 1 : 0;
+        const actualDelta = (now - votedMs) / 60_000;
+        const collocated  = entry.types.length > 1 ? 1 : 0;
         for (const snapType of entry.types) {
           const def    = TIMED_SNAPSHOTS.find(s => s.type === snapType)!;
           const source = actualDelta <= def.targetMinutes + 45 ? "native" : "historical_backfill";
@@ -108,7 +156,8 @@ export async function runGrowthSnapshotSampler(log: typeof console = console): P
             entry.voter, entry.author, entry.permlink,
             snapType, def.targetMinutes,
             pendingSbd, voteCount,
-            actualDelta, source, collocated
+            actualDelta, source, collocated,
+            whaleCount, newWhaleVotes, topVoterAccount, topVoterRshares,
           );
         }
       })();
@@ -124,6 +173,7 @@ export async function runGrowthSnapshotSampler(log: typeof console = console): P
 
   // Final snapshots — use post_final_payout_sbd already in vb_global_vote_outcomes.
   // No chain call required; payoutSync keeps this column up to date.
+  // active_votes is empty after payout, so whale fields are stored as NULL.
   const finalDue = db.prepare(`
     SELECT o.voter, o.author, o.permlink, o.voted_at, o.realized_at,
            o.post_final_payout_sbd, o.post_active_votes_count
@@ -152,7 +202,8 @@ export async function runGrowthSnapshotSampler(log: typeof console = console): P
         "final", null,
         row.post_final_payout_sbd, row.post_active_votes_count,
         (realizedMs - votedMs) / 60_000,
-        "native", 0  // final: always accurate, never collocated with timed checkpoints
+        "native", 0,  // final: always accurate, never collocated with timed checkpoints
+        null, null, null, null,
       );
     }
   })();

@@ -357,6 +357,12 @@ function initSchema(db: Database): void {
       -- 1 if this snapshot was captured in the same job run as another checkpoint for the same post
       -- (multiple due windows open simultaneously → values are identical, no real time-series between them)
       collocated         INTEGER NOT NULL DEFAULT 0,
+      -- Whale/vote signal enrichment — causal chain data from active_votes[] in get_content
+      -- NULL for 'final' snapshots (active_votes is empty after payout)
+      whale_count        INTEGER,  -- known whales in active_votes at snapshot time
+      new_whale_votes    INTEGER,  -- delta vs previous snapshot (NULL if first snapshot for this post)
+      top_voter_account  TEXT,     -- voter with highest rshares at snapshot time
+      top_voter_rshares  REAL,     -- their rshares value
       PRIMARY KEY (voter, author, permlink, snapshot_type)
     );
     CREATE INDEX IF NOT EXISTS idx_vgs_vote ON vote_growth_snapshots(voter, author, permlink);
@@ -661,6 +667,12 @@ function runMigrations(db: Database): void {
           FROM pivoted
         `);
       }
+
+      // Add whale signal columns if missing (existing DBs)
+      if (!vgsCols.includes("whale_count"))       db.exec("ALTER TABLE vote_growth_snapshots ADD COLUMN whale_count INTEGER");
+      if (!vgsCols.includes("new_whale_votes"))   db.exec("ALTER TABLE vote_growth_snapshots ADD COLUMN new_whale_votes INTEGER");
+      if (!vgsCols.includes("top_voter_account")) db.exec("ALTER TABLE vote_growth_snapshots ADD COLUMN top_voter_account TEXT");
+      if (!vgsCols.includes("top_voter_rshares")) db.exec("ALTER TABLE vote_growth_snapshots ADD COLUMN top_voter_rshares REAL");
 
       // Add t5m/t10m to view if missing (existing DBs where source+collocated already present)
       const existingViewSql = (db.prepare(
