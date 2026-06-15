@@ -849,6 +849,7 @@ export async function triggerFeePost(token: string, date?: string, forceUpdate?:
 export interface TodayVote {
   author: string; permlink: string; weightBps: number;
   transactionId: string; votedAt: string;
+  vpBeforeBps: number | null; vpAfterBps: number | null;
 }
 
 export interface TodayLastRun {
@@ -861,6 +862,7 @@ export interface TodayStats {
   uniqueAuthors: number; totalWeightBps: number;
   runs: TodayLastRun[];
   lastRun: TodayLastRun | null;
+  dayStartIso: string;
   votes: TodayVote[];
 }
 

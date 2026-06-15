@@ -1451,7 +1451,10 @@ function AllRunsPanel({ todayStats, snapshot, timezone, locale, t }: {
   );
 }
 
-// ── VP-Graph mit Tooltip (heute, aus Vote-Events rekonstruiert) ───────────────
+// ── VP Heartbeat — EKG-style VP chart ────────────────────────────────────────
+// x-axis: vote-index (equal spacing) — not time-based
+// Each vote = 1 sharp drop; between votes = flat/slight regen segment
+// Overall trend: slowly downward as more votes accumulate
 
 function VpGraphToday({ todayStats, snapshot, timezone, locale }: {
   todayStats: TodayStats|null;
@@ -1460,157 +1463,246 @@ function VpGraphToday({ todayStats, snapshot, timezone, locale }: {
 }) {
   const t = createTranslator((locale ?? "de") as import("../i18n").Locale);
   const fmt = makeFmt(timezone??"", locale??"de");
-  const [hoverIdx, setHoverIdx] = useState<number|null>(null);
+  const [hoveredVoteIdx, setHoveredVoteIdx] = useState<number|null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
   const voteUsd = snapshot?.currentVoteUsd ?? 0;
 
   if (!todayStats || todayStats.votes.length === 0 || !snapshot) return null;
 
-  // Build VP curve: work backwards from current VP
   const currentVp = snapshot.votingPowerBps / 100;
-  // Accumulate total VP consumed today
-  const totalConsumed = todayStats.votes.reduce((s, v) => s + v.weightBps / 5000, 0);
-  // VP at start of day ≈ current + all consumed (minus regen — ignore regen for simplicity)
-  const vpAtStart = Math.min(100, currentVp + totalConsumed);
+  const votes     = todayStats.votes;
 
-  // Map each vote to its run number
-  const votes = todayStats.votes;
-  const runs  = todayStats.runs;
-  function runIdxForVote(votedAt: string): number {
-    for (let i = 0; i < runs.length; i++) {
-      if (votedAt >= runs[i].startedAt && votedAt <= runs[i].endedAt) return i;
+  // Build VP events — prefer real DB values, fall back to weight-estimation
+  const vpEvents: Array<{
+    timeMs: number; author: string; weightBps: number;
+    vpBefore: number; vpAfter: number;
+  }> = [];
+
+  const hasRealData = votes.some(v => v.vpBeforeBps != null);
+  if (hasRealData) {
+    for (const v of votes) {
+      const vpBefore = v.vpBeforeBps != null ? v.vpBeforeBps / 100 : null;
+      const vpAfter  = v.vpAfterBps  != null ? v.vpAfterBps  / 100 : null;
+      if (vpBefore == null || vpAfter == null) continue;
+      vpEvents.push({ timeMs: new Date(v.votedAt).getTime(), author: v.author, weightBps: v.weightBps, vpBefore, vpAfter });
     }
-    return -1;
-  }
-
-  // Pre-compute VP before/after per run for tooltip
-  const runVpMap = new Map<number, { vpBefore: number; vpAfter: number }>();
-  {
-    let acc = vpAtStart;
-    for (let i = 0; i < runs.length; i++) {
-      const vpBefore = acc;
-      const consumed = runs[i].weightBps / 5000;
-      acc = Math.max(0, acc - consumed);
-      runVpMap.set(i, { vpBefore, vpAfter: acc });
+  } else {
+    const totalConsumed = votes.reduce((s, v) => s + v.weightBps / 5000, 0);
+    let vp = Math.min(100, currentVp + totalConsumed);
+    for (const v of votes) {
+      const vpBefore = vp;
+      const vpAfter  = Math.max(0, vp - v.weightBps / 5000);
+      vpEvents.push({ timeMs: new Date(v.votedAt).getTime(), author: v.author, weightBps: v.weightBps, vpBefore, vpAfter });
+      vp = vpAfter;
     }
   }
+  vpEvents.sort((a, b) => a.timeMs - b.timeMs);
 
-  type Point = { time: string; vp: number; weightBps: number; runIdx: number; runVotes: number; runAuthors: number; runVpBefore: number; runVpAfter: number };
-  const points: Point[] = [];
-  let vp = vpAtStart;
-  for (let i = 0; i < votes.length; i++) {
-    const v = votes[i];
-    const consumed = v.weightBps / 5000;
-    const ri = runIdxForVote(v.votedAt);
-    const run = ri >= 0 ? runs[ri] : null;
-    const rvp = ri >= 0 ? (runVpMap.get(ri) ?? { vpBefore: vp, vpAfter: vp }) : { vpBefore: vp, vpAfter: vp };
-    points.push({
-      time: v.votedAt, vp: Math.max(0, vp - consumed),
-      weightBps: v.weightBps, runIdx: ri,
-      runVotes: run?.voteCount ?? 1, runAuthors: run?.authors.length ?? 1,
-      runVpBefore: rvp.vpBefore, runVpAfter: rvp.vpAfter,
+  const N = vpEvents.length;
+  if (N === 0) return null;
+
+  // ── Run-based layout ─────────────────────────────────────────────────────
+  // Group individual vote events into runs (gap > 120s = new run).
+  // Each run = one before/after pair; all points equally spaced on x-axis.
+  type VpRun = {
+    vpBefore: number; vpAfter: number; cost: number;
+    voteCount: number; timeStart: number;
+    authors: string[]; totalWeightBps: number;
+  };
+  const vpRuns: VpRun[] = [];
+  let curGroup: typeof vpEvents[number][] = [];
+  for (const ev of vpEvents) {
+    if (curGroup.length === 0 || ev.timeMs - curGroup[curGroup.length - 1].timeMs <= 120_000) {
+      curGroup.push(ev);
+    } else {
+      const first = curGroup[0], last = curGroup[curGroup.length - 1];
+      vpRuns.push({
+        vpBefore: first.vpBefore, vpAfter: last.vpAfter,
+        cost: first.vpBefore - last.vpAfter,
+        voteCount: curGroup.length, timeStart: first.timeMs,
+        authors: [...new Set(curGroup.map(e => e.author))],
+        totalWeightBps: curGroup.reduce((s, e) => s + e.weightBps, 0),
+      });
+      curGroup = [ev];
+    }
+  }
+  if (curGroup.length > 0) {
+    const first = curGroup[0], last = curGroup[curGroup.length - 1];
+    vpRuns.push({
+      vpBefore: first.vpBefore, vpAfter: last.vpAfter,
+      cost: first.vpBefore - last.vpAfter,
+      voteCount: curGroup.length, timeStart: first.timeMs,
+      authors: [...new Set(curGroup.map(e => e.author))],
+      totalWeightBps: curGroup.reduce((s, e) => s + e.weightBps, 0),
     });
-    vp = Math.max(0, vp - consumed);
   }
-  // Add current point (no vote)
-  points.push({ time: new Date().toISOString(), vp: currentVp, weightBps: 0, runIdx: -1, runVotes: 0, runAuthors: 0, runVpBefore: currentVp, runVpAfter: currentVp });
+  const NR = vpRuns.length;
 
+  // Layout: equal x-spacing, 2 points per run (before + after), then currentVp.
+  // xPeak(i) = i*2, xValley(i) = i*2+1, totalX = NR*2 (currentVp point).
+  const xPeak   = (i: number) => i * 2;
+  const xValley = (i: number) => i * 2 + 1;
+  const totalX  = NR * 2;
+
+  // Chart dimensions
   const W = 400, H = 80;
-  const pad = { l:8, r:8, t:8, b:8 };
-  const vpMin = Math.max(0, Math.min(...points.map(p=>p.vp)) - 5);
-  const vpMax = Math.min(100, vpAtStart + 2);
-  const xScale = (i: number) => pad.l + (i / (points.length - 1)) * (W - pad.l - pad.r);
-  const yScale = (v: number) => H - pad.b - ((v - vpMin) / (vpMax - vpMin || 1)) * (H - pad.t - pad.b);
+  const pad = { l: 28, r: 8, t: 4, b: 4 };
 
-  const pathD = points.map((p, i) => `${i===0?"M":"L"}${xScale(i).toFixed(1)},${yScale(p.vp).toFixed(1)}`).join(" ");
-  const fillD = pathD + ` L${xScale(points.length-1).toFixed(1)},${H-pad.b} L${pad.l},${H-pad.b} Z`;
+  const allVp = [...vpRuns.map(r => r.vpBefore), ...vpRuns.map(r => r.vpAfter), currentVp];
+  const vpMin = Math.max(0,   Math.min(...allVp) - 2);
+  const vpMax = Math.min(100, Math.max(...allVp) + 1);
 
-  const hovered = hoverIdx !== null ? points[hoverIdx] : null;
+  const xS = (x: number) => pad.l + (x / totalX) * (W - pad.l - pad.r);
+  const yV = (v: number) => H - pad.b - ((v - vpMin) / (vpMax - vpMin || 1)) * (H - pad.t - pad.b);
+
+  // Zigzag path: peak[0] → valley[0] → peak[1] → valley[1] → … → currentVp
+  const pts: { x: number; vp: number }[] = [];
+  for (let i = 0; i < NR; i++) {
+    pts.push({ x: xPeak(i),   vp: vpRuns[i].vpBefore });
+    pts.push({ x: xValley(i), vp: vpRuns[i].vpAfter  });
+  }
+  pts.push({ x: totalX, vp: currentVp });
+
+  const pathD = pts.map((p, i) => `${i===0?"M":"L"}${xS(p.x).toFixed(1)},${yV(p.vp).toFixed(1)}`).join(" ");
+  const fillD = pathD
+    + ` L${xS(totalX).toFixed(1)},${(H-pad.b).toFixed(1)}`
+    + ` L${xS(0).toFixed(1)},${(H-pad.b).toFixed(1)} Z`;
+
+  // Hover: snap to nearest valley
+  const hov = hoveredVoteIdx !== null ? vpRuns[hoveredVoteIdx] : null;
+
+  function findClosestRun(mouseX: number): number | null {
+    let best = 0, bestDist = Infinity;
+    for (let i = 0; i < NR; i++) {
+      const cx = xS(xValley(i));
+      const d  = Math.abs(mouseX - cx);
+      if (d < bestDist) { bestDist = d; best = i; }
+    }
+    return bestDist < (W / Math.max(NR, 1)) * 0.85 ? best : null;
+  }
+
+  const vpAtStart = vpRuns[0].vpBefore;
+  const totalCost = vpAtStart - currentVp;
+  const lowestVp  = Math.min(...vpRuns.map(r => r.vpAfter), currentVp);
 
   return (
-    <div style={{ ...card, paddingBottom:"0.5rem" }}>
+    <div style={{ ...card, paddingBottom: "0.5rem" }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"0.4rem" }}>
         <p style={{ ...lbl, margin:0 }}>{t("chartVpToday")}</p>
-        <span style={{ color:C.dim, fontSize:"0.75rem", fontWeight:600 }}>{votes.length} Votes · {vpAtStart.toFixed(1)}% → {currentVp.toFixed(1)}%</span>
+        <span style={{ color:C.dim, fontSize:"0.75rem", fontWeight:600 }}>
+          {votes.length} Votes · {NR} {NR===1?"Run":"Runs"}
+          {" · "}
+          <span style={{ color: C.warn }}>−{totalCost.toFixed(1)}%</span>
+          {" · "}
+          Tiefst {lowestVp.toFixed(1)}%
+        </span>
       </div>
+
       <div style={{ position:"relative" }}>
         <svg
           ref={svgRef}
           width="100%" viewBox={`0 0 ${W} ${H}`}
           style={{ display:"block", overflow:"visible" }}
-          onMouseLeave={() => setHoverIdx(null)}
+          onMouseLeave={() => setHoveredVoteIdx(null)}
           onMouseMove={e => {
             const rect = svgRef.current?.getBoundingClientRect();
             if (!rect) return;
-            const x = (e.clientX - rect.left) / rect.width * W;
-            let closest = 0;
-            let closestDist = Infinity;
-            points.forEach((_, i) => { const d = Math.abs(xScale(i) - x); if (d < closestDist) { closestDist = d; closest = i; } });
-            setHoverIdx(closest);
+            const mouseX = (e.clientX - rect.left) / rect.width * W;
+            setHoveredVoteIdx(findClosestRun(mouseX));
           }}
         >
           <defs>
             <linearGradient id="vpFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={C.ok} stopOpacity="0.25"/>
-              <stop offset="100%" stopColor={C.ok} stopOpacity="0.02"/>
+              <stop offset="0%" stopColor={C.ok} stopOpacity="0.15"/>
+              <stop offset="100%" stopColor={C.ok} stopOpacity="0.01"/>
             </linearGradient>
           </defs>
+
+          {/* Y-axis labels */}
+          {[vpMin, (vpMin+vpMax)/2, vpMax].map(v => (
+            <text key={v} x={pad.l-3} y={yV(v)+3.5} textAnchor="end" fontSize="7" fill={C.faint}>{v.toFixed(0)}%</text>
+          ))}
+
+          {/* Gradient fill */}
           <path d={fillD} fill="url(#vpFill)"/>
-          <path d={pathD} fill="none" stroke={C.ok} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          {hoverIdx !== null && (
+
+          {/* Full zigzag path — recovery segments in green */}
+          <path d={pathD} fill="none" stroke={C.ok} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+
+          {/* Drop segments (peak→valley) — overlaid in orange for emphasis */}
+          {vpRuns.map((run, i) => (
+            <line key={i}
+              x1={xS(xPeak(i)).toFixed(1)}   y1={yV(run.vpBefore).toFixed(1)}
+              x2={xS(xValley(i)).toFixed(1)} y2={yV(run.vpAfter).toFixed(1)}
+              stroke={hoveredVoteIdx === i ? C.warn : C.warn + "cc"}
+              strokeWidth={hoveredVoteIdx === i ? 2.5 : 2}
+              strokeLinecap="round"
+            />
+          ))}
+
+          {/* Peak dots */}
+          {vpRuns.map((_, i) => (
+            <circle key={i}
+              cx={xS(xPeak(i)).toFixed(1)} cy={yV(vpRuns[i].vpBefore).toFixed(1)}
+              r="2" fill={C.ok} stroke="none"
+            />
+          ))}
+
+          {/* Valley dots */}
+          {vpRuns.map((run, i) => (
+            <circle key={i}
+              cx={xS(xValley(i)).toFixed(1)} cy={yV(run.vpAfter).toFixed(1)}
+              r={hoveredVoteIdx === i ? 4.5 : 3}
+              fill={hoveredVoteIdx === i ? C.warn : C.warn + "cc"}
+              stroke="#fff" strokeWidth="1.2"
+            />
+          ))}
+
+          {/* Crosshair at hovered valley */}
+          {hov !== null && hoveredVoteIdx !== null && (
             <line
-              x1={xScale(hoverIdx)} y1={pad.t} x2={xScale(hoverIdx)} y2={H-pad.b}
+              x1={xS(xValley(hoveredVoteIdx))} y1={pad.t}
+              x2={xS(xValley(hoveredVoteIdx))} y2={H-pad.b}
               stroke={C.faint} strokeWidth="1" strokeDasharray="3,2"
             />
           )}
-          {points.map((p, i) => p.weightBps > 0 && (
-            <circle key={i} cx={xScale(i)} cy={yScale(p.vp)} r={hoverIdx===i?4:2.5}
-              fill={hoverIdx===i?C.ok:C.ok+"99"} stroke="#fff" strokeWidth="1"/>
-          ))}
         </svg>
-        {hovered && hoverIdx !== null && (
-          <div style={{
-            position:"absolute",
-            left: Math.min(Math.max(xScale(hoverIdx) / W * 100, 14), 70) + "%",
-            top: "-4px",
-            transform: "translateX(-50%)",
-            background: "#0f172a", color:"#e2e8f0",
-            borderRadius:"12px", padding:"0.7rem 1rem",
-            fontSize:"0.8rem", lineHeight:1.75,
-            pointerEvents:"none",
-            boxShadow:"0 8px 24px rgba(0,0,0,0.4)",
-            zIndex:10, minWidth:"180px",
-          }}>
-            {/* Header */}
-            <div style={{ fontWeight:800, fontSize:"0.88rem", color:"#fff", marginBottom:"0.3rem", display:"flex", justifyContent:"space-between", alignItems:"baseline" }}>
-              <span>{fmt.time(hovered.time)} Uhr</span>
-              {hovered.runIdx >= 0 && <span style={{ color:"#94a3b8", fontWeight:600, fontSize:"0.75rem" }}>Durchlauf #{hovered.runIdx+1}</span>}
+
+        {/* Tooltip */}
+        {hov !== null && hoveredVoteIdx !== null && (() => {
+          const xPct = Math.min(Math.max(xS(xValley(hoveredVoteIdx)) / W * 100, 18), 72);
+          return (
+            <div style={{
+              position:"absolute", left: xPct + "%", top: "-4px",
+              transform:"translateX(-50%)",
+              background:"#0f172a", color:"#e2e8f0",
+              borderRadius:"12px", padding:"0.6rem 0.9rem",
+              fontSize:"0.78rem", lineHeight:1.7,
+              pointerEvents:"none",
+              boxShadow:"0 8px 24px rgba(0,0,0,0.45)",
+              zIndex:10, minWidth:"170px",
+            }}>
+              <div style={{ fontWeight:800, color:"#fff", marginBottom:"0.15rem" }}>
+                {fmt.time(new Date(hov.timeStart).toISOString())} Uhr
+              </div>
+              <div style={{ color:"#94a3b8", fontSize:"0.72rem", marginBottom:"0.2rem" }}>
+                {hov.voteCount} Votes · {hov.authors.slice(0,3).map(a => `@${a}`).join(", ")}{hov.authors.length > 3 ? ` +${hov.authors.length-3}` : ""}
+              </div>
+              <div style={{ color:"#fcd34d", fontWeight:700 }}>
+                {hov.vpBefore.toFixed(2)}% → {hov.vpAfter.toFixed(2)}%
+              </div>
+              <div style={{ color:C.warn, fontSize:"0.72rem", fontWeight:700 }}>
+                −{hov.cost.toFixed(3)}% VP
+              </div>
+              {voteUsd > 0 && (
+                <div style={{ borderTop:"1px solid #1e293b", marginTop:"0.28rem", paddingTop:"0.28rem", color:"#6ee7b7", fontWeight:700, fontSize:"0.74rem" }}>
+                  ~{fmtUsd((hov.totalWeightBps/10000)*voteUsd*0.25)} Est. Curation
+                </div>
+              )}
             </div>
-            {hovered.weightBps > 0 ? (
-              <>
-                {/* Run summary */}
-                <div style={{ color:"#cbd5e1", marginBottom:"0.25rem" }}>
-                  {hovered.runVotes} {hovered.runVotes===1?t("unitVote"):t("unitVotes")} · {hovered.runAuthors} {t("unitAuthors")}
-                </div>
-                {/* VP before → after for whole run */}
-                <div style={{ color:"#fcd34d", fontWeight:700 }}>
-                  VP: {hovered.runVpBefore.toFixed(1)}% → {hovered.runVpAfter.toFixed(1)}%
-                </div>
-                <div style={{ color:"#94a3b8", fontSize:"0.74rem" }}>
-                  −{(hovered.runVpBefore - hovered.runVpAfter).toFixed(2)}% VP
-                </div>
-                {/* Value */}
-                <div style={{ borderTop:"1px solid #1e293b", marginTop:"0.35rem", paddingTop:"0.35rem" }}>
-                  <div style={{ color:"#93c5fd" }}>Vote-Wert: {fmtUsd((hovered.weightBps/10000)*voteUsd)}</div>
-                  <div style={{ color:"#6ee7b7", fontWeight:700 }}>+{fmtUsd((hovered.weightBps/10000)*voteUsd*0.25)} Est. Curation</div>
-                </div>
-              </>
-            ) : (
-              <div style={{ color:"#86efac", fontWeight:700 }}>VP jetzt: {hovered.vp.toFixed(1)}%</div>
-            )}
-          </div>
-        )}
+          );
+        })()}
       </div>
     </div>
   );

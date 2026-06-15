@@ -1025,14 +1025,26 @@ export function registerTodayVotesRoute(app: FastifyInstance): void {
     const db = getDb();
     const tz = getUserTimezone(session.user.username);
     const { startIso, endIso } = todayBoundsUtc(tz);
-    type VoteRow = { author: string; permlink: string; weight_bps: number; transaction_id: string; created_at: string };
+
+    type VoteRow = {
+      author: string; permlink: string; weight_bps: number;
+      transaction_id: string; created_at: string;
+      vp_before_bps: number | null; vp_after_bps: number | null;
+    };
     const rows = db.prepare(`
-      SELECT author, permlink, weight_bps, transaction_id, created_at
-      FROM audit_events
-      WHERE type = 'vote_broadcast_success'
-        AND username = ?
-        AND created_at >= ? AND created_at < ?
-      ORDER BY created_at ASC
+      SELECT
+        a.author, a.permlink, a.weight_bps, a.transaction_id, a.created_at,
+        o.vp_before_vote_bps AS vp_before_bps,
+        o.vp_after_vote_bps  AS vp_after_bps
+      FROM audit_events a
+      LEFT JOIN vb_global_vote_outcomes o
+        ON o.voter   = a.username
+        AND o.author  = a.author
+        AND o.permlink = a.permlink
+      WHERE a.type = 'vote_broadcast_success'
+        AND a.username = ?
+        AND a.created_at >= ? AND a.created_at < ?
+      ORDER BY a.created_at ASC
     `).all(session.user.username, startIso, endIso) as VoteRow[];
 
     // Group votes into runs (gap > 120s = new run)
@@ -1070,12 +1082,15 @@ export function registerTodayVotesRoute(app: FastifyInstance): void {
       totalWeightBps,
       runs:          allRuns,
       lastRun:       allRuns.length > 0 ? allRuns[allRuns.length - 1] : null,
+      dayStartIso:   startIso,
       votes: rows.map(v => ({
         author:        v.author,
         permlink:      v.permlink,
         weightBps:     v.weight_bps ?? 0,
         transactionId: v.transaction_id,
         votedAt:       v.created_at,
+        vpBeforeBps:   v.vp_before_bps ?? null,
+        vpAfterBps:    v.vp_after_bps  ?? null,
       })),
     };
   });
