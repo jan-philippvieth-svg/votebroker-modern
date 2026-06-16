@@ -4,7 +4,7 @@ import { todayString, startOfLocalDay, localDateString } from "../utils/timezone
 import type {
   AuthSession, CurationProfile, DailyEarnings, DailyHistoryPoint, DailyHistoryResult,
   DailyHistorySummary, GrowthAnalytics, GrowthBucket, GrowthData, OpportunitiesMeta,
-  PendingCuration, PendingDebugPost, PostOpportunity, SteemAccountSnapshot, TodayStats,
+  PendingCuration, PendingDebugPost, PostOpportunity, SteemAccountSnapshot, TodayLastRun, TodayStats,
   VBEarningsResult, VotePlanResponse, VpBudget,
 } from "../api";
 import { fetchGrowthAnalytics, fetchGrowthAnalyticsVersion, fetchVBEarnings, fetchVpBudget } from "../api";
@@ -1334,6 +1334,35 @@ function GrowthAnalyticsPanel({ data, loading }: {
   );
 }
 
+// ── Gemeinsame VP-Rückwärtsrechnung (timestamp-basiert, geteilt von AllRunsPanel + VpGraphToday) ──
+// Regeneration: 20% VP pro 24h. Rückwärts von currentVp durch echte Run-Timestamps.
+function calcRunsWithVp(runs: TodayLastRun[], currentVpPct: number, nowMs = Date.now()) {
+  const REGEN_PER_SEC = 20 / 86400;
+  const NR = runs.length;
+  const vpStartArr: number[] = new Array(NR);
+  const vpEndArr:   number[] = new Array(NR);
+
+  const secSinceLastEnd = Math.max(0, (nowMs - new Date(runs[NR - 1].endedAt).getTime()) / 1000);
+  let vpBack = Math.max(0, currentVpPct - secSinceLastEnd * REGEN_PER_SEC);
+
+  for (let i = NR - 1; i >= 0; i--) {
+    vpEndArr[i]   = Math.min(100, Math.max(0, vpBack));
+    vpBack        = vpEndArr[i] + runs[i].weightBps / 5000;
+    vpStartArr[i] = Math.min(100, Math.max(0, vpBack));
+    if (i > 0) {
+      const gapSec = Math.max(0, (new Date(runs[i].startedAt).getTime() - new Date(runs[i - 1].endedAt).getTime()) / 1000);
+      vpBack = Math.max(0, vpStartArr[i] - gapSec * REGEN_PER_SEC);
+    }
+  }
+
+  return runs.map((run, i) => ({
+    run,
+    vpStart:  vpStartArr[i],
+    vpEnd:    vpEndArr[i],
+    consumed: run.weightBps / 5000,
+  }));
+}
+
 // ── Alle Durchläufe heute ─────────────────────────────────────────────────────
 
 function AllRunsPanel({ todayStats, snapshot, timezone, locale, t }: {
@@ -1349,17 +1378,10 @@ function AllRunsPanel({ todayStats, snapshot, timezone, locale, t }: {
 
   const voteUsd      = snapshot?.currentVoteUsd ?? 0;
   const currentVpPct = snapshot ? snapshot.votingPowerBps / 100 : null;
-  const totalConsumed = todayStats.totalWeightBps / 5000;
-  const vpBeforeDay   = currentVpPct !== null ? Math.min(100, currentVpPct + totalConsumed) : null;
 
-  let cumConsumed = 0;
-  const runsWithVp = todayStats.runs.map(run => {
-    const vpBeforeRun = vpBeforeDay !== null ? Math.max(0, vpBeforeDay - cumConsumed) : null;
-    const consumed    = run.weightBps / 5000;
-    cumConsumed      += consumed;
-    const vpAfterRun  = vpBeforeDay !== null ? Math.max(0, vpBeforeDay - cumConsumed) : null;
-    return { run, vpBeforeRun, vpAfterRun, consumed };
-  });
+  const runsWithVp = currentVpPct !== null
+    ? calcRunsWithVp(todayStats.runs, currentVpPct).map(r => ({ ...r, vpBeforeRun: r.vpStart, vpAfterRun: r.vpEnd }))
+    : todayStats.runs.map(run => ({ run, vpBeforeRun: null, vpAfterRun: null, consumed: run.weightBps / 5000 }));
 
   const totalValue = (todayStats.totalWeightBps / 10000) * voteUsd;
 
@@ -1442,7 +1464,7 @@ function AllRunsPanel({ todayStats, snapshot, timezone, locale, t }: {
           <span style={{ color:C.text, fontWeight:800 }}>{t("cardTotalToday")}</span>
           <span style={{ color:C.ok, fontWeight:700 }}>{todayStats.totalVotes} Votes</span>
           <span style={{ color:C.info, fontWeight:600 }}>{todayStats.uniqueAuthors} Autoren</span>
-          <span style={{ color:C.warn, fontWeight:700 }}>−{totalConsumed.toFixed(1)}% VP</span>
+          <span style={{ color:C.warn, fontWeight:700 }}>−{(todayStats.totalWeightBps / 5000).toFixed(1)}% VP</span>
           <span style={{ color:C.dim, fontWeight:600 }}>Vote-Wert: {fmtUsd(totalValue)}</span>
           <span style={{ color:C.ok, fontWeight:700 }}>+{fmtUsd(totalValue * 0.25)} Curation</span>
         </div>
@@ -1469,60 +1491,54 @@ function VpGraphToday({ todayStats, snapshot, timezone, locale }: {
 
   if (!todayStats || todayStats.runs.length === 0 || !snapshot) return null;
 
-  // Exakt dieselbe Rückwärtsrechnung wie AllRunsPanel.
-  const currentVp     = snapshot.votingPowerBps / 100;
-  const totalConsumed = todayStats.totalWeightBps / 5000;
-  const vpBeforeDay   = Math.min(100, currentVp + totalConsumed);
+  const currentVp = snapshot.votingPowerBps / 100;
+  const runs = todayStats.runs;
+  const NR   = runs.length;
+  const nowMs = Date.now();
 
-  let cumConsumed = 0;
-  const runsWithVp = todayStats.runs.map(run => {
-    const vpStart  = Math.max(0, vpBeforeDay - cumConsumed);
-    const consumed = run.weightBps / 5000;
-    cumConsumed   += consumed;
-    const vpEnd    = Math.max(0, vpBeforeDay - cumConsumed);
-    return { run, vpStart, vpEnd, consumed };
-  });
+  const runsWithVp = calcRunsWithVp(runs, currentVp, nowMs);
 
-  const NR = runsWithVp.length;
-
-  // EKG layout: jeder Durchgang = ein Peak→Valley-Drop.
-  const SLOT  = 2;
-  const DROP  = 1;
-  const xPeak   = (i: number) => i * SLOT;
-  const xValley = (i: number) => i * SLOT + DROP;
-  const totalX  = (NR - 1) * SLOT + DROP;
+  // Zeitproportionale X-Achse: vom Tagesbeginn bis jetzt.
+  const dayStartMs  = new Date(todayStats.dayStartIso).getTime();
+  const spanMs      = Math.max(1, nowMs - dayStartMs);
 
   const W = 400, H = 80;
   const pad = { l: 28, r: 8, t: 4, b: 4 };
 
-  const allVp = [...runsWithVp.map(r => r.vpStart), ...runsWithVp.map(r => r.vpEnd)];
+  const runStartMs = (i: number) => new Date(runs[i].startedAt).getTime();
+  const runEndMs   = (i: number) => new Date(runs[i].endedAt).getTime();
+  const xT = (ms: number) => pad.l + ((ms - dayStartMs) / spanMs) * (W - pad.l - pad.r);
+
+  const allVp = [...runsWithVp.map(r => r.vpStart), ...runsWithVp.map(r => r.vpEnd), currentVp];
   const vpMin = Math.max(0,   Math.min(...allVp) - 2);
   const vpMax = Math.min(100, Math.max(...allVp) + 1);
-
-  const xS = (x: number) => pad.l + (x / totalX) * (W - pad.l - pad.r);
   const yV = (v: number) => H - pad.b - ((v - vpMin) / (vpMax - vpMin || 1)) * (H - pad.t - pad.b);
 
-  const pts: { x: number; vp: number }[] = [];
+  // Datenpunkte: Start + Ende jedes Runs, dann aktueller VP-Stand
+  const pts: { ms: number; vp: number }[] = [];
   for (let i = 0; i < NR; i++) {
-    pts.push({ x: xPeak(i),   vp: runsWithVp[i].vpStart });
-    pts.push({ x: xValley(i), vp: runsWithVp[i].vpEnd   });
+    pts.push({ ms: runStartMs(i), vp: runsWithVp[i].vpStart });
+    pts.push({ ms: runEndMs(i),   vp: runsWithVp[i].vpEnd   });
+  }
+  if (nowMs - runEndMs(NR - 1) > 60_000) {
+    pts.push({ ms: nowMs, vp: currentVp });
   }
 
-  const pathD = pts.map((p, i) => `${i===0?"M":"L"}${xS(p.x).toFixed(1)},${yV(p.vp).toFixed(1)}`).join(" ");
+  const pathD = pts.map((p, i) => `${i===0?"M":"L"}${xT(p.ms).toFixed(1)},${yV(p.vp).toFixed(1)}`).join(" ");
   const fillD = pathD
-    + ` L${xS(totalX).toFixed(1)},${(H-pad.b).toFixed(1)}`
-    + ` L${xS(0).toFixed(1)},${(H-pad.b).toFixed(1)} Z`;
+    + ` L${xT(pts[pts.length-1].ms).toFixed(1)},${(H-pad.b).toFixed(1)}`
+    + ` L${xT(pts[0].ms).toFixed(1)},${(H-pad.b).toFixed(1)} Z`;
 
   const hov = hoveredRunIdx !== null ? runsWithVp[hoveredRunIdx] : null;
 
   function findClosestRun(mouseX: number): number | null {
     let best = 0, bestDist = Infinity;
     for (let i = 0; i < NR; i++) {
-      const cx = xS(xValley(i));
+      const cx = xT((runStartMs(i) + runEndMs(i)) / 2);
       const d  = Math.abs(mouseX - cx);
       if (d < bestDist) { bestDist = d; best = i; }
     }
-    return bestDist < (W / Math.max(NR, 1)) * 0.85 ? best : null;
+    return best;
   }
 
   const totalCost = runsWithVp.reduce((s, r) => s + r.consumed, 0);
@@ -1570,8 +1586,8 @@ function VpGraphToday({ todayStats, snapshot, timezone, locale }: {
 
           {runsWithVp.map((r, i) => (
             <line key={i}
-              x1={xS(xPeak(i)).toFixed(1)}   y1={yV(r.vpStart).toFixed(1)}
-              x2={xS(xValley(i)).toFixed(1)} y2={yV(r.vpEnd).toFixed(1)}
+              x1={xT(runStartMs(i)).toFixed(1)} y1={yV(r.vpStart).toFixed(1)}
+              x2={xT(runEndMs(i)).toFixed(1)}   y2={yV(r.vpEnd).toFixed(1)}
               stroke={hoveredRunIdx === i ? C.warn : C.warn + "cc"}
               strokeWidth={hoveredRunIdx === i ? 2.5 : 2}
               strokeLinecap="round"
@@ -1580,14 +1596,14 @@ function VpGraphToday({ todayStats, snapshot, timezone, locale }: {
 
           {runsWithVp.map((r, i) => (
             <circle key={i}
-              cx={xS(xPeak(i)).toFixed(1)} cy={yV(r.vpStart).toFixed(1)}
+              cx={xT(runStartMs(i)).toFixed(1)} cy={yV(r.vpStart).toFixed(1)}
               r="2" fill={C.ok} stroke="none"
             />
           ))}
 
           {runsWithVp.map((r, i) => (
             <circle key={i}
-              cx={xS(xValley(i)).toFixed(1)} cy={yV(r.vpEnd).toFixed(1)}
+              cx={xT(runEndMs(i)).toFixed(1)} cy={yV(r.vpEnd).toFixed(1)}
               r={hoveredRunIdx === i ? 4.5 : 3}
               fill={hoveredRunIdx === i ? C.warn : C.warn + "cc"}
               stroke="#fff" strokeWidth="1.2"
@@ -1596,15 +1612,15 @@ function VpGraphToday({ todayStats, snapshot, timezone, locale }: {
 
           {hov !== null && hoveredRunIdx !== null && (
             <line
-              x1={xS(xValley(hoveredRunIdx))} y1={pad.t}
-              x2={xS(xValley(hoveredRunIdx))} y2={H-pad.b}
+              x1={xT(runEndMs(hoveredRunIdx))} y1={pad.t}
+              x2={xT(runEndMs(hoveredRunIdx))} y2={H-pad.b}
               stroke={C.faint} strokeWidth="1" strokeDasharray="3,2"
             />
           )}
         </svg>
 
         {hov !== null && hoveredRunIdx !== null && (() => {
-          const xPct = Math.min(Math.max(xS(xValley(hoveredRunIdx)) / W * 100, 18), 72);
+          const xPct = Math.min(Math.max(xT(runEndMs(hoveredRunIdx)) / W * 100, 18), 72);
           return (
             <div style={{
               position:"absolute", left: xPct + "%", top: "-4px",

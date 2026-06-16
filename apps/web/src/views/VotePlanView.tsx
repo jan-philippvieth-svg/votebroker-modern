@@ -535,6 +535,20 @@ export function VotePlanSection(props: {
                 })}
               </div>
 
+              {/* ── Score-Legende ── */}
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", fontSize: "0.7rem", color: "#9ca3af", marginBottom: "0.4rem", flexWrap: "wrap" as const }}>
+                <span style={{ color: "#6b7280", fontWeight: 700 }}>Score 0–100:</span>
+                <span><span style={{ color: "#15803d", fontWeight: 800 }}>■</span> ≥ 80 sehr gut</span>
+                <span><span style={{ color: "#a16207", fontWeight: 800 }}>■</span> ≥ 50 gut</span>
+                <span><span style={{ color: "#9ca3af", fontWeight: 800 }}>■</span> &lt; 50 schwach</span>
+                <span
+                  title={"Opportunity Score — 5 Faktoren (0–100):\n\n• Payout-Timing (0–35): Je niedriger der aktuelle Payout, desto früher sind wir im Pool. Wer früh votet, hat weniger Pool-Konkurrenz.\n\n• Alter (0–25): Je frischer der Post, desto besser das Curation-Fenster. < 15 Min. = Maximum.\n\n• Whale-Signal (0–20): 1–5 Wale die diesen Autor regelmäßig voten = Momentum ohne Überfüllung. > 12 Wale = hohe Pool-Konkurrenz.\n\n• Kategorie (0–10): Priorität in deiner Strategie — 'Immer voten' = 10, 'Niedrig' = 2.\n\n• Autorhistorie (0–10): Bisherige SP/VP-Performance dieses Autors aus VoteBroker-Daten. Ohne Daten: neutral (5)."}
+                  style={{ marginLeft: "auto", color: "#b0bec5", cursor: "help", fontWeight: 600, textDecoration: "underline dotted", textUnderlineOffset: "2px" }}
+                >
+                  ℹ Wie wird der Score berechnet?
+                </span>
+              </div>
+
               {/* ── Plan-Karten mit Inline-Controls ── */}
               <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", marginBottom: "0.75rem" }}>
                 {allPlanEntries.map(rawE => {
@@ -579,7 +593,10 @@ export function VotePlanSection(props: {
                       <div style={{ display: "flex", flex: 1, gap: "0.75rem", alignItems: "center", opacity: isExcluded ? 0.45 : 1, transition: "opacity 0.15s", minWidth: 0 }}>
 
                       {/* Score-Badge */}
-                      <div style={{ flexShrink: 0, width: "40px", height: "40px", borderRadius: "9px", background: isExcluded ? "#e5e7eb" : isAdded ? "#dcfce7" : scoreBg, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column" as const, position: "relative" as const }}>
+                      <div
+                        title={`Opportunity Score ${e.postScore}/100\nPayout-Timing + Alter + Whale-Signal + Kategorie + Autorhistorie`}
+                        style={{ flexShrink: 0, width: "40px", height: "40px", borderRadius: "9px", background: isExcluded ? "#e5e7eb" : isAdded ? "#dcfce7" : scoreBg, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column" as const, position: "relative" as const, cursor: "help" }}
+                      >
                         {isAdded && <span style={{ position: "absolute" as const, top: "-5px", right: "-5px", background: "#16a34a", color: "#fff", borderRadius: "50%", width: "14px", height: "14px", fontSize: "0.65rem", fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>+</span>}
                         <span style={{ color: isExcluded ? "#9ca3af" : isAdded ? "#15803d" : scoreColor, fontSize: "0.95rem", fontWeight: 900, lineHeight: 1 }}>{e.postScore}</span>
                         <span style={{ color: isExcluded ? "#9ca3af" : isAdded ? "#15803d" : scoreColor, fontSize: "0.52rem", fontWeight: 700, opacity: 0.6 }}>score</span>
