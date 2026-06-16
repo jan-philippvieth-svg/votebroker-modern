@@ -184,6 +184,7 @@ export function App() {
   const [lastScannedAt, setLastScannedAt] = useState<Date | null>(null);
   const autoScanRunningRef = useRef(false);
   const opportunitiesRef = useRef<PostOpportunity[] | null>(null); // always current, safe in intervals
+  const backgroundPollRef = useRef<() => Promise<void>>(); // always points to latest closure
   // Keys of posts voted successfully this session — prevents server re-scan from un-doing local state
   const recentlyVotedKeysRef = useRef<Set<string>>(new Set());
   const [votePlan, setVotePlan] = useState<VotePlanResponse | null>(null);
@@ -205,8 +206,10 @@ export function App() {
   const [activeTab, setActiveTab] = useState<"dna" | "dashboard" | "community" | "opportunities" | "billing" | "admin">("dna");
   const t = createTranslator(locale);
 
-  // Keep ref in sync so interval callbacks always see the latest opportunities list
+  // Keep refs in sync every render so interval callbacks always see fresh state
   opportunitiesRef.current = opportunities;
+  // backgroundPollRef updated after its declaration (hoisted) — see below
+
 
   useEffect(() => {
     getConsentCatalog()
@@ -423,7 +426,7 @@ export function App() {
       void loadOpportunities();
     }
 
-    const id = setInterval(() => { void backgroundPollOpportunities(); }, 60_000);
+    const id = setInterval(() => { void backgroundPollRef.current?.(); }, 60_000);
     return () => clearInterval(id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.token, activeTab]);
@@ -595,6 +598,8 @@ export function App() {
       autoScanRunningRef.current = false;
     }
   }
+  // Sync ref so setInterval always calls the latest closure (fixes stale closure bug)
+  backgroundPollRef.current = backgroundPollOpportunities;
 
   function showPendingOpportunities() {
     setOpportunities(prev => {
