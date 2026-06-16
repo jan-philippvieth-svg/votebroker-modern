@@ -411,6 +411,122 @@ function getNotifications() {
   return { notifications, count: notifications.length };
 }
 
+// ── Shadow Outcome Analysis ───────────────────────────────────────────────────
+
+function getShadowOutcomes(goodPayoutThreshold: number, goodVoteThreshold: number) {
+  const db = getDb();
+
+  // Overall resolution status
+  type StatusRow = { outcome_status: string; n: number };
+  const statusRows = db.prepare(`
+    SELECT outcome_status, COUNT(*) as n
+    FROM vb_copilot_shadow_runs
+    WHERE decision IN ('would_vote', 'skip_score', 'skip_budget')
+      AND author IS NOT NULL AND permlink IS NOT NULL
+    GROUP BY outcome_status
+  `).all() as StatusRow[];
+
+  const statusMap = Object.fromEntries(statusRows.map(r => [r.outcome_status, r.n]));
+  const totalResolved   = statusMap["resolved"]         ?? 0;
+  const totalMissing    = statusMap["content_missing"]  ?? 0;
+  const totalError      = statusMap["error"]            ?? 0;
+  const totalUnresolved = statusMap["unresolved"]       ?? 0;
+
+  // Confusion matrix — only for resolved rows
+  // A post is "good" when its payout >= threshold OR its vote count >= threshold
+  type MatrixRow = {
+    decision: string;
+    good_payout: number; // 1 if payout >= threshold, else 0
+    n: number;
+  };
+  const matrixRows = db.prepare(`
+    SELECT
+      decision,
+      CASE WHEN resolved_payout_sbd >= @payout THEN 1 ELSE 0 END AS good_payout,
+      COUNT(*) AS n
+    FROM vb_copilot_shadow_runs
+    WHERE outcome_status = 'resolved'
+      AND decision IN ('would_vote', 'skip_score', 'skip_budget')
+      AND author IS NOT NULL AND permlink IS NOT NULL
+    GROUP BY decision, good_payout
+  `).all({ payout: goodPayoutThreshold }) as MatrixRow[];
+
+  let tp = 0, fp = 0, fn = 0, tn = 0;
+  for (const r of matrixRows) {
+    const isGood     = r.good_payout === 1;
+    const isVote     = r.decision === "would_vote";
+    const isSkip     = r.decision === "skip_score" || r.decision === "skip_budget";
+    if (isVote && isGood)  tp += r.n;
+    if (isVote && !isGood) fp += r.n;
+    if (isSkip && isGood)  fn += r.n;
+    if (isSkip && !isGood) tn += r.n;
+  }
+
+  const precision = (tp + fp) > 0 ? Math.round((tp / (tp + fp)) * 10000) / 100 : null;
+  const recall    = (tp + fn) > 0 ? Math.round((tp / (tp + fn)) * 10000) / 100 : null;
+  const f1        = precision !== null && recall !== null && (precision + recall) > 0
+    ? Math.round((2 * precision * recall / (precision + recall)) * 100) / 100
+    : null;
+
+  // Best missed posts (False Negatives: skip + good payout)
+  type MissedRow = {
+    author: string; permlink: string; title: string | null;
+    decision: string; category: string | null;
+    run_at: string; post_score: number | null;
+    resolved_payout_sbd: number; resolved_vote_count: number | null;
+  };
+  const bestMissed = db.prepare(`
+    SELECT author, permlink, title, decision, category, run_at, post_score,
+           resolved_payout_sbd, resolved_vote_count
+    FROM vb_copilot_shadow_runs
+    WHERE outcome_status = 'resolved'
+      AND decision IN ('skip_score', 'skip_budget')
+      AND resolved_payout_sbd >= @payout
+    ORDER BY resolved_payout_sbd DESC
+    LIMIT 10
+  `).all({ payout: goodPayoutThreshold }) as MissedRow[];
+
+  // Average payouts by decision type (for calibration insight)
+  type AvgRow = { decision: string; avg_payout: number | null; median_payout: number | null; n: number };
+  const avgByDecision = db.prepare(`
+    SELECT decision,
+           AVG(resolved_payout_sbd) as avg_payout,
+           COUNT(*) as n
+    FROM vb_copilot_shadow_runs
+    WHERE outcome_status = 'resolved'
+      AND decision IN ('would_vote', 'skip_score', 'skip_budget')
+    GROUP BY decision
+  `).all() as AvgRow[];
+
+  return {
+    thresholds: { goodPayoutThreshold, goodVoteThreshold },
+    resolution: {
+      resolved:  totalResolved,
+      missing:   totalMissing,
+      error:     totalError,
+      unresolved: totalUnresolved,
+    },
+    confusionMatrix: { tp, fp, fn, tn },
+    metrics: { precision, recall, f1 },
+    missedOpportunities: fn,
+    bestMissed: bestMissed.map(r => ({
+      author:            r.author,
+      permlink:          r.permlink,
+      title:             r.title,
+      decision:          r.decision,
+      category:          r.category,
+      runAt:             r.run_at,
+      postScore:         r.post_score,
+      resolvedPayoutSbd: r.resolved_payout_sbd,
+      resolvedVoteCount: r.resolved_vote_count,
+      steemitUrl:        `https://steemit.com/@${r.author}/${r.permlink}`,
+    })),
+    avgByDecision: Object.fromEntries(
+      avgByDecision.map(r => [r.decision, { avgPayout: r.avg_payout !== null ? Math.round(r.avg_payout * 1000) / 1000 : null, n: r.n }])
+    ),
+  };
+}
+
 // ── Route registration ────────────────────────────────────────────────────────
 export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
 
@@ -565,5 +681,29 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       LIMIT 100
     `).all();
     return { communities: rows };
+  });
+
+  // ── Shadow Outcome Analysis ─────────────────────────────────────────────────
+
+  app.get("/api/admin/shadow-outcomes", {
+    schema: { tags: ["Admin"], summary: "CoPilot Shadow-Entscheidungsqualität (Confusion Matrix)" }
+  }, async (request, reply) => {
+    if (!requireAdmin(request)) return reply.code(403).send({ error: "forbidden" });
+
+    const query = (request.query ?? {}) as Record<string, string>;
+    const goodPayoutThreshold = parseFloat(query.good_payout_threshold_sbd ?? "1.0") || 1.0;
+    const goodVoteThreshold   = parseInt(query.good_vote_count_threshold    ?? "5",  10) || 5;
+
+    return getShadowOutcomes(goodPayoutThreshold, goodVoteThreshold);
+  });
+
+  app.post("/api/admin/shadow-outcomes/resolve-now", {
+    schema: { tags: ["Admin"], summary: "Shadow Outcome Resolver manuell triggern" }
+  }, async (request, reply) => {
+    if (!requireAdmin(request)) return reply.code(403).send({ error: "forbidden" });
+    import("../jobs/shadowOutcomeResolverJob.js").then(({ runShadowOutcomeResolver }) =>
+      runShadowOutcomeResolver(console).catch(e => console.warn("[ShadowResolver] triggered error:", e))
+    ).catch(() => {});
+    return { status: "started", message: "Shadow outcome resolver running in background" };
   });
 }

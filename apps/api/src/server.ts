@@ -17,6 +17,7 @@ import { startWhaleEnrichment } from "./jobs/whaleEnrichment.js";
 import { startPayoutSync } from "./jobs/payoutSync.js";
 import { startSignalCompute } from "./jobs/signalCompute.js";
 import { startCopilotShadow } from "./jobs/copilotShadowJob.js";
+import { startShadowOutcomeResolver } from "./jobs/shadowOutcomeResolverJob.js";
 import { startOpportunityRefresh } from "./jobs/opportunityRefreshJob.js";
 import { startGrowthSnapshotSampler } from "./jobs/growthSnapshotSampler.js";
 import { scanWhaleHistory } from "./chain/whaleHistoryScanner.js";
@@ -89,6 +90,7 @@ setTimeout(() => {
   startPriceSampler(log);
   startWhaleEnrichment(log);
   startCopilotShadow(log);
+  startShadowOutcomeResolver(log);
   startGrowthSnapshotSampler(log);
   startSignalCompute(log);
   startOpportunityRefresh(log);

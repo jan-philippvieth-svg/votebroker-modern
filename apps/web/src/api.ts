@@ -1460,6 +1460,53 @@ export async function fetchLiveVoteReport(token: string): Promise<LiveVoteReport
   return res.json();
 }
 
+export interface ShadowMissedPost {
+  author:            string;
+  permlink:          string;
+  title:             string | null;
+  decision:          string;
+  category:          string | null;
+  runAt:             string;
+  postScore:         number | null;
+  resolvedPayoutSbd: number;
+  resolvedVoteCount: number | null;
+  steemitUrl:        string;
+}
+
+export interface ShadowOutcomes {
+  thresholds: { goodPayoutThreshold: number; goodVoteThreshold: number };
+  resolution: { resolved: number; missing: number; error: number; unresolved: number };
+  confusionMatrix: { tp: number; fp: number; fn: number; tn: number };
+  metrics: { precision: number | null; recall: number | null; f1: number | null };
+  missedOpportunities: number;
+  bestMissed: ShadowMissedPost[];
+  avgByDecision: Record<string, { avgPayout: number | null; n: number }>;
+}
+
+export async function fetchShadowOutcomes(
+  token: string,
+  opts?: { goodPayoutThreshold?: number; goodVoteThreshold?: number }
+): Promise<ShadowOutcomes> {
+  const params = new URLSearchParams();
+  if (opts?.goodPayoutThreshold !== undefined) params.set("good_payout_threshold_sbd", String(opts.goodPayoutThreshold));
+  if (opts?.goodVoteThreshold   !== undefined) params.set("good_vote_count_threshold",  String(opts.goodVoteThreshold));
+  const qs = params.toString() ? `?${params}` : "";
+  const res = await fetch(`${API_BASE}/api/admin/shadow-outcomes${qs}`, {
+    headers: { session: token },
+  });
+  if (!res.ok) throw new Error("Shadow-Outcomes konnten nicht geladen werden.");
+  return res.json();
+}
+
+export async function triggerShadowOutcomeResolver(token: string): Promise<{ status: string; message: string }> {
+  const res = await fetch(`${API_BASE}/api/admin/shadow-outcomes/resolve-now`, {
+    method: "POST",
+    headers: { session: token },
+  });
+  if (!res.ok) throw new Error("Trigger fehlgeschlagen.");
+  return res.json();
+}
+
 export async function fixScreenshotUrls(token: string, filename: string): Promise<{ ok: boolean; changed: boolean; replacements: number; hint: string }> {
   const res = await fetch(`${API_BASE}/api/admin/content/fix-screenshot-urls`, {
     method: "POST",

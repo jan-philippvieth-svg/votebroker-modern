@@ -5,10 +5,12 @@ import {
   generateDevlogContent, generatePromoPost, getAdminCockpit, getContentDrafts, getContentPreview,
   injectScreenshots, listScreenshots, publishDraft, triggerFeePost, updateDraftStatus,
   fetchLiveVoteReport,
+  fetchShadowOutcomes, triggerShadowOutcomeResolver,
   type AdminCockpit, type AuthSession, type BroadcastEntry,
   type ContentDraft, type ContentListResponse, type ContentQueueItem,
   type DraftStatus, type FeePostLogEntry, type PromoLocale, type PublishResult, type ScreenshotFile,
   type LiveVoteReport, type ModelErrorMetrics, type DelayVsPostBucket,
+  type ShadowOutcomes, type ShadowMissedPost,
   PROMO_LOCALES,
 } from "../api";
 
@@ -1148,6 +1150,170 @@ function ContentSection({ session, queueItems }: { session: AuthSession; queueIt
   );
 }
 
+// ── Shadow Outcome Box (Section E) ────────────────────────────────────────────
+
+function ShadowOutcomeSection({ session }: { session: AuthSession }) {
+  const [data, setData]               = useState<ShadowOutcomes | null>(null);
+  const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState<string | null>(null);
+  const [triggering, setTriggering]   = useState(false);
+  const [triggerMsg, setTriggerMsg]   = useState<string | null>(null);
+  const [payoutThr, setPayoutThr]     = useState(1.0);
+  const [voteThr, setVoteThr]         = useState(5);
+
+  const load = () => {
+    setLoading(true);
+    fetchShadowOutcomes(session.token, { goodPayoutThreshold: payoutThr, goodVoteThreshold: voteThr })
+      .then(r => { setData(r); setLoading(false); })
+      .catch(e => { setError(e instanceof Error ? e.message : "Fehler"); setLoading(false); });
+  };
+
+  useEffect(() => { load(); }, [payoutThr, voteThr]);
+
+  const triggerResolve = async () => {
+    setTriggering(true);
+    try {
+      const r = await triggerShadowOutcomeResolver(session.token);
+      setTriggerMsg(r.message);
+      setTimeout(() => { setTriggerMsg(null); load(); }, 5000);
+    } catch (e) {
+      setTriggerMsg(e instanceof Error ? e.message : "Fehler");
+    } finally {
+      setTriggering(false);
+    }
+  };
+
+  if (loading) return <p style={{ color: C.dim, padding: "2rem", textAlign: "center" }}>Lade Shadow-Outcomes…</p>;
+  if (error || !data) return <p style={{ color: C.err, padding: "1rem" }}>{error ?? "Keine Daten"}</p>;
+
+  const { confusionMatrix: cm, metrics, resolution, thresholds, bestMissed, avgByDecision } = data;
+  const totalResolvable = cm.tp + cm.fp + cm.fn + cm.tn;
+
+  const matrixCell = (v: number, col: string) => (
+    <td style={{ padding: "0.4rem 0.8rem", textAlign: "center" as const, fontWeight: 700, fontSize: "1.1rem", color: col }}>{v}</td>
+  );
+
+  return (
+    <div style={{ ...card }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.5rem", marginBottom: "0.75rem" }}>
+        <p style={{ ...lbl, margin: 0 }}>E — Shadow-Mode: Entscheidungsqualität</p>
+        <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", flexWrap: "wrap" }}>
+          <label style={{ color: C.dim, fontSize: "0.73rem" }}>Payout-Schwelle (SBD)</label>
+          <input type="number" min="0.1" step="0.1" value={payoutThr}
+            onChange={e => setPayoutThr(parseFloat(e.target.value) || 1.0)}
+            style={{ width: "60px", fontSize: "0.77rem", padding: "0.2rem 0.3rem", border: `1px solid ${C.border}`, borderRadius: "4px", background: C.bg1, color: C.text }} />
+          <button onClick={load} style={btnStyle(C.info)}>↺ Neu berechnen</button>
+          <button onClick={() => void triggerResolve()} disabled={triggering} style={btnStyle(C.purple)}>
+            {triggering ? "Startet…" : "▶ Resolver jetzt"}
+          </button>
+        </div>
+      </div>
+
+      {triggerMsg && (
+        <div style={{ background: C.purple + "18", border: `1px solid ${C.purple}44`, borderRadius: "5px", padding: "0.4rem 0.75rem", marginBottom: "0.6rem", color: C.purple, fontSize: "0.78rem" }}>
+          {triggerMsg}
+        </div>
+      )}
+
+      {/* Resolution status */}
+      <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
+        <KpiCard label="Resolved"   value={resolution.resolved}   color={C.ok}     />
+        <KpiCard label="Unresolved" value={resolution.unresolved} color={C.warn}   />
+        <KpiCard label="Missing"    value={resolution.missing}    color={C.dim}    />
+        <KpiCard label="Error"      value={resolution.error}      color={C.err}    />
+      </div>
+
+      {totalResolvable === 0 ? (
+        <p style={{ color: C.dim, fontSize: "0.82rem" }}>
+          Noch keine resolved Rows — Resolver läuft täglich um 06:00 UTC, oder manuell starten.
+        </p>
+      ) : (
+        <>
+          {/* Confusion Matrix */}
+          <p style={{ ...lbl, margin: "0 0 0.4rem" }}>Confusion Matrix (Schwelle: {thresholds.goodPayoutThreshold} SBD)</p>
+          <table style={{ borderCollapse: "collapse", marginBottom: "0.75rem", fontSize: "0.78rem" }}>
+            <thead>
+              <tr>
+                <th style={{ padding: "0.3rem 0.8rem", color: C.dim, fontWeight: 600 }}></th>
+                <th style={{ padding: "0.3rem 0.8rem", color: C.dim, fontWeight: 600, textAlign: "center" as const }}>Post war gut</th>
+                <th style={{ padding: "0.3rem 0.8rem", color: C.dim, fontWeight: 600, textAlign: "center" as const }}>Post war schlecht</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style={{ borderBottom: `1px solid ${C.border}44` }}>
+                <td style={{ padding: "0.4rem 0.8rem", color: C.text, fontWeight: 600, fontSize: "0.77rem" }}>Hätte gevoted</td>
+                {matrixCell(cm.tp, C.ok)}
+                {matrixCell(cm.fp, C.err)}
+              </tr>
+              <tr>
+                <td style={{ padding: "0.4rem 0.8rem", color: C.text, fontWeight: 600, fontSize: "0.77rem" }}>Abgelehnt (skip)</td>
+                {matrixCell(cm.fn, C.warn)}
+                {matrixCell(cm.tn, C.ok)}
+              </tr>
+            </tbody>
+          </table>
+
+          {/* Labels */}
+          <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
+            <span style={tagStyle(C.ok)}>TP={cm.tp} True Positive</span>
+            <span style={tagStyle(C.err)}>FP={cm.fp} False Positive</span>
+            <span style={tagStyle(C.warn)}>FN={cm.fn} Missed</span>
+            <span style={tagStyle(C.dim)}>TN={cm.tn} True Negative</span>
+          </div>
+
+          {/* Metrics */}
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
+            <KpiCard label="Precision" value={metrics.precision !== null ? metrics.precision + "%" : "—"} color={metrics.precision !== null && metrics.precision >= 60 ? C.ok : C.warn} />
+            <KpiCard label="Recall"    value={metrics.recall    !== null ? metrics.recall    + "%" : "—"} color={metrics.recall    !== null && metrics.recall    >= 60 ? C.ok : C.warn} />
+            <KpiCard label="F1-Score"  value={metrics.f1        !== null ? metrics.f1        + "%" : "—"} color={metrics.f1        !== null && metrics.f1        >= 60 ? C.ok : C.warn} />
+            <KpiCard label="Verpasst"  value={data.missedOpportunities} color={C.warn} sub="False Negatives" />
+          </div>
+
+          {/* Avg payout by decision */}
+          <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
+            {(["would_vote","skip_score","skip_budget"] as const).map(d => {
+              const avg = avgByDecision[d];
+              if (!avg) return null;
+              const col = d === "would_vote" ? C.ok : C.dim;
+              return (
+                <div key={d} style={{ ...card, padding: "0.5rem 0.75rem", minWidth: "120px" }}>
+                  <p style={{ ...lbl, margin: "0 0 0.2rem" }}>{d}</p>
+                  <span style={{ fontWeight: 700, color: col }}>
+                    {avg.avgPayout !== null ? avg.avgPayout.toFixed(3) + " SBD" : "—"}
+                  </span>
+                  <span style={{ color: C.dim, fontSize: "0.7rem", marginLeft: "0.4rem" }}>n={avg.n}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Best missed posts */}
+          {bestMissed.length > 0 && (
+            <>
+              <p style={{ ...lbl, margin: "0 0 0.4rem" }}>Beste verpasste Posts (False Negatives ≥ {thresholds.goodPayoutThreshold} SBD)</p>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+                {bestMissed.map((p: ShadowMissedPost, i: number) => (
+                  <div key={i} style={{ display: "flex", gap: "0.6rem", alignItems: "center", fontSize: "0.77rem", padding: "0.3rem 0", borderBottom: `1px solid ${C.border}44`, flexWrap: "wrap" }}>
+                    <span style={{ color: C.warn, fontWeight: 700, minWidth: "55px" }}>{p.resolvedPayoutSbd.toFixed(3)} SBD</span>
+                    <span style={tagStyle(C.dim)}>{p.decision}</span>
+                    <span style={tagStyle(C.dim)}>{p.category ?? "—"}</span>
+                    {p.postScore !== null && <span style={{ color: C.dim, fontSize: "0.7rem" }}>score={p.postScore}</span>}
+                    <a href={p.steemitUrl} target="_blank" rel="noopener noreferrer"
+                      style={{ color: C.info, textDecoration: "none", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
+                      {p.title ?? `@${p.author}/${p.permlink}`}
+                    </a>
+                    <span style={{ color: C.dim, fontSize: "0.7rem", whiteSpace: "nowrap" as const }}>{fmtAge(p.runAt)}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Research Lab ─────────────────────────────────────────────────────────────
 
 function computeDataQuality(r: LiveVoteReport): { score: number; factors: Array<{ label: string; pts: number; max: number }> } {
@@ -1418,6 +1584,8 @@ function ResearchLabSection({ session }: { session: AuthSession }) {
           ★ = Delay-Bucket mit dem höchsten Ø Post-Payout. Interpretation: Je früher der Vote, desto höher der finale Post-Payout? → Datenbasis prüfen.
         </p>
       </div>
+
+      <ShadowOutcomeSection session={session} />
     </div>
   );
 }
