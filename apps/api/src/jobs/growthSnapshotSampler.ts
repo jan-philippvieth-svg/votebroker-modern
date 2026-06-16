@@ -46,6 +46,7 @@ function processActiveVotes(
   nowMs: number,
 ): {
   whaleCount:           number;
+  whaleVoters:          string[];
   topVoterAccount:      string | null;
   topVoterRshares:      number | null;
   totalRsharesSum:      number | null;
@@ -54,6 +55,7 @@ function processActiveVotes(
   timeSinceLastVoteMin: number | null;
 } {
   let whaleCount        = 0;
+  const whaleVoters:    string[]      = [];
   let topVoterAccount:  string | null = null;
   let topVoterRshares:  number | null = null;
   let totalRsharesSum   = 0;
@@ -72,6 +74,7 @@ function processActiveVotes(
 
     if (whaleSet.has(v.voter)) {
       whaleCount++;
+      whaleVoters.push(v.voter);
       if (voteTimeMs !== null && (firstWhaleTimeMs === null || voteTimeMs < firstWhaleTimeMs)) {
         firstWhaleTimeMs = voteTimeMs;
       }
@@ -104,7 +107,7 @@ function processActiveVotes(
     : null;
 
   return {
-    whaleCount, topVoterAccount, topVoterRshares,
+    whaleCount, whaleVoters, topVoterAccount, topVoterRshares,
     totalRsharesSum: allRshares.length > 0 ? totalRsharesSum : null,
     medianRshares,
     firstWhaleDelayMin, timeSinceLastVoteMin,
@@ -158,7 +161,7 @@ export async function runGrowthSnapshotSampler(log: typeof console = console): P
   const client = createSteemClient();
 
   const prevWhaleStmt = db.prepare(`
-    SELECT whale_count FROM vote_growth_snapshots
+    SELECT whale_count, whale_voters_json FROM vote_growth_snapshots
     WHERE voter=? AND author=? AND permlink=? AND whale_count IS NOT NULL
     ORDER BY measured_at DESC LIMIT 1
   `);
@@ -167,9 +170,10 @@ export async function runGrowthSnapshotSampler(log: typeof console = console): P
     INSERT OR IGNORE INTO vote_growth_snapshots
       (voter, author, permlink, snapshot_type, target_minutes, pending_payout_sbd,
        active_votes_count, measured_at, actual_delta_min, source, collocated,
-       whale_count, new_whale_votes, top_voter_account, top_voter_rshares,
+       whale_count, new_whale_votes, whale_voters_json, new_whale_voters_json,
+       top_voter_account, top_voter_rshares,
        first_whale_delay_min, time_since_last_vote_min, total_rshares_sum, median_rshares)
-    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   let liveFetched = 0;
@@ -191,13 +195,18 @@ export async function runGrowthSnapshotSampler(log: typeof console = console): P
       if (pendingSbd <= 0) continue;
 
       const postCreatedMs = content.created ? toUtcMs(content.created) : toUtcMs(entry.voted_at);
-      const { whaleCount, topVoterAccount, topVoterRshares, totalRsharesSum, medianRshares, firstWhaleDelayMin, timeSinceLastVoteMin } =
+      const { whaleCount, whaleVoters, topVoterAccount, topVoterRshares, totalRsharesSum, medianRshares, firstWhaleDelayMin, timeSinceLastVoteMin } =
         processActiveVotes(activeVotes, whaleSet, postCreatedMs, now);
 
-      // Delta vs most recent prior snapshot to reveal whale arrival timing.
+      // Delta vs most recent prior snapshot: count and identity of new whales.
       const prevRow = prevWhaleStmt.get(entry.voter, entry.author, entry.permlink) as
-        { whale_count: number } | undefined;
+        { whale_count: number; whale_voters_json: string | null } | undefined;
       const newWhaleVotes = prevRow != null ? Math.max(0, whaleCount - prevRow.whale_count) : null;
+      const prevWhaleSet  = new Set<string>(prevRow?.whale_voters_json ? JSON.parse(prevRow.whale_voters_json) as string[] : []);
+      const newWhaleVoters = whaleVoters.filter(w => !prevWhaleSet.has(w));
+
+      const whaleVotersJson    = whaleVoters.length > 0 ? JSON.stringify(whaleVoters) : null;
+      const newWhaleVotersJson = prevRow != null && newWhaleVoters.length > 0 ? JSON.stringify(newWhaleVoters) : null;
 
       const votedMs = toUtcMs(entry.voted_at);
 
@@ -212,7 +221,8 @@ export async function runGrowthSnapshotSampler(log: typeof console = console): P
             snapType, def.targetMinutes,
             pendingSbd, voteCount,
             actualDelta, source, collocated,
-            whaleCount, newWhaleVotes, topVoterAccount, topVoterRshares,
+            whaleCount, newWhaleVotes, whaleVotersJson, newWhaleVotersJson,
+            topVoterAccount, topVoterRshares,
             firstWhaleDelayMin, timeSinceLastVoteMin, totalRsharesSum, medianRshares,
           );
         }
@@ -265,9 +275,136 @@ export async function runGrowthSnapshotSampler(log: typeof console = console): P
     }
   })();
 
-  const total = liveFetched + finalDue.length;
+  // ── Shadow-mode growth snapshots ──────────────────────────────────────────
+  // Track posts the CoPilot evaluated (would_vote + skip_score) so we can
+  // compare the event chain of chosen vs. rejected posts.
+  const SHADOW_TIMED: SnapshotDef[] = [
+    { type: "eval_time", targetMinutes: 0,    maxDelayMinutes: 180   },
+    { type: "t1h",       targetMinutes: 60,   maxDelayMinutes: 480   },
+    { type: "t6h",       targetMinutes: 360,  maxDelayMinutes: 960   },
+    { type: "t24h",      targetMinutes: 1440, maxDelayMinutes: 2880  },
+    { type: "t72h",      targetMinutes: 4320, maxDelayMinutes: 8640  },
+  ];
+
+  // Find all unique shadow posts with due snapshots (anchor = first evaluated_at per username/post)
+  const shadowDueMap = new Map<string, {
+    username: string; author: string; permlink: string;
+    firstEvaluatedAt: string; decision: string; types: string[];
+  }>();
+
+  for (const snap of SHADOW_TIMED) {
+    const rows = db.prepare(`
+      SELECT s.username, s.author, s.permlink, s.decision, s.first_evaluated_at
+      FROM (
+        SELECT username, author, permlink,
+               MAX(CASE WHEN decision='would_vote' THEN 'would_vote' ELSE 'skip_score' END) AS decision,
+               MIN(run_at) AS first_evaluated_at
+        FROM vb_copilot_shadow_runs
+        WHERE author IS NOT NULL AND permlink IS NOT NULL
+          AND decision IN ('would_vote', 'skip_score')
+        GROUP BY username, author, permlink
+      ) s
+      WHERE datetime(s.first_evaluated_at, '+' || ? || ' minutes') <= datetime('now')
+        AND datetime(s.first_evaluated_at, '+' || ? || ' minutes') >  datetime('now')
+        AND NOT EXISTS (
+          SELECT 1 FROM vb_shadow_growth_snapshots sgs
+          WHERE sgs.username    = s.username
+            AND sgs.author      = s.author
+            AND sgs.permlink    = s.permlink
+            AND sgs.snapshot_type = ?
+        )
+      LIMIT ?
+    `).all(snap.targetMinutes, snap.maxDelayMinutes, snap.type, BATCH_SIZE) as Array<{
+      username: string; author: string; permlink: string;
+      decision: string; first_evaluated_at: string;
+    }>;
+
+    for (const row of rows) {
+      const key = `${row.username}||${row.author}||${row.permlink}`;
+      if (!shadowDueMap.has(key)) {
+        shadowDueMap.set(key, { ...row, firstEvaluatedAt: row.first_evaluated_at, types: [] });
+      }
+      shadowDueMap.get(key)!.types.push(snap.type);
+    }
+  }
+
+  const shadowPrevStmt = db.prepare(`
+    SELECT whale_count, whale_voters_json FROM vb_shadow_growth_snapshots
+    WHERE username=? AND author=? AND permlink=? AND whale_count IS NOT NULL
+    ORDER BY measured_at DESC LIMIT 1
+  `);
+
+  const shadowInsertStmt = db.prepare(`
+    INSERT OR IGNORE INTO vb_shadow_growth_snapshots
+      (username, author, permlink, snapshot_type, decision, target_minutes,
+       pending_payout_sbd, active_votes_count, measured_at, actual_delta_min,
+       first_evaluated_at, collocated,
+       whale_count, new_whale_votes, whale_voters_json, new_whale_voters_json,
+       top_voter_account, top_voter_rshares,
+       first_whale_delay_min, time_since_last_vote_min, total_rshares_sum, median_rshares)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  let shadowFetched = 0;
+
+  for (const [, entry] of shadowDueMap) {
+    try {
+      const content = await client.database.call("get_content", [entry.author, entry.permlink]) as {
+        pending_payout_value?: string;
+        active_votes?:         unknown[];
+        created?:              string;
+      };
+
+      const pendingSbd  = parseSbd(content.pending_payout_value);
+      const activeVotes = Array.isArray(content.active_votes) ? content.active_votes : [];
+      const voteCount   = activeVotes.length || null;
+
+      if (pendingSbd <= 0) continue; // paid out — no snapshot until resolver provides final
+
+      const postCreatedMs = content.created ? toUtcMs(content.created) : toUtcMs(entry.firstEvaluatedAt);
+      const { whaleCount, whaleVoters, topVoterAccount, topVoterRshares, totalRsharesSum,
+              medianRshares, firstWhaleDelayMin, timeSinceLastVoteMin } =
+        processActiveVotes(activeVotes, whaleSet, postCreatedMs, now);
+
+      const sPrev = shadowPrevStmt.get(entry.username, entry.author, entry.permlink) as
+        { whale_count: number; whale_voters_json: string | null } | undefined;
+      const sNewWhaleCount  = sPrev != null ? Math.max(0, whaleCount - sPrev.whale_count) : null;
+      const sPrevSet        = new Set<string>(sPrev?.whale_voters_json ? JSON.parse(sPrev.whale_voters_json) as string[] : []);
+      const sNewWhaleVoters = whaleVoters.filter(w => !sPrevSet.has(w));
+
+      const wvJson  = whaleVoters.length > 0 ? JSON.stringify(whaleVoters) : null;
+      const nwvJson = sPrev != null && sNewWhaleVoters.length > 0 ? JSON.stringify(sNewWhaleVoters) : null;
+
+      const firstEvalMs = toUtcMs(entry.firstEvaluatedAt);
+
+      db.transaction(() => {
+        const actualDelta = (now - firstEvalMs) / 60_000;
+        const collocated  = entry.types.length > 1 ? 1 : 0;
+        for (const snapType of entry.types) {
+          const def = SHADOW_TIMED.find(s => s.type === snapType)!;
+          shadowInsertStmt.run(
+            entry.username, entry.author, entry.permlink,
+            snapType, entry.decision, def.targetMinutes,
+            pendingSbd, voteCount, actualDelta,
+            entry.firstEvaluatedAt, collocated,
+            whaleCount, sNewWhaleCount, wvJson, nwvJson,
+            topVoterAccount, topVoterRshares,
+            firstWhaleDelayMin, timeSinceLastVoteMin, totalRsharesSum, medianRshares,
+          );
+        }
+      })();
+
+      shadowFetched++;
+    } catch (err) {
+      log.warn(`[GrowthSnapshot] shadow get_content failed for ${entry.author}/${entry.permlink}:`, err);
+    }
+
+    await new Promise(r => setTimeout(r, 120));
+  }
+
+  const total = liveFetched + finalDue.length + shadowFetched;
   if (total > 0) {
-    log.info(`[GrowthSnapshot] Captured ${liveFetched} live + ${finalDue.length} final snapshots`);
+    log.info(`[GrowthSnapshot] Captured ${liveFetched} live + ${finalDue.length} final + ${shadowFetched} shadow snapshots`);
   }
 }
 

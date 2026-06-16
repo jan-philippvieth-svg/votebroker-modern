@@ -704,6 +704,8 @@ function runMigrations(db: Database): void {
       if (!vgsCols.includes("time_since_last_vote_min")) db.exec("ALTER TABLE vote_growth_snapshots ADD COLUMN time_since_last_vote_min REAL");
       if (!vgsCols.includes("total_rshares_sum"))        db.exec("ALTER TABLE vote_growth_snapshots ADD COLUMN total_rshares_sum REAL");
       if (!vgsCols.includes("median_rshares"))           db.exec("ALTER TABLE vote_growth_snapshots ADD COLUMN median_rshares REAL");
+      if (!vgsCols.includes("whale_voters_json"))        db.exec("ALTER TABLE vote_growth_snapshots ADD COLUMN whale_voters_json TEXT");
+      if (!vgsCols.includes("new_whale_voters_json"))    db.exec("ALTER TABLE vote_growth_snapshots ADD COLUMN new_whale_voters_json TEXT");
 
       // Add t5m/t10m to view if missing (existing DBs where source+collocated already present)
       const existingViewSql = (db.prepare(
@@ -756,5 +758,95 @@ function runMigrations(db: Database): void {
         `);
       }
     }
+
+    // ── vb_shadow_growth_snapshots ────────────────────────────────────────────
+    // Growth snapshots for CoPilot shadow-mode posts (would_vote + skip_score).
+    // Mirrors vote_growth_snapshots but keyed by (username, author, permlink, snapshot_type)
+    // so shadow data never conflicts with actual VoteBroker vote snapshots.
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS vb_shadow_growth_snapshots (
+        username              TEXT    NOT NULL,
+        author                TEXT    NOT NULL,
+        permlink              TEXT    NOT NULL,
+        snapshot_type         TEXT    NOT NULL,  -- eval_time, t1h, t6h, t24h, t72h, final
+        decision              TEXT,              -- would_vote | skip_score
+        target_minutes        INTEGER,
+        pending_payout_sbd    REAL,
+        active_votes_count    INTEGER,
+        measured_at           TEXT    NOT NULL,
+        actual_delta_min      REAL,             -- minutes since first_evaluated_at
+        first_evaluated_at    TEXT,             -- MIN(run_at) for this username/post
+        collocated            INTEGER NOT NULL DEFAULT 0,
+        whale_count           INTEGER,
+        new_whale_votes       INTEGER,
+        whale_voters_json     TEXT,
+        new_whale_voters_json TEXT,
+        top_voter_account     TEXT,
+        top_voter_rshares     REAL,
+        first_whale_delay_min REAL,
+        time_since_last_vote_min REAL,
+        total_rshares_sum     REAL,
+        median_rshares        REAL,
+        PRIMARY KEY (username, author, permlink, snapshot_type)
+      )
+    `);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_sgs_post    ON vb_shadow_growth_snapshots(author, permlink)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_sgs_user    ON vb_shadow_growth_snapshots(username)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_sgs_type    ON vb_shadow_growth_snapshots(snapshot_type, measured_at)`);
+
+    // ── v_event_chain ─────────────────────────────────────────────────────────
+    // Unified per-post event chain: actual VoteBroker votes + shadow-mode observations.
+    // Primary research view for "how does growth happen on Steem?"
+    db.exec(`DROP VIEW IF EXISTS v_event_chain`);
+    db.exec(`
+      CREATE VIEW v_event_chain AS
+      SELECT
+        'actual'            AS source_type,
+        voter               AS username,
+        author,
+        permlink,
+        snapshot_type,
+        measured_at,
+        pending_payout_sbd  AS pool_sbd,
+        active_votes_count  AS curators,
+        whale_count,
+        new_whale_votes,
+        whale_voters_json,
+        new_whale_voters_json,
+        first_whale_delay_min,
+        time_since_last_vote_min,
+        top_voter_account,
+        top_voter_rshares,
+        total_rshares_sum,
+        median_rshares,
+        NULL                AS decision,
+        NULL                AS first_evaluated_at
+      FROM vote_growth_snapshots
+
+      UNION ALL
+
+      SELECT
+        'shadow'            AS source_type,
+        username,
+        author,
+        permlink,
+        snapshot_type,
+        measured_at,
+        pending_payout_sbd  AS pool_sbd,
+        active_votes_count  AS curators,
+        whale_count,
+        new_whale_votes,
+        whale_voters_json,
+        new_whale_voters_json,
+        first_whale_delay_min,
+        time_since_last_vote_min,
+        top_voter_account,
+        top_voter_rshares,
+        total_rshares_sum,
+        median_rshares,
+        decision,
+        first_evaluated_at
+      FROM vb_shadow_growth_snapshots
+    `);
   }
 }
