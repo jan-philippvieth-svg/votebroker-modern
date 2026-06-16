@@ -255,6 +255,9 @@ export function CurationDnaPanel(props: {
   opportunitiesError: string | null;
   accountSnapshot: SteemAccountSnapshot | null;
   onLoadOpportunities: () => void;
+  pendingOpportunitiesCount: number;
+  lastScannedAt: Date | null;
+  onShowPendingOpportunities: () => void;
   onExecuteVotes: (targets: Array<{ author: string; permlink: string; weightBps: number; strategyCategory?: string }>) => Promise<VoteBatchResult>;
   onExecuteSingle: (target: { author: string; permlink: string; weightBps: number; strategyCategory?: string }) => Promise<{ transactionId: string }>;
   onPlanExecuted?: () => void;
@@ -532,8 +535,24 @@ export function CurationDnaPanel(props: {
                   <p style={{ color: "#374151", fontSize: "0.95rem", margin: 0, lineHeight: 1.55, maxWidth: "600px" }}>{msgBody}</p>
                 </div>
 
+                {/* ── Neue Posts — Pending Banner ── */}
+                {props.pendingOpportunitiesCount > 0 && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", padding: "0.5rem 0.85rem", background: "#ecfdf5", border: "1.5px solid #10b981", borderRadius: "10px", marginBottom: "0.75rem" }}>
+                    <span style={{ color: "#065f46", fontWeight: 700, fontSize: "0.85rem" }}>
+                      {props.pendingOpportunitiesCount === 1 ? "1 neuer Post gefunden" : `${props.pendingOpportunitiesCount} neue Posts gefunden`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={props.onShowPendingOpportunities}
+                      style={{ background: "#10b981", border: "none", borderRadius: "6px", color: "#fff", cursor: "pointer", fontSize: "0.78rem", fontWeight: 700, padding: "0.25rem 0.65rem" }}
+                    >
+                      Anzeigen
+                    </button>
+                  </div>
+                )}
+
                 {/* ── Haupt-CTA ── */}
-                <div style={{ display: "flex", gap: "0.75rem", marginBottom: "1.75rem", alignItems: "center", flexWrap: "wrap" as const }}>
+                <div style={{ display: "flex", gap: "0.75rem", marginBottom: "0.5rem", alignItems: "center", flexWrap: "wrap" as const }}>
                   {/* Primär: offene Votes (wenn vorhanden) oder Scan */}
                   {/* Primär-CTA: Scan oder Status */}
                   {openCount > 0 ? (
@@ -577,6 +596,14 @@ export function CurationDnaPanel(props: {
                     {props.planLoading ? t("planGenerating") : plan ? t("planUpdate") : t("planCreate")}
                   </button>
                 </div>
+
+                {/* ── Letzter Scan-Zeitstempel ── */}
+                {props.lastScannedAt && (
+                  <p style={{ color: "#94a3b8", fontSize: "0.71rem", margin: "0 0 1rem", fontVariantNumeric: "tabular-nums" }}>
+                    Zuletzt aktualisiert: {props.lastScannedAt.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                    {" · "}Auto-Refresh alle 60 s
+                  </p>
+                )}
 
                 {/* ── Ziel VP morgen ── */}
                 {(() => {

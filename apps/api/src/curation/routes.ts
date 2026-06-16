@@ -387,6 +387,30 @@ function getRecentlyVotedKeys(voter: string, windowMs = 2 * 24 * 3600 * 1000): S
   return new Set(rows.map(r => `${r.author}/${r.permlink}`));
 }
 
+// ── Per-user scan result cache (90s TTL) ──────────────────────────────────────
+// Prevents blast when multiple tabs or background polls call simultaneously.
+// Key: voterUsername — author list is strategy-specific per user.
+
+interface ScanCacheEntry {
+  result: {
+    opportunities: PostOpportunity[];
+    meta: {
+      requestedAuthors: number; scannedAuthors: number;
+      totalPosts: number; eligiblePosts: number;
+      perAuthor: Record<string, { scanned: number; eligible: number; alreadyVoted: number; noRecentPosts: boolean }>;
+    };
+  };
+  authorsKey: string; // sorted author list — invalidate if strategy changes
+  cachedAt:   number;
+}
+
+const SCAN_CACHE_TTL_MS = 90_000;
+const scanCache = new Map<string, ScanCacheEntry>();
+
+function getScanCacheKey(authors: string[]): string {
+  return [...authors].sort().join(",");
+}
+
 // ── Batch fetch helper ────────────────────────────────────────────────────────
 
 async function fetchAllPosts(authors: string[], voter: string): Promise<Map<string, PostOpportunity[]>> {
@@ -458,7 +482,14 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
     }
     const { authors, voterUsername } = body.data;
 
-    // Log the full author list for traceability
+    // Cache check — serve without blockchain scan if result is fresh
+    const authorsKey = getScanCacheKey(authors);
+    const cached = scanCache.get(voterUsername);
+    if (cached && cached.authorsKey === authorsKey && Date.now() - cached.cachedAt < SCAN_CACHE_TTL_MS) {
+      request.log.info({ voterUsername, authorCount: authors.length, fromCache: true }, "opportunity-scan: cache hit");
+      return cached.result;
+    }
+
     request.log.info({
       voterUsername,
       authorCount: authors.length,
@@ -492,7 +523,7 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
       totalPosts: all.length,
     }, "opportunity-scan: results");
 
-    return {
+    const result = {
       opportunities: all,
       meta: {
         requestedAuthors: authors.length,
@@ -502,6 +533,9 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
         perAuthor,
       },
     };
+
+    scanCache.set(voterUsername, { result, authorsKey, cachedAt: Date.now() });
+    return result;
   });
 
   // Debug endpoint — shows every post and why it was accepted or rejected

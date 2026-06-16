@@ -179,6 +179,11 @@ export function App() {
   const [opportunitiesMeta, setOpportunitiesMeta] = useState<import("../api").OpportunitiesMeta | null>(null);
   const [opportunitiesLoading, setOpportunitiesLoading] = useState(false);
   const [opportunitiesError, setOpportunitiesError] = useState<string | null>(null);
+  // Background auto-poll state
+  const [pendingOpportunities, setPendingOpportunities] = useState<PostOpportunity[]>([]);
+  const [lastScannedAt, setLastScannedAt] = useState<Date | null>(null);
+  const autoScanRunningRef = useRef(false);
+  const opportunitiesRef = useRef<PostOpportunity[] | null>(null); // always current, safe in intervals
   // Keys of posts voted successfully this session — prevents server re-scan from un-doing local state
   const recentlyVotedKeysRef = useRef<Set<string>>(new Set());
   const [votePlan, setVotePlan] = useState<VotePlanResponse | null>(null);
@@ -199,6 +204,9 @@ export function App() {
   const [curationConstants, setCurationConstants] = useState<CurationConstants | null>(null);
   const [activeTab, setActiveTab] = useState<"dna" | "dashboard" | "community" | "opportunities" | "billing" | "admin">("dna");
   const t = createTranslator(locale);
+
+  // Keep ref in sync so interval callbacks always see the latest opportunities list
+  opportunitiesRef.current = opportunities;
 
   useEffect(() => {
     getConsentCatalog()
@@ -406,6 +414,20 @@ export function App() {
     return () => clearInterval(id);
   }, [session?.token, activeTab]);
 
+  // Auto-scan: initial load + 60s silent background poll while on DNA tab
+  useEffect(() => {
+    if (!session || activeTab !== "dna") return;
+
+    // Initial load when landing on tab without data
+    if (opportunitiesRef.current === null && !opportunitiesLoading) {
+      void loadOpportunities();
+    }
+
+    const id = setInterval(() => { void backgroundPollOpportunities(); }, 60_000);
+    return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.token, activeTab]);
+
   const votePercent = useMemo(() => {
     if (!result) return "0.00";
     return (result.quote.voteWeightBps / 100).toFixed(2);
@@ -473,20 +495,22 @@ export function App() {
     }
   }
 
-  async function loadOpportunities() {
-    if (!session || !strategyRules) return;
-
-    // Deduplicate + filter active non-ignored authors
+  function buildActiveAuthors(): string[] {
+    if (!strategyRules) return [];
     const allActive = strategyRules
       .filter(r => r.enabled && r.category !== "ignorieren")
       .map(r => r.username.toLowerCase().trim())
       .filter(Boolean);
-    const unique = [...new Set(allActive)];
+    return [...new Set(allActive)];
+  }
+
+  async function loadOpportunities() {
+    if (!session || !strategyRules) return;
+    const unique = buildActiveAuthors();
 
     console.log(
       `[VoteBroker] loadOpportunities — Strategy has ${strategyRules.length} rules, ` +
-      `${allActive.length} active (${allActive.length - unique.length} dupes removed), ` +
-      `sending ${unique.length} authors:`,
+      `${unique.length} unique active authors`,
       unique
     );
 
@@ -495,7 +519,6 @@ export function App() {
     setOpportunitiesError(null);
     try {
       const result = await getVoteOpportunities(unique, session.user.username);
-      // Apply recentlyVoted filter — prevents server scan from un-doing a successful local vote
       const voted = recentlyVotedKeysRef.current;
       const filtered = voted.size === 0
         ? result.opportunities
@@ -506,10 +529,10 @@ export function App() {
           );
       setOpportunities(filtered);
       setOpportunitiesMeta(result.meta);
-      // Always refresh VP after a scan — user is about to vote
+      setPendingOpportunities([]);  // manual scan clears pending banner
+      setLastScannedAt(new Date());
       refreshSnapshot();
 
-      // Log the meta summary in the browser console for easy debugging
       console.log("[VoteBroker] Opportunity scan complete:", {
         requested:    result.meta.requestedAuthors,
         scanned:      result.meta.scannedAuthors,
@@ -518,7 +541,6 @@ export function App() {
         perAuthor:    result.meta.perAuthor,
       });
 
-      // Flag authors with no recent posts
       const noPostAuthors = Object.entries(result.meta.perAuthor)
         .filter(([, v]) => v.noRecentPosts)
         .map(([k]) => k);
@@ -530,6 +552,58 @@ export function App() {
     } finally {
       setOpportunitiesLoading(false);
     }
+  }
+
+  // ── Background auto-poll (silent, no spinner, deduplicates against current list) ──
+  async function backgroundPollOpportunities() {
+    if (!session || !strategyRules) return;
+    if (opportunitiesLoading || autoScanRunningRef.current) return;
+    if (document.hidden) return;
+
+    const unique = buildActiveAuthors();
+    if (unique.length === 0) return;
+
+    autoScanRunningRef.current = true;
+    try {
+      const result = await getVoteOpportunities(unique, session.user.username);
+      const voted = recentlyVotedKeysRef.current;
+
+      // Keys already visible to the user (read from ref — always current in closures)
+      const knownKeys = new Set(
+        (opportunitiesRef.current ?? []).map(p => `${p.author}/${p.permlink}`)
+      );
+
+      const fresh = result.opportunities
+        .filter(p => !knownKeys.has(`${p.author}/${p.permlink}`))
+        .filter(p => !voted.has(`${p.author}/${p.permlink}`))
+        .filter(p => p.eligible);
+
+      setLastScannedAt(new Date());
+
+      if (fresh.length > 0) {
+        // Accumulate new posts into pending, deduplicating against existing pending
+        setPendingOpportunities(prev => {
+          const prevKeys = new Set(prev.map(p => `${p.author}/${p.permlink}`));
+          const toAdd = fresh.filter(p => !prevKeys.has(`${p.author}/${p.permlink}`));
+          return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+        });
+        console.log(`[VoteBroker] Background poll: ${fresh.length} new eligible post(s) found`);
+      }
+    } catch {
+      // Silent — retry next interval
+    } finally {
+      autoScanRunningRef.current = false;
+    }
+  }
+
+  function showPendingOpportunities() {
+    setOpportunities(prev => {
+      if (!prev) return pendingOpportunities;
+      const knownKeys = new Set(prev.map(p => `${p.author}/${p.permlink}`));
+      const toAdd = pendingOpportunities.filter(p => !knownKeys.has(`${p.author}/${p.permlink}`));
+      return toAdd.length > 0 ? [...toAdd, ...prev] : prev; // new posts at top
+    });
+    setPendingOpportunities([]);
   }
 
   // ── Single vote: Keychain if available, server as fallback ─────────────────
@@ -1092,6 +1166,9 @@ export function App() {
             opportunitiesError={opportunitiesError}
             accountSnapshot={accountSnapshot}
             onLoadOpportunities={loadOpportunities}
+            pendingOpportunitiesCount={pendingOpportunities.length}
+            lastScannedAt={lastScannedAt}
+            onShowPendingOpportunities={showPendingOpportunities}
             onExecuteVotes={executeStrategyVotes}
             onExecuteSingle={executeSingleVote}
             onPlanExecuted={() => setVotePlan(null)}
