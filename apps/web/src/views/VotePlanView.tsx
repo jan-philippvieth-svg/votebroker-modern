@@ -128,6 +128,52 @@ function ConstraintBadge(props: { report: ConstraintReport }) {
   );
 }
 
+function ScoreLegend() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ marginBottom: "0.5rem" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.65rem", fontSize: "0.7rem", color: "#9ca3af", flexWrap: "wrap" as const }}>
+        <span style={{ color: "#6b7280", fontWeight: 700 }}>Score 0–100:</span>
+        <span><span style={{ color: "#15803d", fontWeight: 800 }}>■</span> ≥ 80 sehr gut</span>
+        <span><span style={{ color: "#a16207", fontWeight: 800 }}>■</span> ≥ 50 gut</span>
+        <span><span style={{ color: "#9ca3af", fontWeight: 800 }}>■</span> &lt; 50 schwach</span>
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          style={{ marginLeft: "auto", background: "none", border: "none", color: "#6b7280", cursor: "pointer", fontSize: "0.72rem", padding: 0, textDecoration: "underline dotted", textUnderlineOffset: "2px" }}
+        >
+          {open ? "▲ ausblenden" : "ℹ Wie wird der Score berechnet?"}
+        </button>
+      </div>
+      {open && (
+        <div style={{ marginTop: "0.4rem", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "9px", padding: "0.75rem 1rem", fontSize: "0.78rem" }}>
+          <div style={{ color: "#374151", fontWeight: 700, marginBottom: "0.55rem" }}>5 Faktoren — Summe ergibt 0–100 Punkte</div>
+          <table style={{ borderCollapse: "collapse" as const, width: "100%" }}>
+            <tbody>
+              {[
+                { label: "Payout-Timing",  max: 35, desc: "Je niedriger der bisherige Payout, desto weniger Pool-Konkurrenz — früh einsteigen lohnt sich." },
+                { label: "Alter des Posts", max: 25, desc: "Je frischer, desto besser das Curation-Fenster. Unter 15 Min. = Maximum." },
+                { label: "Whale-Signal",   max: 20, desc: "1–5 Wale, die diesen Autor regelmäßig supporten = gutes Momentum. Über 12 Wale = hohe Konkurrenz." },
+                { label: "Kategorie",      max: 10, desc: "Priorität deiner Strategie: 'Immer voten' = 10 Pkt., 'Niedrig' = 2 Pkt." },
+                { label: "Autorhistorie",  max: 10, desc: "Bisherige SP/VP-Performance aus VoteBroker-Verlaufsdaten. Ohne Daten: neutral (5 Pkt.)." },
+              ].map(f => (
+                <tr key={f.label}>
+                  <td style={{ padding: "0.22rem 1rem 0.22rem 0", fontWeight: 700, color: "#374151", whiteSpace: "nowrap" as const, verticalAlign: "top" }}>{f.label}</td>
+                  <td style={{ padding: "0.22rem 0.75rem 0.22rem 0", color: "#2563eb", fontWeight: 800, whiteSpace: "nowrap" as const, verticalAlign: "top" }}>0–{f.max}</td>
+                  <td style={{ padding: "0.22rem 0", color: "#6b7280", lineHeight: 1.45, verticalAlign: "top" }}>{f.desc}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ marginTop: "0.55rem", color: "#9ca3af", fontSize: "0.71rem", borderTop: "1px solid #e2e8f0", paddingTop: "0.45rem" }}>
+            Mindest-Score für CoPilot-Auswahl: <b style={{ color: "#6b7280" }}>15 Punkte</b>. Posts darunter werden nicht berücksichtigt.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const PLAN_CATEGORY_COLOR: Record<string, string> = {
   immer_voten: "#ff6b35", lieblingsautor: "#d97706",
   bevorzugt:   "#2563eb", normal:         "#16a34a", niedrig: "#607078",
@@ -536,18 +582,7 @@ export function VotePlanSection(props: {
               </div>
 
               {/* ── Score-Legende ── */}
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", fontSize: "0.7rem", color: "#9ca3af", marginBottom: "0.4rem", flexWrap: "wrap" as const }}>
-                <span style={{ color: "#6b7280", fontWeight: 700 }}>Score 0–100:</span>
-                <span><span style={{ color: "#15803d", fontWeight: 800 }}>■</span> ≥ 80 sehr gut</span>
-                <span><span style={{ color: "#a16207", fontWeight: 800 }}>■</span> ≥ 50 gut</span>
-                <span><span style={{ color: "#9ca3af", fontWeight: 800 }}>■</span> &lt; 50 schwach</span>
-                <span
-                  title={"Opportunity Score — 5 Faktoren (0–100):\n\n• Payout-Timing (0–35): Je niedriger der aktuelle Payout, desto früher sind wir im Pool. Wer früh votet, hat weniger Pool-Konkurrenz.\n\n• Alter (0–25): Je frischer der Post, desto besser das Curation-Fenster. < 15 Min. = Maximum.\n\n• Whale-Signal (0–20): 1–5 Wale die diesen Autor regelmäßig voten = Momentum ohne Überfüllung. > 12 Wale = hohe Pool-Konkurrenz.\n\n• Kategorie (0–10): Priorität in deiner Strategie — 'Immer voten' = 10, 'Niedrig' = 2.\n\n• Autorhistorie (0–10): Bisherige SP/VP-Performance dieses Autors aus VoteBroker-Daten. Ohne Daten: neutral (5)."}
-                  style={{ marginLeft: "auto", color: "#b0bec5", cursor: "help", fontWeight: 600, textDecoration: "underline dotted", textUnderlineOffset: "2px" }}
-                >
-                  ℹ Wie wird der Score berechnet?
-                </span>
-              </div>
+              <ScoreLegend />
 
               {/* ── Plan-Karten mit Inline-Controls ── */}
               <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", marginBottom: "0.75rem" }}>
@@ -966,6 +1001,9 @@ export function OpenVoteOpportunities(props: {
           })()}
         </div>
       )}
+
+      {/* Score-Erklärung */}
+      {props.opportunities !== null && <ScoreLegend />}
 
       {/* Per-author groups */}
       {props.opportunities !== null && authorGroups.length > 0 && (
