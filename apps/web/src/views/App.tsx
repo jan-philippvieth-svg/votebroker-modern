@@ -417,6 +417,17 @@ export function App() {
     return () => clearInterval(id);
   }, [session?.token, activeTab]);
 
+  // Dashboard: silent initial opportunity scan when no data loaded yet.
+  // Fires immediately on tab entry so "Offene Chancen" shows a count right away
+  // instead of "—" for up to 60 s until the background poll interval fires.
+  useEffect(() => {
+    if (!session || activeTab !== "dashboard") return;
+    if (opportunitiesRef.current !== null) return; // already have data
+    if (!strategyRules || strategyRules.filter(r => r.enabled && r.category !== "ignorieren").length === 0) return;
+    void backgroundPollRef.current?.();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.token, activeTab, strategyRules]);
+
   // Background poll: always running while logged in, not tied to active tab.
   // Puts newly-found eligible posts into pendingOpportunities for any tab.
   useEffect(() => {

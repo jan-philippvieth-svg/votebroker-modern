@@ -137,6 +137,27 @@ function getAuthorAvgSpPerVp(voter: string, author: string): number | undefined 
   return row.avg_sp_per_vp;
 }
 
+// ── Author shadow precision (fraction of resolved would_vote that paid ≥1 SBD) ──
+// Minimum 5 resolved votes required for reliability. Used as Gate-3 exception:
+// authors with proven shadow quality bypass the "niedrig + no whale" skip.
+
+function getAuthorShadowPrecision(
+  username: string,
+  author: string,
+): { precision: number; n: number } | null {
+  const row = getDb().prepare(`
+    SELECT COUNT(*) as n,
+           SUM(CASE WHEN resolved_payout_sbd >= 1.0 THEN 1.0 ELSE 0.0 END) as tp_count
+    FROM vb_copilot_shadow_runs
+    WHERE username = ? AND author = ?
+      AND decision = 'would_vote'
+      AND outcome_status = 'resolved'
+  `).get(username, author) as { n: number; tp_count: number } | undefined;
+
+  if (!row || row.n < 5) return null;
+  return { precision: row.tp_count / row.n, n: row.n };
+}
+
 // ── Core shadow evaluation ────────────────────────────────────────────────────
 
 async function runShadowEval(username: string, log: typeof console): Promise<void> {
@@ -285,20 +306,23 @@ async function runShadowEval(username: string, log: typeof console): Promise<voi
       continue;
     }
 
-    // Score all eligible posts with composite opportunity score v2, pick best
-    const authorAvgSpPerVp = getAuthorAvgSpPerVp(username, rule.username);
+    // Score all eligible posts with composite opportunity score v3, pick best
+    const authorAvgSpPerVp  = getAuthorAvgSpPerVp(username, rule.username);
+    const shadowPrec        = getAuthorShadowPrecision(username, rule.username);
     const scored = eligible.map(p => ({
       post: p,
       opp:  calcOpportunityScore({
-        ageMinutes:       p.ageMinutes,
-        remainingHours:   p.remainingHours,
-        category:         rule.category,
-        pendingPayoutSbd: p.pendingPayoutSbd,
-        whaleCount:       whale?.whaleCount ?? undefined,
+        ageMinutes:            p.ageMinutes,
+        remainingHours:        p.remainingHours,
+        category:              rule.category,
+        pendingPayoutSbd:      p.pendingPayoutSbd,
+        whaleCount:            whale?.whaleCount ?? undefined,
         authorAvgSpPerVp,
-        isSelfPost:       p.isSelfPost,
+        authorShadowPrecision: shadowPrec?.precision,
+        authorShadowN:         shadowPrec?.n,
+        isSelfPost:            p.isSelfPost,
       }),
-    })).sort((a, b) => b.opp.score - a.opp.score);
+    })).sort((a, b) => b.opp.finalScore - a.opp.finalScore);
 
     const best    = scored[0].post;
     const oppResult = scored[0].opp;
@@ -312,24 +336,26 @@ async function runShadowEval(username: string, log: typeof console): Promise<voi
         permlink:             best.permlink,
         title:                best.title,
         category:             rule.category,
-        post_score:           oppResult.score,
+        post_score:           oppResult.finalScore,
         score_gate:           OPPORTUNITY_GATE,
         suggested_weight_bps: weightBps,
         vp_cost_bps:          costBps,
         expected_vote_usd:    Math.round((weightBps / 10_000) * vpCtx.voteUsd * 10_000) / 10_000,
         reasons_json:         null,
-        skip_reason:          oppResult.skipReason ?? `opportunityScore ${oppResult.score} < gate ${OPPORTUNITY_GATE}`,
+        skip_reason:          oppResult.skipReason ?? `opportunityScore ${oppResult.finalScore} < gate ${OPPORTUNITY_GATE}`,
         vp_bps_at_run:        vpCtx.vpBps,
         vp_budget_bps:        vpCtx.budgetBps,
         signals_json:         JSON.stringify({
           ...baseSignals,
-          ageMinutes:          best.ageMinutes,
-          remainingHours:      best.remainingHours,
-          opportunityScore:    oppResult.score,
+          ageMinutes:            best.ageMinutes,
+          remainingHours:        best.remainingHours,
+          opportunityScore:      oppResult.finalScore,
+          opportunityScoreRaw:   oppResult.score,
           opportunityComponents: oppResult.components,
-          activeVotesCount:    best.activeVotesCount,
-          community:           best.community,
-          isSelfPost:          best.isSelfPost,
+          authorShadowPrecision: shadowPrec,
+          activeVotesCount:      best.activeVotesCount,
+          community:             best.community,
+          isSelfPost:            best.isSelfPost,
         }),
       });
       continue;
@@ -344,7 +370,7 @@ async function runShadowEval(username: string, log: typeof console): Promise<voi
         permlink:             best.permlink,
         title:                best.title,
         category:             rule.category,
-        post_score:           oppResult.score,
+        post_score:           oppResult.finalScore,
         score_gate:           OPPORTUNITY_GATE,
         suggested_weight_bps: weightBps,
         vp_cost_bps:          costBps,
@@ -357,7 +383,8 @@ async function runShadowEval(username: string, log: typeof console): Promise<voi
           ...baseSignals,
           ageMinutes:            best.ageMinutes,
           remainingHours:        best.remainingHours,
-          opportunityScore:      oppResult.score,
+          opportunityScore:      oppResult.finalScore,
+          opportunityScoreRaw:   oppResult.score,
           opportunityComponents: oppResult.components,
           activeVotesCount:      best.activeVotesCount,
           community:             best.community,
@@ -370,11 +397,11 @@ async function runShadowEval(username: string, log: typeof console): Promise<voi
     const expectedVoteUsd = Math.round((weightBps / 10_000) * vpCtx.voteUsd * 10_000) / 10_000;
     const reasons: string[] = [];
     if (rule.selectionReasons?.length) reasons.push(...rule.selectionReasons.slice(0, 2));
-    reasons.push(`Kategorie: ${rule.category} — opportunityScore ${oppResult.score}`);
-    if (oppResult.components.timing >= 22) reasons.push("Optimales Curation-Fenster (<30 min)");
-    else if (oppResult.components.timing >= 16) reasons.push(`Post ${best.ageMinutes < 1440 ? Math.round(best.ageMinutes / 60) + "h" : Math.round(best.ageMinutes / 1440) + "d"} alt — ausreichend Curation-Potenzial`);
+    reasons.push(`Kategorie: ${rule.category} — opportunityScore ${oppResult.finalScore}`);
+    if (oppResult.components.timing >= 8) reasons.push("Optimales Curation-Fenster (10–30 min)");
     if (oppResult.components.signalCurators > 0) reasons.push(`Signal-Kuratoren: +${oppResult.components.signalCurators} Pts`);
-    if (oppResult.components.payoutSweetspot >= 28) reasons.push("Payout-Sweetspot: frühzeitig im Pool");
+    if (oppResult.components.payoutSweetspot >= 20) reasons.push("Payout-Sweetspot: frühzeitig im Pool");
+    if (shadowPrec && shadowPrec.precision >= 0.70) reasons.push(`Autor-Qualität nachgewiesen: ${Math.round(shadowPrec.precision * 100)}% (n=${shadowPrec.n})`);
     if (best.community) reasons.push(`Community: ${best.community}`);
     if (best.warning) reasons.push(best.warning);
 
@@ -387,7 +414,7 @@ async function runShadowEval(username: string, log: typeof console): Promise<voi
       permlink:             best.permlink,
       title:                best.title,
       category:             rule.category,
-      post_score:           oppResult.score,
+      post_score:           oppResult.finalScore,
       score_gate:           OPPORTUNITY_GATE,
       suggested_weight_bps: weightBps,
       vp_cost_bps:          costBps,
@@ -400,8 +427,10 @@ async function runShadowEval(username: string, log: typeof console): Promise<voi
         ...baseSignals,
         ageMinutes:            best.ageMinutes,
         remainingHours:        best.remainingHours,
-        opportunityScore:      oppResult.score,
+        opportunityScore:      oppResult.finalScore,
+        opportunityScoreRaw:   oppResult.score,
         opportunityComponents: oppResult.components,
+        authorShadowPrecision: shadowPrec,
         activeVotesCount:      best.activeVotesCount,
         community:             best.community,
         isSelfPost:            best.isSelfPost,

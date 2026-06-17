@@ -1498,6 +1498,39 @@ export async function fetchShadowOutcomes(
   return res.json();
 }
 
+export interface AuthorTrustEntry {
+  author:       string;
+  category:     string | null;
+  tp:           number;
+  fp:           number;
+  n:            number;
+  precisionPct: number;
+  avgPayout:    number | null;
+  lastResolved: string | null;
+}
+
+export interface AuthorTrustRanking {
+  thresholds: { goodPayoutThreshold: number; minResolved: number };
+  trusted:    AuthorTrustEntry[];
+  worst:      AuthorTrustEntry[];
+  all:        AuthorTrustEntry[];
+}
+
+export async function fetchAuthorTrust(
+  token: string,
+  opts?: { goodPayoutThreshold?: number; minResolved?: number }
+): Promise<AuthorTrustRanking> {
+  const params = new URLSearchParams();
+  if (opts?.goodPayoutThreshold !== undefined) params.set("good_payout_threshold_sbd", String(opts.goodPayoutThreshold));
+  if (opts?.minResolved          !== undefined) params.set("min_resolved",               String(opts.minResolved));
+  const qs = params.toString() ? `?${params}` : "";
+  const res = await fetch(`${API_BASE}/api/admin/author-trust${qs}`, {
+    headers: { session: token },
+  });
+  if (!res.ok) throw new Error("Author-Trust konnte nicht geladen werden.");
+  return res.json();
+}
+
 export async function triggerShadowOutcomeResolver(token: string): Promise<{ status: string; message: string }> {
   const res = await fetch(`${API_BASE}/api/admin/shadow-outcomes/resolve-now`, {
     method: "POST",

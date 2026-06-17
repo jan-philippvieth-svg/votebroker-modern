@@ -6,12 +6,14 @@ import {
   injectScreenshots, listScreenshots, publishDraft, triggerFeePost, updateDraftStatus,
   fetchLiveVoteReport,
   fetchShadowOutcomes, triggerShadowOutcomeResolver,
+  fetchAuthorTrust,
   fetchSystemMetrics,
   type AdminCockpit, type AuthSession, type BroadcastEntry,
   type ContentDraft, type ContentListResponse, type ContentQueueItem,
   type DraftStatus, type FeePostLogEntry, type PromoLocale, type PublishResult, type ScreenshotFile,
   type LiveVoteReport, type ModelErrorMetrics, type DelayVsPostBucket,
   type ShadowOutcomes, type ShadowMissedPost,
+  type AuthorTrustRanking, type AuthorTrustEntry,
   type SystemMetrics,
   PROMO_LOCALES,
 } from "../api";
@@ -1474,6 +1476,113 @@ function ShadowOutcomeSection({ session }: { session: AuthSession }) {
   );
 }
 
+// ── Author Trust Section (Section F) ─────────────────────────────────────────
+
+function precColor(pct: number): string {
+  if (pct >= 80) return C.ok;
+  if (pct >= 60) return C.warn;
+  return C.err;
+}
+
+function AuthorTrustSection({ session }: { session: AuthSession }) {
+  const [data, setData]     = useState<AuthorTrustRanking | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]   = useState<string | null>(null);
+  const [minN, setMinN]     = useState(5);
+  const [tab, setTab]       = useState<"trusted" | "worst" | "all">("trusted");
+
+  const load = () => {
+    setLoading(true);
+    fetchAuthorTrust(session.token, { minResolved: minN })
+      .then(d => { setData(d); setLoading(false); })
+      .catch(e => { setError(String(e)); setLoading(false); });
+  };
+
+  useEffect(() => { load(); }, [minN]);
+
+  const tblHead: React.CSSProperties = { ...lbl, padding: "0.4rem 0.5rem", textAlign: "left" as const, borderBottom: `1px solid ${C.border}` };
+  const tblCell: React.CSSProperties = { padding: "0.35rem 0.5rem", fontSize: "0.82rem", borderBottom: `1px solid ${C.border}22` };
+
+  const rows = data ? (tab === "trusted" ? data.trusted : tab === "worst" ? data.worst : data.all) : [];
+
+  return (
+    <div style={{ ...card, marginTop: "1rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+        <p style={{ ...lbl, margin: 0 }}>F — Autor-Vertrauen (Shadow-Precision)</p>
+        <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+          <span style={{ ...lbl, margin: 0 }}>Min. Votes:</span>
+          {[5, 10, 20].map(n => (
+            <button key={n} onClick={() => setMinN(n)} style={{ ...btnStyle(n === minN ? C.info : C.border), fontWeight: n === minN ? 700 : 400 }}>{n}</button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.75rem" }}>
+        {(["trusted", "worst", "all"] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)} style={{ ...btnStyle(t === tab ? C.info : C.border), fontWeight: t === tab ? 700 : 400 }}>
+            {t === "trusted" ? `✓ Bewährt (${data?.trusted.length ?? "—"})` : t === "worst" ? `✗ Problematisch (${data?.worst.length ?? "—"})` : `Alle (${data?.all.length ?? "—"})`}
+          </button>
+        ))}
+      </div>
+
+      {loading && <p style={{ color: C.dim, padding: "1rem 0" }}>Lade Autor-Vertrauen…</p>}
+      {error   && <p style={{ color: C.err }}>{error}</p>}
+      {!loading && !error && data && (
+        <>
+          {rows.length === 0 ? (
+            <p style={{ color: C.dim, fontSize: "0.85rem" }}>Keine Autoren mit ≥{minN} resolved Votes in dieser Kategorie.</p>
+          ) : (
+            <div style={{ overflowX: "auto" as const }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" as const, fontSize: "0.83rem" }}>
+                <thead>
+                  <tr>
+                    <th style={tblHead}>Autor</th>
+                    <th style={{ ...tblHead, textAlign: "center" as const }}>Precision</th>
+                    <th style={{ ...tblHead, textAlign: "center" as const }}>TP</th>
+                    <th style={{ ...tblHead, textAlign: "center" as const }}>FP</th>
+                    <th style={{ ...tblHead, textAlign: "center" as const }}>Votes</th>
+                    <th style={{ ...tblHead, textAlign: "right" as const }}>Ø Payout</th>
+                    <th style={tblHead}>Kategorie</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r: AuthorTrustEntry) => (
+                    <tr key={r.author}>
+                      <td style={tblCell}>
+                        <a href={`https://steemit.com/@${r.author}`} target="_blank" rel="noreferrer"
+                          style={{ color: C.info, textDecoration: "none", fontWeight: 500 }}>
+                          @{r.author}
+                        </a>
+                      </td>
+                      <td style={{ ...tblCell, textAlign: "center" as const }}>
+                        <span style={{ ...tagStyle(precColor(r.precisionPct)), fontSize: "0.78rem" }}>
+                          {r.precisionPct.toFixed(1)}%
+                        </span>
+                      </td>
+                      <td style={{ ...tblCell, textAlign: "center" as const, color: C.ok, fontWeight: 600 }}>{r.tp}</td>
+                      <td style={{ ...tblCell, textAlign: "center" as const, color: r.fp > 0 ? C.err : C.dim }}>{r.fp}</td>
+                      <td style={{ ...tblCell, textAlign: "center" as const, color: C.dim }}>{r.n}</td>
+                      <td style={{ ...tblCell, textAlign: "right" as const, color: C.dim }}>
+                        {r.avgPayout !== null ? `$${r.avgPayout.toFixed(2)}` : "—"}
+                      </td>
+                      <td style={tblCell}>
+                        {r.category ? <span style={tagStyle(C.purple)}>{r.category}</span> : <span style={{ color: C.dim }}>—</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p style={{ color: C.dim, fontSize: "0.72rem", marginTop: "0.5rem" }}>
+            Bewährt = Precision ≥ 70% · Problematisch = Precision &lt; 50% · Threshold: ≥{minN} resolved Votes, Payout-Gate 1 SBD
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Research Lab ─────────────────────────────────────────────────────────────
 
 function computeDataQuality(r: LiveVoteReport): { score: number; factors: Array<{ label: string; pts: number; max: number }> } {
@@ -1746,6 +1855,7 @@ function ResearchLabSection({ session }: { session: AuthSession }) {
       </div>
 
       <ShadowOutcomeSection session={session} />
+      <AuthorTrustSection session={session} />
     </div>
   );
 }

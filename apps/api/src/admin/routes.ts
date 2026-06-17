@@ -532,6 +532,63 @@ function getShadowOutcomes(goodPayoutThreshold: number, goodVoteThreshold: numbe
   };
 }
 
+// ── Author trust ranking ──────────────────────────────────────────────────────
+
+function getAuthorTrustRanking(goodPayoutThreshold: number, minResolved: number) {
+  const db = getDb();
+
+  type AuthorRow = {
+    author:          string;
+    category:        string | null;
+    tp:              number;
+    fp:              number;
+    n:               number;
+    precision_pct:   number;
+    avg_payout:      number | null;
+    last_resolved:   string | null;
+  };
+
+  const rows = db.prepare(`
+    SELECT
+      author,
+      MAX(category) AS category,
+      SUM(CASE WHEN resolved_payout_sbd >= @payout THEN 1 ELSE 0 END) AS tp,
+      SUM(CASE WHEN resolved_payout_sbd <  @payout THEN 1 ELSE 0 END) AS fp,
+      COUNT(*) AS n,
+      ROUND(100.0 * SUM(CASE WHEN resolved_payout_sbd >= @payout THEN 1 ELSE 0 END) / COUNT(*), 1) AS precision_pct,
+      ROUND(AVG(resolved_payout_sbd), 2) AS avg_payout,
+      MAX(resolved_at) AS last_resolved
+    FROM vb_copilot_shadow_runs
+    WHERE outcome_status = 'resolved'
+      AND decision = 'would_vote'
+      AND author IS NOT NULL
+    GROUP BY author
+    HAVING COUNT(*) >= @minN
+    ORDER BY precision_pct DESC, tp DESC
+  `).all({ payout: goodPayoutThreshold, minN: minResolved }) as AuthorRow[];
+
+  const trusted = rows.filter(r => r.precision_pct >= 70);
+  const worst   = [...rows].reverse().filter(r => r.precision_pct < 50);
+
+  const toEntry = (r: AuthorRow) => ({
+    author:       r.author,
+    category:     r.category,
+    tp:           r.tp,
+    fp:           r.fp,
+    n:            r.n,
+    precisionPct: r.precision_pct,
+    avgPayout:    r.avg_payout,
+    lastResolved: r.last_resolved,
+  });
+
+  return {
+    thresholds: { goodPayoutThreshold, minResolved },
+    trusted:    trusted.map(toEntry),
+    worst:      worst.map(toEntry),
+    all:        rows.map(toEntry),
+  };
+}
+
 // ── Route registration ────────────────────────────────────────────────────────
 export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
 
@@ -700,6 +757,16 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
     const goodVoteThreshold   = parseInt(query.good_vote_count_threshold    ?? "5",  10) || 5;
 
     return getShadowOutcomes(goodPayoutThreshold, goodVoteThreshold);
+  });
+
+  app.get("/api/admin/author-trust", {
+    schema: { tags: ["Admin"], summary: "Autor-Vertrauensranking aus Shadow-Daten (Trusted / Worst)" }
+  }, async (request, reply) => {
+    if (!requireAdmin(request)) return reply.code(403).send({ error: "forbidden" });
+    const query = (request.query ?? {}) as Record<string, string>;
+    const goodPayoutThreshold = parseFloat(query.good_payout_threshold_sbd ?? "1.0") || 1.0;
+    const minResolved         = parseInt(query.min_resolved ?? "5", 10) || 5;
+    return getAuthorTrustRanking(goodPayoutThreshold, minResolved);
   });
 
   app.post("/api/admin/shadow-outcomes/resolve-now", {
