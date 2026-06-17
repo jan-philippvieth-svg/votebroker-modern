@@ -404,7 +404,7 @@ interface ScanCacheEntry {
   cachedAt:   number;
 }
 
-const SCAN_CACHE_TTL_MS = 90_000;
+const SCAN_CACHE_TTL_MS = 120_000;
 const scanCache = new Map<string, ScanCacheEntry>();
 
 function getScanCacheKey(authors: string[]): string {
@@ -418,7 +418,7 @@ async function fetchAllPosts(authors: string[], voter: string): Promise<Map<stri
   const recentlyVoted = getRecentlyVotedKeys(voter);
 
   const map = new Map<string, PostOpportunity[]>();
-  const BATCH = 5;
+  const BATCH = 10;
   for (let i = 0; i < authors.length; i += BATCH) {
     const batch = authors.slice(i, i + BATCH);
     const results = await Promise.allSettled(

@@ -148,13 +148,21 @@ export async function fetchRecentPostsDebug(
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+const FETCH_TIMEOUT_MS = 8_000;
+
 async function fetchRawPosts(author: string, limit: number): Promise<RawPost[] | null> {
   const client = createSteemClient();
   const db = client.database as unknown as {
     call(method: string, params: unknown[]): Promise<RawPost[]>
   };
   try {
-    const posts = await db.call("get_discussions_by_blog", [{ tag: author, limit }]);
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("steem_timeout")), FETCH_TIMEOUT_MS)
+    );
+    const posts = await Promise.race([
+      db.call("get_discussions_by_blog", [{ tag: author, limit }]),
+      timeout,
+    ]);
     return Array.isArray(posts) ? posts : null;
   } catch {
     return null;
