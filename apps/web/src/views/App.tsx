@@ -1268,6 +1268,7 @@ export function App() {
           loading={topOpportunitiesLoading}
           locale={locale}
           session={session}
+          onAddToStrategy={(author, category) => addAuthorToStrategy(author, category as import("./strategyTypes").StrategyCategory)}
         />
       )}
 

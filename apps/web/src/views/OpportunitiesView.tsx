@@ -406,10 +406,11 @@ const STRATEGY_CATEGORIES = [
   { value: "normal",         label: "Normal" },
 ] as const;
 
-function AddToStrategyPanel({ author, token, onAdded }: {
-  author:  string;
-  token:   string;
-  onAdded: () => void;
+function AddToStrategyPanel({ author, token, onAdded, onAddToStrategy }: {
+  author:             string;
+  token:              string;
+  onAdded:            () => void;
+  onAddToStrategy?:   (author: string, category: string) => void;
 }) {
   const [category, setCategory] = useState<string>("normal");
   const [status,   setStatus]   = useState<"idle" | "loading" | "success" | "error">("idle");
@@ -418,15 +419,17 @@ function AddToStrategyPanel({ author, token, onAdded }: {
   async function handleAdd() {
     setStatus("loading"); setErrorMsg(null);
     try {
-      const existing = (await getPersistedStrategy(token)) as Array<{
-        username: string; enabled: boolean; category: string; manuallyModified?: boolean;
-      }> | null ?? [];
-
-      // Remove existing entry for this author, then prepend fresh rule
-      const filtered = existing.filter(r => r.username.toLowerCase() !== author.toLowerCase());
-      const newRule  = { username: author, enabled: true, category, manuallyModified: true };
-      await persistStrategy(token, [newRule, ...filtered]);
-
+      if (onAddToStrategy) {
+        // Use App-level callback: weight calculation + local state update + persist via effect
+        onAddToStrategy(author, category);
+      } else {
+        // Fallback: direct persist (no weight fields — legacy path)
+        const existing = (await getPersistedStrategy(token)) as Array<{
+          username: string; enabled: boolean; category: string; manuallyModified?: boolean;
+        }> | null ?? [];
+        const filtered = existing.filter(r => r.username.toLowerCase() !== author.toLowerCase());
+        await persistStrategy(token, [existing.find(r => r.username.toLowerCase() === author.toLowerCase()) ?? { username: author, enabled: true, category, manuallyModified: true }, ...filtered]);
+      }
       setStatus("success");
       onAdded();
     } catch {
@@ -480,7 +483,10 @@ function AddToStrategyPanel({ author, token, onAdded }: {
 
 // ── Action cell ───────────────────────────────────────────────────────────────
 
-function ActionCell({ opp, token }: { opp: OpportunityEntry; token: string }) {
+function ActionCell({ opp, token, onAddToStrategy }: {
+  opp: OpportunityEntry; token: string;
+  onAddToStrategy?: (author: string, category: string) => void;
+}) {
   const [voteOpen,     setVoteOpen]     = useState(false);
   const [strategyOpen, setStrategyOpen] = useState(false);
   const [voted,        setVoted]        = useState(opp.alreadyVoted);
@@ -521,6 +527,7 @@ function ActionCell({ opp, token }: { opp: OpportunityEntry; token: string }) {
         <AddToStrategyPanel
           author={opp.author}
           token={token}
+          onAddToStrategy={onAddToStrategy}
           onAdded={() => { setInStrategy(true); setStrategyOpen(false); }}
         />
       ) : (
@@ -542,13 +549,14 @@ function ActionCell({ opp, token }: { opp: OpportunityEntry; token: string }) {
 
 // ── Single opportunity row ─────────────────────────────────────────────────────
 
-function OpportunityRow({ opp, idx, expanded, onToggle, t, token }: {
-  opp:      OpportunityEntry;
-  idx:      number;
-  expanded: boolean;
-  onToggle: () => void;
-  t:        T;
-  token:    string | null;
+function OpportunityRow({ opp, idx, expanded, onToggle, t, token, onAddToStrategy }: {
+  opp:              OpportunityEntry;
+  idx:              number;
+  expanded:         boolean;
+  onToggle:         () => void;
+  t:                T;
+  token:            string | null;
+  onAddToStrategy?: (author: string, category: string) => void;
 }) {
   const badge   = scoreBadge(opp.opportunityScore);
   const reasons = topReasons(opp.components, t);
@@ -669,7 +677,7 @@ function OpportunityRow({ opp, idx, expanded, onToggle, t, token }: {
         {/* Actions */}
         <td style={{ padding: "0.4rem 0.6rem", verticalAlign: "top" as const }}>
           {token
-            ? <ActionCell opp={opp} token={token} />
+            ? <ActionCell opp={opp} token={token} onAddToStrategy={onAddToStrategy} />
             : <span style={{ color: C.faint, fontSize: "0.68rem" }}>Login erforderlich</span>
           }
         </td>
@@ -689,11 +697,12 @@ function OpportunityRow({ opp, idx, expanded, onToggle, t, token }: {
 
 // ── Main View ─────────────────────────────────────────────────────────────────
 
-export function OpportunitiesView({ data, loading, locale, session }: {
-  data:     OpportunitiesData | null;
-  loading:  boolean;
-  locale?:  Locale;
-  session?: AuthSession | null;
+export function OpportunitiesView({ data, loading, locale, session, onAddToStrategy }: {
+  data:              OpportunitiesData | null;
+  loading:           boolean;
+  locale?:           Locale;
+  session?:          AuthSession | null;
+  onAddToStrategy?:  (author: string, category: string) => void;
 }) {
   const t = createTranslator(locale ?? "de");
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
@@ -774,6 +783,7 @@ export function OpportunitiesView({ data, loading, locale, session }: {
                     onToggle={() => setExpandedKey(k => k === key ? null : key)}
                     t={t}
                     token={session?.token ?? null}
+                    onAddToStrategy={onAddToStrategy}
                   />
                 );
               })}
