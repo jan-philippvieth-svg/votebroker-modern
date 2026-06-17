@@ -221,6 +221,7 @@ export async function runOpportunityRefresh(log: typeof console = console): Prom
         });
 
         if (result.finalScore < OPPORTUNITY_GATE) continue;
+        if (result.components.timing === 0) continue; // >2h without timing signal — skip from top opportunities
 
         scored.push({
           author:             post.author,

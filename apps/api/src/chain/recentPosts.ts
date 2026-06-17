@@ -248,10 +248,11 @@ function mapPost(post: RawPost, voterUsername: string, nowMs: number): PostOppor
     ? remainingMs > 0                        // only payout window matters
     : ageMs >= MIN_AGE_MS && remainingMs > 0; // strangers: also needs 5-min minimum
 
-  const eligible   = !alreadyVoted && withinWindow;
   const postScore  = isSelfPost && ageMinutes < 30
     ? 100                                    // self-posts always get top score when fresh
     : calcPostScore(ageMinutes, remainingHours);
+  // Posts >2h have postScore=0 — no curation timing benefit, don't surface as open opportunities
+  const eligible   = !alreadyVoted && withinWindow && postScore > 0;
 
   const activeVotesCount = post.active_votes?.length ?? 0;
   const community = post.parent_permlink?.startsWith("hive-") ? post.parent_permlink : null;
