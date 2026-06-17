@@ -45,7 +45,24 @@ Jede Vote-Entscheidung — ob abgefeuert oder übersprungen — wird mit Begrün
 ![CoPilot Vote-DNA](docs/assets/copilot.png)
 
 ### Opportunity Scanner
-Neben der eigenen Strategie entdeckt VoteBroker laufend interessante Posts außerhalb der Autoren-Liste: nach Community, Timing-Muster und historischer Payout-Performance bewertet. Die Opportunities sind direkt im Dashboard votebar oder lassen sich mit einem Klick zur eigenen Strategie hinzufügen.
+Neben der eigenen Strategie entdeckt VoteBroker laufend interessante Posts außerhalb der Autoren-Liste. Jeder Post erhält einen **Ist-Attraktivität-Score (0–100 Pkt.)**, der aus fünf Dimensionen berechnet wird:
+
+| Komponente | Max | Bedeutung |
+|------------|-----|-----------|
+| Pool | 35 | Curation-Pool-Größe zum aktuellen Zeitpunkt |
+| Timing | 25 | Wie gut passt das Alter in historisch starke Fenster |
+| Signal / Wale | 20 | Wale-Votes als Frühindikatoren |
+| Discovery | 10 | Wie früh entdeckt VoteBroker diesen Post |
+| Autorhistorie | 10 | Historische Growth-Factor-Performance des Autors |
+
+Die Opportunities sind direkt im Dashboard votebar oder lassen sich mit einem Klick zur eigenen Strategie hinzufügen.
+
+![Opportunity Scanner – Liste](docs/assets/opportunities.png)
+
+![Opportunity Scanner – Score-Detail](docs/assets/opportunities_score.png)
+
+### Community-Radar
+Der Community-Tab zeigt welche Autoren von mehreren VoteBroker-Nutzern gleichzeitig gevoted werden — ein organisches Signal für besonders interessante Accounts. Außerdem werden Autoren aus anderen Strategien als Entdeckungsvorschläge angezeigt.
 
 ![Community Autor-Radar](docs/assets/community.png)
 
