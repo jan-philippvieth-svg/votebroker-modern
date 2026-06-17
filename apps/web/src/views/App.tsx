@@ -417,17 +417,24 @@ export function App() {
     return () => clearInterval(id);
   }, [session?.token, activeTab]);
 
-  // Auto-scan: initial load + 60s silent background poll while on DNA tab
+  // Background poll: always running while logged in, not tied to active tab.
+  // Puts newly-found eligible posts into pendingOpportunities for any tab.
   useEffect(() => {
-    if (!session || activeTab !== "dna") return;
-
-    // Initial load when landing on tab without data
-    if (opportunitiesRef.current === null && !opportunitiesLoading) {
-      void loadOpportunities();
-    }
-
+    if (!session) return;
     const id = setInterval(() => { void backgroundPollRef.current?.(); }, 60_000);
     return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.token]);
+
+  // DNA tab entry: full refresh if no data or last scan older than 5 min.
+  // Fixes the case where stale data (e.g. "0 eligible") prevented re-scan on return.
+  useEffect(() => {
+    if (!session || activeTab !== "dna") return;
+    const STALE_MS = 5 * 60_000;
+    const isStale = !lastScannedAt || (Date.now() - lastScannedAt.getTime()) > STALE_MS;
+    if (!opportunitiesLoading && (opportunitiesRef.current === null || isStale)) {
+      void loadOpportunities();
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.token, activeTab]);
 
@@ -571,11 +578,11 @@ export function App() {
       const result = await getVoteOpportunities(unique, session.user.username);
       const voted = recentlyVotedKeysRef.current;
 
-      // Keys already visible to the user (read from ref — always current in closures)
       const knownKeys = new Set(
         (opportunitiesRef.current ?? []).map(p => `${p.author}/${p.permlink}`)
       );
 
+      // Posts not yet tracked at all that are now eligible
       const fresh = result.opportunities
         .filter(p => !knownKeys.has(`${p.author}/${p.permlink}`))
         .filter(p => !voted.has(`${p.author}/${p.permlink}`))
@@ -583,8 +590,29 @@ export function App() {
 
       setLastScannedAt(new Date());
 
+      // Always update opportunities silently so Dashboard (and all tabs) see current data.
+      // This covers two cases: new eligible posts and previously-ineligible posts that are now eligible.
+      setOpportunities(prev => {
+        const incomingMap = new Map(result.opportunities.map(p => [`${p.author}/${p.permlink}`, p]));
+        const existing = prev ?? [];
+
+        // Update eligibility of tracked posts from fresh scan data
+        const updated = existing.map(p => {
+          const key = `${p.author}/${p.permlink}`;
+          if (voted.has(key)) return { ...p, alreadyVoted: true, eligible: false };
+          return incomingMap.get(key) ?? p;
+        });
+
+        if (fresh.length === 0) return updated;
+
+        // Prepend new eligible posts that weren't tracked yet
+        const updatedKeys = new Set(existing.map(p => `${p.author}/${p.permlink}`));
+        const toAdd = fresh.filter(p => !updatedKeys.has(`${p.author}/${p.permlink}`));
+        return toAdd.length > 0 ? [...toAdd, ...updated] : updated;
+      });
+
       if (fresh.length > 0) {
-        // Accumulate new posts into pending, deduplicating against existing pending
+        // Accumulate in pending for the banner on DNA tab
         setPendingOpportunities(prev => {
           const prevKeys = new Set(prev.map(p => `${p.author}/${p.permlink}`));
           const toAdd = fresh.filter(p => !prevKeys.has(`${p.author}/${p.permlink}`));
