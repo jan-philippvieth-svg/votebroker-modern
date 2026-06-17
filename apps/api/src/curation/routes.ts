@@ -27,7 +27,7 @@ const opportunitiesSchema = z.object({
 const strategyRuleSchema = z.object({
   username:          z.string().min(1).max(64),
   category:          z.enum(["immer_voten", "lieblingsautor", "bevorzugt", "normal", "niedrig", "ignorieren"]),
-  maxWeightPct:      z.number().min(0).max(100),
+  maxWeightPct:      z.number().min(0).max(100).default(100),
   minWeightPct:      z.number().min(0).max(100).default(0),
   enabled:           z.boolean(),
   selectionReasons:  z.array(z.string()).optional().default([]),

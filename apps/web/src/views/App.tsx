@@ -491,8 +491,8 @@ export function App() {
         rules: strategyRules.map(r => ({
           username:         r.username,
           category:         r.category,
-          maxWeightPct:     r.maxWeightPct,
-          minWeightPct:     r.minWeightPct,
+          maxWeightPct:     r.maxWeightPct ?? 100,
+          minWeightPct:     r.minWeightPct ?? 0,
           enabled:          r.enabled,
           selectionReasons: r.selectionReasons,
         }))
