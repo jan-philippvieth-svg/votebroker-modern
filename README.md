@@ -134,7 +134,7 @@ npm run dev:web   # Web auf http://localhost:5173
 
 ## Sicherheitsmodell
 
-- Private Keys verlassen niemals den Browser. VoteBroker arbeitet ausschließlich mit einer delegierten Posting-Berechtigung, die der Nutzer in SteemConnect erteilt.
+- Nutzer-Private-Keys verlassen niemals den Browser. VoteBroker speichert keine privaten Keys von Nutzern. Server-seitige Votes erfolgen ausschließlich über den VoteBroker-eigenen Broadcast-Account (`VOTEBROKER_BROADCAST_ACCOUNT`) mit dessen Posting-Key — nicht über den Key des Nutzers. Der Nutzer erteilt VoteBroker dafür die Posting-Berechtigung über SteemConnect.
 - Votes auf den Fee-Post werden nur nach expliziter `fee_post_vote`-Zustimmung ausgeführt.
 - Jede Consent-Änderung wird in der Consent-Historie gespeichert.
 - Das Admin-Interface ist durch einen separaten Operator-Token geschützt.
