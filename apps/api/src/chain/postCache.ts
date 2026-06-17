@@ -13,7 +13,9 @@
  * enough to absorb the 30-min shadow scan + continuous opportunity poll.
  */
 
-const CACHE_TTL_MS = 90_000;
+// 150s — intentionally longer than the opportunity-scan cache TTL (120s) so that
+// postCache entries are never expired in the gap between two scan-cache cycles.
+const CACHE_TTL_MS = 150_000;
 
 interface CacheEntry<T> {
   data:       T[];
