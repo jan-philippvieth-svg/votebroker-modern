@@ -121,8 +121,9 @@ function upsertPosts(
 // ── Main scanner run ──────────────────────────────────────────────────────────
 
 export async function runPostScanner(log = console): Promise<void> {
-  const db      = getDb();
-  const authors = getAllUniqueAuthors();
+  const runStart = Date.now();
+  const db       = getDb();
+  const authors  = getAllUniqueAuthors();
   if (authors.length === 0) return;
 
   const upsertPost = db.prepare(`
@@ -170,11 +171,37 @@ export async function runPostScanner(log = console): Promise<void> {
     })();
   }
 
+  const durationMs = Date.now() - runStart;
+  _stats.lastRunAt         = new Date().toISOString();
+  _stats.lastRunDurationMs = durationMs;
+  _stats.lastAuthorCount   = authors.length;
+  _stats.lastPostsStored   = postsStored;
+  _stats.lastFetchErrors   = fetchErrors;
+  _stats.totalRuns++;
+
   log.info(
     `[PostScanner] ${authors.length} unique authors, ${rpcCalls} RPC calls, ` +
-    `${postsStored} posts stored, ${fetchErrors} fetch errors`
+    `${postsStored} posts stored, ${fetchErrors} fetch errors, ${durationMs}ms`
   );
 }
+
+// ── Run stats (exposed for /api/admin/system-metrics) ────────────────────────
+
+export interface PostScannerStats {
+  lastRunAt:         string | null;
+  lastRunDurationMs: number | null;
+  lastAuthorCount:   number | null;
+  lastPostsStored:   number | null;
+  lastFetchErrors:   number | null;
+  totalRuns:         number;
+}
+
+const _stats: PostScannerStats = {
+  lastRunAt: null, lastRunDurationMs: null, lastAuthorCount: null,
+  lastPostsStored: null, lastFetchErrors: null, totalRuns: 0,
+};
+
+export function getPostScannerStats(): PostScannerStats { return { ..._stats }; }
 
 // ── Scheduler ─────────────────────────────────────────────────────────────────
 

@@ -1,3 +1,4 @@
+import os from "os";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { getSession } from "../auth/sessionStore.js";
 import { getDb } from "../db/index.js";
@@ -7,6 +8,9 @@ import { broadcastConfig, steemNetworkConfig } from "../config.js";
 import { todayBoundsUtc } from "../utils/timezone.js";
 import { createSteemClient } from "../chain/steemBroadcaster.js";
 import { getPostCacheMetrics, resetPostCacheMetrics } from "../chain/postCache.js";
+import { getPostScannerStats } from "../jobs/postScannerJob.js";
+import { getShadowScannerStats } from "../jobs/copilotShadowJob.js";
+import { getOpportunityScannerStats } from "../jobs/opportunityRefreshJob.js";
 
 // ── Owner-only access ─────────────────────────────────────────────────────────
 const ADMIN_USERNAME = "jan-philippvieth";
@@ -723,5 +727,79 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
     if (!requireAdmin(request)) return reply.code(403).send({ error: "forbidden" });
     resetPostCacheMetrics();
     return { status: "reset", metrics: getPostCacheMetrics() };
+  });
+
+  // ── System resource metrics ─────────────────────────────────────────────────
+
+  app.get("/api/admin/system-metrics", {
+    schema: { tags: ["Admin"], summary: "CPU, RAM, Scanner-Laufzeiten, RPC-Metriken, Daten-Zähler" }
+  }, async (request, reply) => {
+    if (!requireAdmin(request)) return reply.code(403).send({ error: "forbidden" });
+
+    const mem      = process.memoryUsage();
+    const totalMem = os.totalmem();
+    const freeMem  = os.freemem();
+    const load     = os.loadavg();
+    const cpus     = os.cpus();
+    const db       = getDb();
+    const cm       = getPostCacheMetrics();
+
+    // Data counters from SQLite
+    const authorCount = (db.prepare("SELECT COUNT(*) AS n FROM vb_post_scan_log").get() as { n: number })?.n ?? 0;
+    const postCount   = (db.prepare("SELECT COUNT(*) AS n FROM vb_posts").get() as { n: number })?.n ?? 0;
+    const eligibleCount = (db.prepare("SELECT COUNT(*) AS n FROM vb_opportunity_cache WHERE cached_at >= datetime('now', '-2 hours')").get() as { n: number })?.n ?? 0;
+    const wouldVoteToday = (db.prepare(`
+      SELECT COUNT(*) AS n FROM vb_copilot_shadow_runs
+      WHERE decision = 'would_vote' AND run_at >= datetime('now', '-24 hours')
+    `).get() as { n: number })?.n ?? 0;
+
+    // RPC calls/min: postCache misses / uptime in minutes
+    const uptimeMin = process.uptime() / 60;
+    const rpcCallsPerMin = uptimeMin > 0
+      ? Math.round((cm.misses / uptimeMin) * 10) / 10
+      : 0;
+
+    return {
+      system: {
+        cpu: {
+          loadAvg1:  Math.round(load[0] * 100) / 100,
+          loadAvg5:  Math.round(load[1] * 100) / 100,
+          loadAvg15: Math.round(load[2] * 100) / 100,
+          cpuCount:  cpus.length,
+          loadPct1:  Math.round((load[0] / cpus.length) * 1000) / 10,
+        },
+        memory: {
+          rssMb:       Math.round(mem.rss         / 1024 / 1024),
+          heapUsedMb:  Math.round(mem.heapUsed    / 1024 / 1024),
+          heapTotalMb: Math.round(mem.heapTotal   / 1024 / 1024),
+          totalMb:     Math.round(totalMem        / 1024 / 1024),
+          freeMb:      Math.round(freeMem         / 1024 / 1024),
+          usedPct:     Math.round((1 - freeMem / totalMem) * 1000) / 10,
+        },
+        uptimeSeconds: Math.round(process.uptime()),
+        nodeVersion:   process.version,
+      },
+      scanner: {
+        postScanner:        getPostScannerStats(),
+        shadowScanner:      getShadowScannerStats(),
+        opportunityScanner: getOpportunityScannerStats(),
+      },
+      blockchain: {
+        rpcCallsPerMin,
+        cacheHitRate:  cm.hitRatePct,
+        cacheMissRate: cm.hits + cm.misses > 0
+          ? Math.round((cm.misses / (cm.hits + cm.misses)) * 1000) / 10
+          : 0,
+        cacheHits:     cm.hits,
+        cacheMisses:   cm.misses,
+        avgCacheAgeMs: cm.avgHitAgeMs,
+      },
+      data: {
+        authorCount,
+        postCount,
+        eligibleCount,
+        wouldVoteToday,
+      },
+    };
   });
 }

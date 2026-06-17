@@ -1603,3 +1603,61 @@ export function voteErrorMessage(err: unknown, locale?: Locale): { message: stri
   }
   return { message: "Unbekannter Fehler. Bitte Browser-Konsole prüfen.", code: "unknown" };
 }
+
+// ── System Metrics ────────────────────────────────────────────────────────────
+
+export interface ScannerRunStats {
+  lastRunAt:         string | null;
+  lastRunDurationMs: number | null;
+  totalRuns:         number;
+  lastAuthorCount?:  number | null;
+  lastPostsStored?:  number | null;
+  lastFetchErrors?:  number | null;
+  lastUserCount?:    number | null;
+  lastWouldVote?:    number | null;
+  lastSkipped?:      number | null;
+  lastScanned?:      number | null;
+  lastCached?:       number | null;
+}
+
+export interface SystemMetrics {
+  system: {
+    cpu: {
+      loadAvg1: number; loadAvg5: number; loadAvg15: number;
+      cpuCount: number; loadPct1: number;
+    };
+    memory: {
+      rssMb: number; heapUsedMb: number; heapTotalMb: number;
+      totalMb: number; freeMb: number; usedPct: number;
+    };
+    uptimeSeconds: number;
+    nodeVersion:   string;
+  };
+  scanner: {
+    postScanner:        ScannerRunStats;
+    shadowScanner:      ScannerRunStats;
+    opportunityScanner: ScannerRunStats;
+  };
+  blockchain: {
+    rpcCallsPerMin: number;
+    cacheHitRate:   number;
+    cacheMissRate:  number;
+    cacheHits:      number;
+    cacheMisses:    number;
+    avgCacheAgeMs:  number;
+  };
+  data: {
+    authorCount:    number;
+    postCount:      number;
+    eligibleCount:  number;
+    wouldVoteToday: number;
+  };
+}
+
+export async function fetchSystemMetrics(token: string): Promise<SystemMetrics> {
+  const res = await fetch(`${API_BASE}/api/admin/system-metrics`, {
+    headers: { session: token },
+  });
+  if (!res.ok) throw new Error("system-metrics fetch failed");
+  return res.json();
+}

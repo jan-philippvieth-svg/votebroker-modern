@@ -6,11 +6,13 @@ import {
   injectScreenshots, listScreenshots, publishDraft, triggerFeePost, updateDraftStatus,
   fetchLiveVoteReport,
   fetchShadowOutcomes, triggerShadowOutcomeResolver,
+  fetchSystemMetrics,
   type AdminCockpit, type AuthSession, type BroadcastEntry,
   type ContentDraft, type ContentListResponse, type ContentQueueItem,
   type DraftStatus, type FeePostLogEntry, type PromoLocale, type PublishResult, type ScreenshotFile,
   type LiveVoteReport, type ModelErrorMetrics, type DelayVsPostBucket,
   type ShadowOutcomes, type ShadowMissedPost,
+  type SystemMetrics,
   PROMO_LOCALES,
 } from "../api";
 
@@ -352,6 +354,161 @@ function VotesSection({ broadcasts }: { broadcasts: BroadcastEntry[] }) {
   );
 }
 
+// ── System Metrics Widget ─────────────────────────────────────────────────────
+
+function MiniBar({ pct, color }: { pct: number; color: string }) {
+  const capped = Math.min(100, Math.max(0, pct));
+  return (
+    <div style={{ background: C.border, borderRadius: "3px", height: "5px", overflow: "hidden", marginTop: "3px" }}>
+      <div style={{ background: color, width: `${capped}%`, height: "100%", borderRadius: "3px", transition: "width 0.4s" }} />
+    </div>
+  );
+}
+
+function MetricCell({ label, value, sub, color = C.info, bar }: {
+  label: string; value: string; sub?: string; color?: string; bar?: number;
+}) {
+  return (
+    <div style={{ minWidth: "90px" }}>
+      <div style={{ ...lbl, marginBottom: "2px" }}>{label}</div>
+      <div style={{ color, fontWeight: 700, fontSize: "1.1rem", lineHeight: 1.1 }}>{value}</div>
+      {sub && <div style={{ color: C.dim, fontSize: "0.68rem", marginTop: "2px" }}>{sub}</div>}
+      {bar !== undefined && <MiniBar pct={bar} color={color} />}
+    </div>
+  );
+}
+
+function fmtDuration(ms: number | null): string {
+  if (ms === null) return "—";
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+function fmtAgeShort(iso: string | null): string {
+  if (!iso) return "—";
+  const m = Math.round((Date.now() - Date.parse(iso)) / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  return `${Math.round(m / 60)}h ago`;
+}
+
+function SystemMetricsWidget({ token }: { token: string }) {
+  const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
+  const [error,   setError]   = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const m = await fetchSystemMetrics(token);
+        if (!cancelled) { setMetrics(m); setError(false); }
+      } catch { if (!cancelled) setError(true); }
+    }
+    void load();
+    const iv = setInterval(() => { void load(); }, 30_000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, [token]);
+
+  if (error) return <div style={{ ...card, color: C.err, fontSize: "0.8rem" }}>System-Metriken nicht verfügbar</div>;
+  if (!metrics) return <div style={{ ...card, color: C.dim, fontSize: "0.8rem" }}>Lade Metriken…</div>;
+
+  const { system, scanner, blockchain, data } = metrics;
+  const cpuColor  = system.cpu.loadPct1 > 80 ? C.err : system.cpu.loadPct1 > 50 ? C.warn : C.ok;
+  const ramColor  = system.memory.usedPct > 85 ? C.err : system.memory.usedPct > 65 ? C.warn : C.ok;
+  const hitColor  = blockchain.cacheHitRate > 60 ? C.ok : blockchain.cacheHitRate > 30 ? C.warn : C.err;
+  const rpcColor  = blockchain.rpcCallsPerMin > 10 ? C.err : blockchain.rpcCallsPerMin > 5 ? C.warn : C.ok;
+
+  return (
+    <div style={{ ...card, padding: "0.85rem 1rem" }}>
+      <p style={{ ...lbl, margin: "0 0 0.75rem" }}>System Metrics <span style={{ color: C.dim, fontWeight: 400, textTransform: "none", letterSpacing: 0, fontSize: "0.68rem" }}>· aktualisiert alle 30s</span></p>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1rem 1.5rem" }}>
+
+        {/* Column 1: System */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          <div style={{ ...lbl, color: C.info, marginBottom: "0.1rem" }}>System</div>
+          <MetricCell
+            label={`CPU (${system.cpu.cpuCount} core${system.cpu.cpuCount > 1 ? "s" : ""})`}
+            value={`${system.cpu.loadPct1}%`}
+            sub={`load ${system.cpu.loadAvg1} / ${system.cpu.loadAvg5} / ${system.cpu.loadAvg15}`}
+            color={cpuColor}
+            bar={system.cpu.loadPct1}
+          />
+          <MetricCell
+            label="RAM"
+            value={`${system.memory.usedPct}%`}
+            sub={`${system.memory.rssMb} MB RSS · ${system.memory.freeMb} MB frei`}
+            color={ramColor}
+            bar={system.memory.usedPct}
+          />
+          <MetricCell
+            label="Uptime"
+            value={fmtUptime(system.uptimeSeconds)}
+            color={C.dim}
+          />
+        </div>
+
+        {/* Column 2: Scanner */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          <div style={{ ...lbl, color: C.purple, marginBottom: "0.1rem" }}>Scanner</div>
+          <MetricCell
+            label="Post Scanner"
+            value={fmtDuration(scanner.postScanner.lastRunDurationMs)}
+            sub={`${scanner.postScanner.lastAuthorCount ?? "—"} authors · ${fmtAgeShort(scanner.postScanner.lastRunAt)}`}
+            color={C.purple}
+          />
+          <MetricCell
+            label="Shadow Scanner"
+            value={fmtDuration(scanner.shadowScanner.lastRunDurationMs)}
+            sub={`${scanner.shadowScanner.lastUserCount ?? "—"} users · ${fmtAgeShort(scanner.shadowScanner.lastRunAt)}`}
+            color={C.purple}
+          />
+          <MetricCell
+            label="Opportunity Scanner"
+            value={fmtDuration(scanner.opportunityScanner.lastRunDurationMs)}
+            sub={`${scanner.opportunityScanner.lastScanned ?? "—"} geprüft · ${fmtAgeShort(scanner.opportunityScanner.lastRunAt)}`}
+            color={C.purple}
+          />
+        </div>
+
+        {/* Column 3: Blockchain / Cache */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          <div style={{ ...lbl, color: C.warn, marginBottom: "0.1rem" }}>Blockchain</div>
+          <MetricCell
+            label="RPC Calls/min"
+            value={`${blockchain.rpcCallsPerMin}`}
+            sub={`${blockchain.cacheMisses} misses total`}
+            color={rpcColor}
+          />
+          <MetricCell
+            label="Cache Hit Rate"
+            value={`${blockchain.cacheHitRate}%`}
+            sub={`${blockchain.cacheHits} hits`}
+            color={hitColor}
+            bar={blockchain.cacheHitRate}
+          />
+          <MetricCell
+            label="Cache Miss Rate"
+            value={`${blockchain.cacheMissRate}%`}
+            sub={`∅ ${blockchain.avgCacheAgeMs}ms Alter`}
+            color={blockchain.cacheMissRate > 70 ? C.err : C.dim}
+          />
+        </div>
+
+        {/* Column 4: Data */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          <div style={{ ...lbl, color: C.ok, marginBottom: "0.1rem" }}>Daten</div>
+          <MetricCell label="Authors" value={String(data.authorCount)} color={C.ok} />
+          <MetricCell label="Posts (DB)" value={String(data.postCount)} color={C.ok} />
+          <MetricCell label="Eligible Posts" value={String(data.eligibleCount)} color={C.ok} />
+          <MetricCell label="Would Votes (24h)" value={String(data.wouldVoteToday)} color={C.info} />
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
 function SystemSection({ d, session }: { d: AdminCockpit; session: AuthSession }) {
   const { health, feePostLog } = d;
   const [triggering, setTriggering]     = useState(false);
@@ -380,6 +537,9 @@ function SystemSection({ d, session }: { d: AdminCockpit; session: AuthSession }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+      {/* Resource metrics */}
+      <SystemMetricsWidget token={session.token} />
+
       {/* Health checks */}
       <div style={card}>
         <p style={{ ...lbl, margin: "0 0 0.6rem" }}>System Health</p>
@@ -1350,7 +1510,7 @@ function modelWinner(mc: NonNullable<LiveVoteReport["modelComparison"]>): string
   return "Unentschieden";
 }
 
-function MetricCell({ value }: { value: string | number | null }) {
+function TdCell({ value }: { value: string | number | null }) {
   return (
     <td style={{ padding: "0.3rem 0.6rem", fontSize: "0.8rem", color: value === null ? C.dim : C.text, textAlign: "right" as const }}>
       {value === null ? "–" : value}
@@ -1468,17 +1628,17 @@ function ResearchLabSection({ session }: { session: AuthSession }) {
                       <td style={{ padding: "0.3rem 0.6rem", fontWeight: 600, color: isWinner ? C.ok : C.text }}>
                         {isWinner ? "✓ " : ""}{name}
                       </td>
-                      <MetricCell value={m.mae.toFixed(4)} />
-                      <MetricCell value={m.rmse.toFixed(4)} />
-                      <MetricCell value={m.mape !== null ? (m.mape * 100).toFixed(1) + "%" : null} />
+                      <TdCell value={m.mae.toFixed(4)} />
+                      <TdCell value={m.rmse.toFixed(4)} />
+                      <TdCell value={m.mape !== null ? (m.mape * 100).toFixed(1) + "%" : null} />
                     </tr>
                   );
                 })}
                 <tr>
                   <td style={{ padding: "0.3rem 0.6rem", color: C.dim, fontSize: "0.75rem" }}>Δ Weight−Rshares</td>
-                  <MetricCell value={(mc.weight.mae  - mc.rshares.mae ).toFixed(4)} />
-                  <MetricCell value={(mc.weight.rmse - mc.rshares.rmse).toFixed(4)} />
-                  <MetricCell value={mc.weight.mape !== null && mc.rshares.mape !== null
+                  <TdCell value={(mc.weight.mae  - mc.rshares.mae ).toFixed(4)} />
+                  <TdCell value={(mc.weight.rmse - mc.rshares.rmse).toFixed(4)} />
+                  <TdCell value={mc.weight.mape !== null && mc.rshares.mape !== null
                     ? ((mc.weight.mape - mc.rshares.mape) * 100).toFixed(1) + "%" : null} />
                 </tr>
               </tbody>

@@ -26,6 +26,23 @@ let _timer: ReturnType<typeof setTimeout> | null = null;
 let _started = false;
 let _running  = false;
 
+// ── Run stats ─────────────────────────────────────────────────────────────────
+
+export interface OpportunityScannerStats {
+  lastRunAt:         string | null;
+  lastRunDurationMs: number | null;
+  lastScanned:       number | null;
+  lastCached:        number | null;
+  totalRuns:         number;
+}
+
+const _oppStats: OpportunityScannerStats = {
+  lastRunAt: null, lastRunDurationMs: null,
+  lastScanned: null, lastCached: null, totalRuns: 0,
+};
+
+export function getOpportunityScannerStats(): OpportunityScannerStats { return { ..._oppStats }; }
+
 // ── DB helpers ────────────────────────────────────────────────────────────────
 
 interface WhalePost {
@@ -127,6 +144,7 @@ export async function runOpportunityRefresh(log: typeof console = console): Prom
     return { cached: 0, scanned: 0 };
   }
   _running = true;
+  const runStart = Date.now();
 
   try {
     const db     = getDb();
@@ -252,7 +270,13 @@ export async function runOpportunityRefresh(log: typeof console = console): Prom
       }
     })();
 
-    log.info(`[OpportunityRefresh] scanned=${scanned} above-gate=${scored.length} cached=${top.length}`);
+    _oppStats.lastRunAt         = new Date().toISOString();
+    _oppStats.lastRunDurationMs = Date.now() - runStart;
+    _oppStats.lastScanned       = scanned;
+    _oppStats.lastCached        = top.length;
+    _oppStats.totalRuns++;
+
+    log.info(`[OpportunityRefresh] scanned=${scanned} above-gate=${scored.length} cached=${top.length} duration=${_oppStats.lastRunDurationMs}ms`);
     return { cached: top.length, scanned };
 
   } finally {

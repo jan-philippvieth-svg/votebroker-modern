@@ -459,6 +459,24 @@ function getEligibleUsers(): string[] {
     });
 }
 
+// ── Run stats ─────────────────────────────────────────────────────────────────
+
+export interface ShadowScannerStats {
+  lastRunAt:         string | null;
+  lastRunDurationMs: number | null;
+  lastUserCount:     number | null;
+  lastWouldVote:     number | null;
+  lastSkipped:       number | null;
+  totalRuns:         number;
+}
+
+const _shadowStats: ShadowScannerStats = {
+  lastRunAt: null, lastRunDurationMs: null, lastUserCount: null,
+  lastWouldVote: null, lastSkipped: null, totalRuns: 0,
+};
+
+export function getShadowScannerStats(): ShadowScannerStats { return { ..._shadowStats }; }
+
 // ── Job runner ────────────────────────────────────────────────────────────────
 
 const INTERVAL_MS = 30 * 60 * 1_000; // 30 minutes
@@ -467,7 +485,8 @@ let _timer: ReturnType<typeof setTimeout> | null = null;
 let _started = false;
 
 export async function runCopilotShadow(log: typeof console = console): Promise<void> {
-  const users = getEligibleUsers();
+  const runStart = Date.now();
+  const users    = getEligibleUsers();
   if (users.length === 0) {
     log.info("[CoPilotShadow] No eligible users (auto_vote consent + strategy required)");
     return;
@@ -475,13 +494,31 @@ export async function runCopilotShadow(log: typeof console = console): Promise<v
 
   log.info(`[CoPilotShadow] Starting shadow run for ${users.length} user(s): ${users.join(", ")}`);
 
+  let totalWouldVote = 0;
+  let totalSkipped   = 0;
+
   for (const username of users) {
     try {
       await runShadowEval(username, log);
+      // tally from last vb_copilot_shadow_runs entries for this run
+      const db = getDb();
+      const recent = db.prepare(`
+        SELECT decision FROM vb_copilot_shadow_runs
+        WHERE username = ? AND run_at >= datetime('now', '-2 minutes')
+      `).all(username) as Array<{ decision: string }>;
+      totalWouldVote += recent.filter(r => r.decision === "would_vote").length;
+      totalSkipped   += recent.filter(r => r.decision !== "would_vote").length;
     } catch (err) {
       log.warn(`[CoPilotShadow] Error evaluating ${username}:`, err);
     }
   }
+
+  _shadowStats.lastRunAt         = new Date().toISOString();
+  _shadowStats.lastRunDurationMs = Date.now() - runStart;
+  _shadowStats.lastUserCount     = users.length;
+  _shadowStats.lastWouldVote     = totalWouldVote;
+  _shadowStats.lastSkipped       = totalSkipped;
+  _shadowStats.totalRuns++;
 }
 
 export function startCopilotShadow(log: typeof console = console): void {
