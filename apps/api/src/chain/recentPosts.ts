@@ -49,16 +49,14 @@ interface RawPost {
 
 function calcPostScore(ageMinutes: number, remainingHours: number): number {
   if (ageMinutes < 5 || remainingHours <= 0) return 0;
-  let timingScore: number;
-  if      (ageMinutes <= 30)   timingScore = 100;
-  else if (ageMinutes <= 60)   timingScore = 92;
-  else if (ageMinutes <= 360)  timingScore = 80;
-  else if (ageMinutes <= 1440) timingScore = 65;
-  else if (ageMinutes <= 4320) timingScore = 40;
-  else if (ageMinutes <= 7200) timingScore = 20;
-  else                         timingScore = 8;
-  const remainingPct = Math.min(1, remainingHours / (PAYOUT_WINDOW_MS / 3_600_000));
-  return Math.round(Math.min(100, timingScore + remainingPct * 15));
+  // Bell curve aligned with v3 OpportunityScore: peak 15–20 min, drops off sharply after 2h
+  if (ageMinutes <=  10) return 30;
+  if (ageMinutes <=  15) return 65;
+  if (ageMinutes <=  20) return 100; // peak
+  if (ageMinutes <=  30) return 65;
+  if (ageMinutes <=  60) return 30;
+  if (ageMinutes <= 120) return 8;
+  return 0;
 }
 
 // ── Main fetch ────────────────────────────────────────────────────────────────
