@@ -88,32 +88,6 @@ offline,vote
 
 The default VoteBroker production flow expects SteemConnect to redirect back with `code` and `state`. VoteBroker validates the one-time `state`, exchanges the code server-side through `STEEMCONNECT_CLIENT_SECRET`, verifies the returned token through `/api/me`, and then creates a local session.
 
-## Live Versus Mock
-
-Production-ready:
-
-- OAuth state creation and validation.
-- `code` callback handling with server-side secret.
-- optional `access_token` callback for manual/fallback mode.
-- target vote broadcasting with server-side VoteBroker posting key.
-- fee-post vote broadcasting with server-side VoteBroker posting key, gated by explicit fee-post consent.
-- posting authority validation before broadcasting.
-- in-memory audit log for attempts, blocks, and successful broadcasts.
-
-Still mock/stub:
-
-- account power data
-- full vote USD value
-- community pool stats
-- in-memory sessions, consents, and invoices
-
-Not live yet:
-
-- persistent database
-- real chain pricing/reward-fund adapter
-- scheduled auto-vote worker
-- durable retry/audit queue
-
 ## Start
 
 ```bash
@@ -171,7 +145,8 @@ The STRATO VPS Linux VC2-4 profile is sufficient for the current stack:
 
 ## Production Notes
 
-- The current API uses in-memory sessions, consents, invoices, and demo account data.
-- Before public launch, move sessions and consent history to Postgres or Redis.
-- Store SteemConnect tokens carefully, or avoid long-term token storage by requiring explicit signed actions.
-- Fee-post votes are blocked unless `fee_post_vote` consent is active.
+- Sessions are stored in SQLite (`user_sessions` table). Keep the database volume outside the container so it survives redeploys.
+- SteemConnect tokens are exchanged server-side and never stored long-term. The local session token is the only credential held by the API.
+- Fee-post votes are blocked unless the user has granted explicit `fee_post_vote` consent.
+- The `VOTEBROKER_OPERATOR_TOKEN` protects the admin and operator endpoints. Use a long random value in production.
+- The Post Scanner and CoPilot jobs start automatically 30 seconds after API startup to let the server stabilize first.
