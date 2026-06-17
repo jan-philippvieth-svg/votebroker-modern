@@ -61,10 +61,10 @@ Die Opportunities sind direkt im Dashboard votebar oder lassen sich mit einem Kl
 
 ![Opportunity Scanner – Score-Detail](docs/assets/opportunities_score.png)
 
-### Community-Radar
-Der Community-Tab zeigt welche Autoren von mehreren VoteBroker-Nutzern gleichzeitig gevoted werden — ein organisches Signal für besonders interessante Accounts. Außerdem werden Autoren aus anderen Strategien als Entdeckungsvorschläge angezeigt.
+### Author Intelligence
+Der Community-Tab zeigt alle Autoren in der eigenen Strategie gerankt nach historischem Wachstumsfaktor (wie stark wächst ein Post nach dem Vote), SP/VP-Effizienz und Anzahl beobachteter Datenpunkte aus der VoteBroker-Datenbank. So ist auf einen Blick erkennbar, welche Autoren konstant starke Curation-Ergebnisse liefern.
 
-![Community Autor-Radar](docs/assets/community.png)
+![Author Intelligence](docs/assets/community.png)
 
 ### Post Scanner
 Ein zentraler Blockchain-Adapter lädt alle 90 Sekunden neue Posts aller überwachten Autoren aus der Steem-Chain und schreibt sie lokal in SQLite. Alle nachgelagerten Scanner lesen aus diesem Cache statt direkt per RPC — das reduziert Latenz und Blockchain-Last erheblich.
