@@ -78,30 +78,27 @@ See `docs/SECURITY.md` for the dsteem runtime dependency notes and the audit che
 
 ## Production Readiness Matrix
 
-Production-ready:
+Live and running:
 
 - Login URL generation with one-time OAuth state.
 - SteemConnect code-flow callback with server-side secret.
 - Optional access-token callback for manual/fallback mode.
 - State/CSRF validation before session creation.
 - Token verification through signer `/api/me`.
-- Server-side target vote broadcast using `VOTEBROKER_POSTING_WIF`.
+- Sessions and consent history persisted in SQLite.
+- Server-side target vote broadcast using `VOTEBROKER_POSTING_WIF`, gated by `target_vote` consent.
 - Server-side fee-post settlement broadcast using `VOTEBROKER_POSTING_WIF`, gated by `fee_post_vote` consent.
 - Posting authority check before server-side vote broadcast.
-- In-memory audit log entries for attempts, blocks, and successful broadcasts.
+- Audit log for every vote attempt, block, and successful broadcast.
+- CoPilot automated curation (requires `auto_vote` consent + active strategy rules).
+- Vote outcomes persisted in `vb_global_vote_outcomes` for timing analytics.
 
-Stub/mock:
+Not yet implemented:
 
-- Account voting power and full-power vote value still come from the in-memory demo account provider.
-- Invoice, consent history, and session storage are in-memory.
-- Community pool metrics are demo snapshots.
-
-Not live yet:
-
-- Persistent Postgres/Redis storage.
-- Real chain account-power/reward-fund pricing adapter.
-- Scheduled auto-vote worker.
-- Durable vote execution history and retry queue.
+- Persistent auth storage for production-grade session management (currently SQLite; Redis or Postgres would add horizontal scaling and proper session expiry management).
+- Rate limiting on public and authenticated endpoints.
+- Hardened operator authentication (currently single shared token; consider per-operator keys or mTLS).
+- Production observability: structured log aggregation, metrics scraping, alerting.
 
 ## Start
 
@@ -124,6 +121,26 @@ Health check:
 ```bash
 curl https://votebroker.org/health
 ```
+
+## HTTPS Without Caddy
+
+If another reverse proxy already owns ports `80` and `443`, remove the `caddy` service from `docker-compose.prod.yml` and expose the web container on a private port instead:
+
+```yaml
+web:
+  ports:
+    - "127.0.0.1:8080:80"
+```
+
+Then proxy `https://votebroker.org` to `http://127.0.0.1:8080` from your existing proxy.
+
+## Resource Fit
+
+The STRATO VPS Linux VC2-4 profile is sufficient for the current stack:
+
+- 2 CPU cores: enough for API, Caddy, and static web serving
+- 4 GB RAM: enough for Node runtime and Docker build room
+- 120 GB storage: enough for source, images, logs, and the SQLite database volume
 
 ## Isolation From Umami
 

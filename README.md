@@ -116,12 +116,12 @@ Analytics → verbesserte Timing-Empfehlungen
 ## Deployment
 
 ```bash
-cp .env.example .env
+cp .env.production.example .env
 # Werte eintragen (Posting-WIF, SteemConnect-Secret, Operator-Token)
-docker compose up -d --build
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-Der Stack bringt Caddy mit — HTTPS für `votebroker.org` wird automatisch provisioniert, sobald DNS auf den Server zeigt. Details in [Deployment](docs/DEPLOYMENT.md).
+Der Stack bringt Caddy mit — HTTPS für `votebroker.org` wird automatisch provisioniert, sobald DNS auf den Server zeigt. Details in [Deployment](DEPLOYMENT.md).
 
 Lokale Entwicklung:
 
@@ -175,7 +175,7 @@ Die Domain-Schicht (`packages/domain`) enthält die gesamte Business-Logik — V
 - [Architektur](docs/ARCHITECTURE.md)
 - [Billing-Modell](docs/BILLING_MODEL.md)
 - [Consent-Modell](docs/CONSENT_MODEL.md)
-- [Deployment](docs/DEPLOYMENT.md)
+- [Deployment](DEPLOYMENT.md)
 - [Security](docs/SECURITY.md)
 - [Architecture Decision Records](docs/decisions/)
 - [Engineering Devlog](docs/devlog/)

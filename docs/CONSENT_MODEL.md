@@ -68,9 +68,10 @@ Production persistence should store this in Postgres or an append-only audit tab
 Current enforcement:
 
 - `fee_post_vote` is required before `/api/fees/settle` can proceed.
+- `target_vote` is required before `/api/votes/execute` (and equivalent endpoints) will broadcast a vote.
+- `auto_vote` is required before the CoPilot Shadow Job includes a user in automated vote decisions.
+- `login` is granted automatically after a successful SteemConnect OAuth exchange.
 
-Planned enforcement:
+Planned:
 
-- `target_vote` required before broadcasting a target post vote.
-- `auto_vote` required before scheduled or rule-based votes.
-- `login` granted automatically after successful SteemConnect login, or explicitly confirmed during onboarding.
+- Explicit `login` confirmation step during first-time onboarding (currently auto-granted on first login).
