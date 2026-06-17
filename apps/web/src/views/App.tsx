@@ -1267,6 +1267,7 @@ export function App() {
           data={topOpportunities}
           loading={topOpportunitiesLoading}
           locale={locale}
+          session={session}
         />
       )}
 

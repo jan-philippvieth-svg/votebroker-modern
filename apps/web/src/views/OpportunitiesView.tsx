@@ -4,7 +4,11 @@
 
 import React, { useState } from "react";
 import { createTranslator, type Locale } from "../i18n";
-import type { OpportunitiesData, OpportunityEntry, OpportunityComponents } from "../api";
+import {
+  executeVote, VoteBroadcastError,
+  getPersistedStrategy, persistStrategy,
+  type OpportunitiesData, type OpportunityEntry, type OpportunityComponents, type AuthSession,
+} from "../api";
 
 const C = {
   bg:     "#f8fafc",
@@ -302,14 +306,249 @@ function LegendPanel({ t }: { t: T }) {
   );
 }
 
+// ── Vote action panel ─────────────────────────────────────────────────────────
+
+const WEIGHT_OPTIONS = [
+  { label: "25%",  bps: 2500 },
+  { label: "50%",  bps: 5000 },
+  { label: "75%",  bps: 7500 },
+  { label: "100%", bps: 10000 },
+];
+
+function VotePanel({ opp, token, onVoted }: {
+  opp:     OpportunityEntry;
+  token:   string;
+  onVoted: () => void;
+}) {
+  const [weightBps, setWeightBps]   = useState(10000);
+  const [status, setStatus]         = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [errorMsg, setErrorMsg]     = useState<string | null>(null);
+
+  async function handleVote() {
+    setStatus("loading"); setErrorMsg(null);
+    try {
+      await executeVote(token, {
+        author:    opp.author,
+        permlink:  opp.permlink,
+        weightBps,
+        broadcastMode: "server",
+        strategyCategory: opp.myCategory ?? undefined,
+      });
+      setStatus("success");
+      onVoted();
+    } catch (err) {
+      const msg = err instanceof VoteBroadcastError ? err.message
+        : err instanceof Error ? err.message
+        : "Vote fehlgeschlagen";
+      setErrorMsg(msg);
+      setStatus("error");
+    }
+  }
+
+  if (status === "success") {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", color: C.ok, fontSize: "0.75rem", fontWeight: 600 }}>
+        <span>✓</span><span>Gevoted</span>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column" as const, gap: "0.3rem", minWidth: "130px" }}>
+      {/* Weight selector */}
+      <div style={{ display: "flex", gap: "0.2rem" }}>
+        {WEIGHT_OPTIONS.map(opt => (
+          <button
+            key={opt.bps}
+            type="button"
+            onClick={() => setWeightBps(opt.bps)}
+            style={{
+              fontSize: "0.62rem", fontWeight: 600, padding: "0.15rem 0.3rem",
+              borderRadius: "3px", cursor: "pointer",
+              background: weightBps === opt.bps ? C.info + "22" : "transparent",
+              border: `1px solid ${weightBps === opt.bps ? C.info : C.border}`,
+              color: weightBps === opt.bps ? C.info : C.dim,
+            }}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+      {/* Confirm button */}
+      <button
+        type="button"
+        disabled={status === "loading"}
+        onClick={() => void handleVote()}
+        style={{
+          background: C.ok + "18", border: `1px solid ${C.ok}55`,
+          color: C.ok, borderRadius: "4px", cursor: "pointer",
+          fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.5rem",
+          opacity: status === "loading" ? 0.6 : 1,
+        }}
+      >
+        {status === "loading" ? "…" : "Vote"}
+      </button>
+      {status === "error" && (
+        <div style={{ fontSize: "0.62rem", color: C.red, maxWidth: "140px", lineHeight: 1.3 }}>
+          {errorMsg}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Strategy add panel ────────────────────────────────────────────────────────
+
+const STRATEGY_CATEGORIES = [
+  { value: "immer_voten",    label: "Immer voten" },
+  { value: "lieblingsautor", label: "Lieblingsautor" },
+  { value: "bevorzugt",      label: "Bevorzugt" },
+  { value: "normal",         label: "Normal" },
+] as const;
+
+function AddToStrategyPanel({ author, token, onAdded }: {
+  author:  string;
+  token:   string;
+  onAdded: () => void;
+}) {
+  const [category, setCategory] = useState<string>("normal");
+  const [status,   setStatus]   = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  async function handleAdd() {
+    setStatus("loading"); setErrorMsg(null);
+    try {
+      const existing = (await getPersistedStrategy(token)) as Array<{
+        username: string; enabled: boolean; category: string; manuallyModified?: boolean;
+      }> | null ?? [];
+
+      // Remove existing entry for this author, then prepend fresh rule
+      const filtered = existing.filter(r => r.username.toLowerCase() !== author.toLowerCase());
+      const newRule  = { username: author, enabled: true, category, manuallyModified: true };
+      await persistStrategy(token, [newRule, ...filtered]);
+
+      setStatus("success");
+      onAdded();
+    } catch {
+      setErrorMsg("Speichern fehlgeschlagen");
+      setStatus("error");
+    }
+  }
+
+  if (status === "success") {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", color: C.purple, fontSize: "0.75rem", fontWeight: 600 }}>
+        <span>✓</span><span>Hinzugefügt</span>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column" as const, gap: "0.3rem", minWidth: "130px" }}>
+      <select
+        value={category}
+        onChange={e => setCategory(e.target.value)}
+        style={{
+          fontSize: "0.68rem", padding: "0.15rem 0.3rem", borderRadius: "3px",
+          border: `1px solid ${C.border}`, background: C.card, color: C.text,
+          cursor: "pointer",
+        }}
+      >
+        {STRATEGY_CATEGORIES.map(c => (
+          <option key={c.value} value={c.value}>{c.label}</option>
+        ))}
+      </select>
+      <button
+        type="button"
+        disabled={status === "loading"}
+        onClick={() => void handleAdd()}
+        style={{
+          background: C.purple + "18", border: `1px solid ${C.purple}55`,
+          color: C.purple, borderRadius: "4px", cursor: "pointer",
+          fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.5rem",
+          opacity: status === "loading" ? 0.6 : 1,
+        }}
+      >
+        {status === "loading" ? "…" : "+ Strategie"}
+      </button>
+      {status === "error" && (
+        <div style={{ fontSize: "0.62rem", color: C.red }}>{errorMsg}</div>
+      )}
+    </div>
+  );
+}
+
+// ── Action cell ───────────────────────────────────────────────────────────────
+
+function ActionCell({ opp, token }: { opp: OpportunityEntry; token: string }) {
+  const [voteOpen,     setVoteOpen]     = useState(false);
+  const [strategyOpen, setStrategyOpen] = useState(false);
+  const [voted,        setVoted]        = useState(opp.alreadyVoted);
+  const [inStrategy,   setInStrategy]   = useState(opp.inMyStrategy);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column" as const, gap: "0.35rem", minWidth: "130px" }}>
+
+      {/* Vote action */}
+      {voted ? (
+        <span style={{ fontSize: "0.7rem", color: C.dim, fontStyle: "italic" }}>Bereits gevoted</span>
+      ) : voteOpen ? (
+        <VotePanel
+          opp={opp}
+          token={token}
+          onVoted={() => { setVoted(true); setVoteOpen(false); }}
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => { setVoteOpen(true); setStrategyOpen(false); }}
+          style={{
+            background: C.ok + "18", border: `1px solid ${C.ok}55`,
+            color: C.ok, borderRadius: "4px", cursor: "pointer",
+            fontSize: "0.72rem", fontWeight: 700, padding: "0.22rem 0.55rem",
+          }}
+        >
+          Vote
+        </button>
+      )}
+
+      {/* Strategy action */}
+      {inStrategy ? (
+        <span style={{ fontSize: "0.65rem", color: C.purple, fontWeight: 600 }}>
+          ✓ In Strategie{opp.myCategory ? ` (${opp.myCategory})` : ""}
+        </span>
+      ) : strategyOpen ? (
+        <AddToStrategyPanel
+          author={opp.author}
+          token={token}
+          onAdded={() => { setInStrategy(true); setStrategyOpen(false); }}
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => { setStrategyOpen(true); setVoteOpen(false); }}
+          style={{
+            background: "transparent", border: `1px solid ${C.border}`,
+            color: C.dim, borderRadius: "4px", cursor: "pointer",
+            fontSize: "0.68rem", fontWeight: 600, padding: "0.18rem 0.45rem",
+          }}
+        >
+          + Strategie
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ── Single opportunity row ─────────────────────────────────────────────────────
 
-function OpportunityRow({ opp, idx, expanded, onToggle, t }: {
+function OpportunityRow({ opp, idx, expanded, onToggle, t, token }: {
   opp:      OpportunityEntry;
   idx:      number;
   expanded: boolean;
   onToggle: () => void;
   t:        T;
+  token:    string | null;
 }) {
   const badge   = scoreBadge(opp.opportunityScore);
   const reasons = topReasons(opp.components, t);
@@ -426,12 +665,20 @@ function OpportunityRow({ opp, idx, expanded, onToggle, t }: {
             ))}
           </div>
         </td>
+
+        {/* Actions */}
+        <td style={{ padding: "0.4rem 0.6rem", verticalAlign: "top" as const }}>
+          {token
+            ? <ActionCell opp={opp} token={token} />
+            : <span style={{ color: C.faint, fontSize: "0.68rem" }}>Login erforderlich</span>
+          }
+        </td>
       </tr>
 
       {/* Expanded detail row */}
       {expanded && (
         <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-          <td colSpan={9} style={{ padding: 0 }}>
+          <td colSpan={10} style={{ padding: 0 }}>
             <ScoreDetail opp={opp} t={t} />
           </td>
         </tr>
@@ -442,10 +689,11 @@ function OpportunityRow({ opp, idx, expanded, onToggle, t }: {
 
 // ── Main View ─────────────────────────────────────────────────────────────────
 
-export function OpportunitiesView({ data, loading, locale }: {
-  data:    OpportunitiesData | null;
-  loading: boolean;
-  locale?: Locale;
+export function OpportunitiesView({ data, loading, locale, session }: {
+  data:     OpportunitiesData | null;
+  loading:  boolean;
+  locale?:  Locale;
+  session?: AuthSession | null;
 }) {
   const t = createTranslator(locale ?? "de");
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
@@ -511,6 +759,7 @@ export function OpportunitiesView({ data, loading, locale }: {
                 <th style={{ ...thStyle, textAlign: "right" }}>{t("oppColPayout")}</th>
                 <th style={thStyle}>{t("oppColCommunity")}</th>
                 <th style={thStyle}>{t("oppColReason")}</th>
+                <th style={{ ...thStyle, textAlign: "center" }}>Aktionen</th>
               </tr>
             </thead>
             <tbody>
@@ -524,6 +773,7 @@ export function OpportunitiesView({ data, loading, locale }: {
                     expanded={expandedKey === key}
                     onToggle={() => setExpandedKey(k => k === key ? null : key)}
                     t={t}
+                    token={session?.token ?? null}
                   />
                 );
               })}
