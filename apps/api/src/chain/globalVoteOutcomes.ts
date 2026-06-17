@@ -424,7 +424,6 @@ export function getVoteOutcomeSummary(username: string): GlobalVoteOutcomeSummar
   const buckets = db.prepare(`
     SELECT
       CASE
-        WHEN vote_delay_minutes < 5    THEN '0–5 min'
         WHEN vote_delay_minutes < 10   THEN '5–10 min'
         WHEN vote_delay_minutes < 15   THEN '10–15 min'
         WHEN vote_delay_minutes < 20   THEN '15–20 min'
@@ -437,7 +436,8 @@ export function getVoteOutcomeSummary(username: string): GlobalVoteOutcomeSummar
       AVG(realized_curation_sp) as avg_sp,
       COUNT(*) as n
     FROM vb_global_vote_outcomes
-    WHERE voter = ? AND voted_at >= ? AND realized_curation_sp IS NOT NULL AND vote_delay_minutes IS NOT NULL
+    WHERE voter = ? AND voted_at >= ? AND realized_curation_sp IS NOT NULL
+      AND vote_delay_minutes IS NOT NULL AND vote_delay_minutes >= 5
     GROUP BY bucket
     ORDER BY avg_sp DESC
     LIMIT 1
@@ -476,12 +476,11 @@ export function getLiveVoteReport(username: string): LiveVoteReport {
     total_live: number; realized: number; avg_sp: number | null;
   };
 
-  const REALIZED_FILTER = "voter = ? AND voted_at >= ? AND realized_curation_sp IS NOT NULL";
+  const REALIZED_FILTER = "voter = ? AND voted_at >= ? AND realized_curation_sp IS NOT NULL AND (vote_delay_minutes IS NULL OR vote_delay_minutes >= 5)";
 
   const delayRows = db.prepare(`
     SELECT
       CASE
-        WHEN vote_delay_minutes < 5    THEN '0–5 min'
         WHEN vote_delay_minutes < 10   THEN '5–10 min'
         WHEN vote_delay_minutes < 15   THEN '10–15 min'
         WHEN vote_delay_minutes < 20   THEN '15–20 min'
@@ -595,7 +594,6 @@ export function getLiveVoteReport(username: string): LiveVoteReport {
   const delayPayoutRows = db.prepare(`
     SELECT
       CASE
-        WHEN vote_delay_minutes < 5    THEN '0–5 min'
         WHEN vote_delay_minutes < 10   THEN '5–10 min'
         WHEN vote_delay_minutes < 15   THEN '10–15 min'
         WHEN vote_delay_minutes < 20   THEN '15–20 min'
@@ -646,7 +644,6 @@ export function getLiveVoteReport(username: string): LiveVoteReport {
   // Uses CTE + window functions to compute per-bucket median without correlated subqueries.
   const DELAY_LABEL = `
     CASE
-      WHEN vote_delay_minutes < 5    THEN '0–5 min'
       WHEN vote_delay_minutes < 10   THEN '5–10 min'
       WHEN vote_delay_minutes < 15   THEN '10–15 min'
       WHEN vote_delay_minutes < 20   THEN '15–20 min'
@@ -661,11 +658,11 @@ export function getLiveVoteReport(username: string): LiveVoteReport {
     END`;
   const DELAY_SORT = `
     CASE label
-      WHEN '0–5 min'   THEN 0 WHEN '5–10 min'  THEN 1 WHEN '10–15 min' THEN 2
-      WHEN '15–20 min' THEN 3 WHEN '20–25 min' THEN 4 WHEN '25–30 min' THEN 5
-      WHEN '30–60 min' THEN 6 WHEN '1–2 h'     THEN 7 WHEN '2–6 h'     THEN 8
-      WHEN '6–24 h'    THEN 9 WHEN '1–3 Tage'  THEN 10
-      ELSE 11
+      WHEN '5–10 min'  THEN 0 WHEN '10–15 min' THEN 1 WHEN '15–20 min' THEN 2
+      WHEN '20–25 min' THEN 3 WHEN '25–30 min' THEN 4 WHEN '30–60 min' THEN 5
+      WHEN '1–2 h'     THEN 6 WHEN '2–6 h'     THEN 7 WHEN '6–24 h'    THEN 8
+      WHEN '1–3 Tage'  THEN 9
+      ELSE 10
     END`;
 
   const delayVsPostRows = db.prepare(`
@@ -675,7 +672,7 @@ export function getLiveVoteReport(username: string): LiveVoteReport {
       WHERE voter = ? AND voted_at >= ?
         AND realized_curation_sp IS NOT NULL
         AND post_final_payout_sbd IS NOT NULL
-        AND vote_delay_minutes IS NOT NULL
+        AND vote_delay_minutes IS NOT NULL AND vote_delay_minutes >= 5
     ), ranked AS (
       SELECT label, post_final_payout_sbd,
         COUNT(*) OVER (PARTITION BY label) as cnt,
@@ -761,6 +758,7 @@ export function getGrowthAnalytics(username: string): GrowthAnalytics {
     AND post_pending_payout_sbd > 0.01
     AND post_final_payout_sbd  IS NOT NULL
     AND post_final_payout_sbd  > 0
+    AND (vote_delay_minutes IS NULL OR vote_delay_minutes >= 5)
   `;
 
   const toBucket = (rows: Array<{ label: string; n: number; avg_growth: number | null; avg_pending: number | null }>): GrowthBucket[] =>
@@ -783,7 +781,6 @@ export function getGrowthAnalytics(username: string): GrowthAnalytics {
     SELECT
       CASE
         WHEN vote_delay_minutes IS NULL  THEN 'Unbekannt'
-        WHEN vote_delay_minutes < 5      THEN '0–5 min'
         WHEN vote_delay_minutes < 10     THEN '5–10 min'
         WHEN vote_delay_minutes < 15     THEN '10–15 min'
         WHEN vote_delay_minutes < 20     THEN '15–20 min'
