@@ -80,8 +80,8 @@ function computeAuthorSignals(log: typeof console): void {
     const g = byAuthor.get(row.author)!;
     if (row.total_payout_sbd != null && row.total_payout_sbd > 0) g.payouts.push(row.total_payout_sbd);
     if (row.curator_payout_sbd != null && row.curator_payout_sbd > 0) g.curators.push(row.curator_payout_sbd);
-    if (row.vote_delay_min != null && row.vote_delay_min >= 0 && row.vote_delay_min < 10080) {
-      g.delays.push(row.vote_delay_min); // cap at 7 days
+    if (row.vote_delay_min != null && row.vote_delay_min >= 5 && row.vote_delay_min < 10080) {
+      g.delays.push(row.vote_delay_min); // ≥5 min: sub-5-min votes give 0 curation reward
     }
     g.whales.add(row.whale);
     g.permlinks.add(row.permlink);

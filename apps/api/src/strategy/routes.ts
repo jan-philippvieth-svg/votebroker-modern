@@ -202,6 +202,7 @@ export async function registerStrategyRoutes(app: FastifyInstance): Promise<void
       LEFT JOIN vb_signal_author sa ON gvo.author = sa.author
       WHERE gvo.voter = ? AND gvo.voted_at >= ? AND gvo.strategy_category IS NOT NULL
         AND gvo.vote_delay_minutes IS NOT NULL
+        AND gvo.vote_delay_minutes >= 5
       ORDER BY gvo.voted_at DESC
     `).all(username, since) as VoteRow[];
 
@@ -438,6 +439,7 @@ export async function registerStrategyRoutes(app: FastifyInstance): Promise<void
         AND gvo.realized_curation_sp IS NOT NULL
         AND gvo.strategy_category IS NOT NULL
         AND gvo.vote_delay_minutes IS NOT NULL
+        AND gvo.vote_delay_minutes >= 5
       ORDER BY gvo.voted_at DESC
     `).all(username, since) as RealizedRow[];
 
@@ -480,8 +482,8 @@ export async function registerStrategyRoutes(app: FastifyInstance): Promise<void
     };
 
     const DELAY_BUCKETS: Array<[string, string, number, number]> = [
-      // [key, label, minMin, maxMin]
-      ["0_30min",  "0–30 min",   0,    30],
+      // [key, label, minMin, maxMin] — starts at 5 min: sub-5-min votes give 0 curation reward
+      ["5_30min",  "5–30 min",   5,    30],
       ["30_120min","30–120 min",  30,   120],
       ["2h_6h",    "2–6 h",      120,  360],
       ["6h_24h",   "6–24 h",     360,  1440],
