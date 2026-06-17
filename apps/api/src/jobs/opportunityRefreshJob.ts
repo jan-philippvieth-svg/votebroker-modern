@@ -220,7 +220,7 @@ export async function runOpportunityRefresh(log: typeof console = console): Prom
           isSelfPost:       false,
         });
 
-        if (result.score < OPPORTUNITY_GATE) continue;
+        if (result.finalScore < OPPORTUNITY_GATE) continue;
 
         scored.push({
           author:             post.author,
@@ -233,7 +233,7 @@ export async function runOpportunityRefresh(log: typeof console = console): Prom
           whale_count:        post.whale_count,
           author_avg_gf:      authorAvgGf,
           author_gf_sample_n: gfSampleN,
-          score:              result.score,
+          score:              result.finalScore,
           score_payout:       result.components.payoutSweetspot,
           score_timing:       result.components.timing,
           score_signal:       result.components.signalCurators,
