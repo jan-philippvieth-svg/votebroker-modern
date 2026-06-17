@@ -1,5 +1,6 @@
 import { createSteemClient } from "./steemBroadcaster.js";
 import { getPostCache, setPostCache } from "./postCache.js";
+import { getDb } from "../db/index.js";
 
 // Steem payout window: exactly 7 days after post creation
 const PAYOUT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -149,14 +150,62 @@ export async function fetchRecentPostsDebug(
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const FETCH_TIMEOUT_MS = 8_000;
+const FETCH_TIMEOUT_MS    = 8_000;
+const DB_FRESHNESS_MS     = 5 * 60 * 1_000; // 5 min — PostScanner runs every 90s
+
+interface DbPost {
+  author:             string;
+  permlink:           string;
+  title:              string;
+  created:            string;
+  pending_payout_sbd: number;
+  active_votes_json:  string | null;
+  active_votes_count: number;
+  parent_permlink:    string | null;
+}
+
+function readPostsFromDb(author: string): RawPost[] | null {
+  const db  = getDb();
+  const log = db.prepare(
+    "SELECT scanned_at FROM vb_post_scan_log WHERE author = ?"
+  ).get(author) as { scanned_at: string } | undefined;
+  if (!log) return null;
+
+  const ageMs = Date.now() - new Date(log.scanned_at + "Z").getTime();
+  if (ageMs > DB_FRESHNESS_MS) return null;
+
+  const rows = db.prepare(
+    "SELECT * FROM vb_posts WHERE author = ? ORDER BY created DESC LIMIT 10"
+  ).all(author) as DbPost[];
+
+  return rows.map(row => ({
+    author:              row.author,
+    permlink:            row.permlink,
+    title:               row.title,
+    created:             row.created,
+    pending_payout_value: `${row.pending_payout_sbd} SBD`,
+    parent_permlink:      row.parent_permlink ?? undefined,
+    active_votes:         row.active_votes_json
+      ? (JSON.parse(row.active_votes_json) as Array<{ voter: string; weight: number }>)
+      : [],
+  }));
+}
 
 async function fetchRawPosts(author: string, limit: number): Promise<RawPost[] | null> {
+  // 1. In-memory cache (warmed by PostScanner every 90s)
   const cached = getPostCache<RawPost>(author);
   if (cached) return cached;
 
+  // 2. SQLite local store (PostScanner writes every 90s — max staleness = DB_FRESHNESS_MS)
+  const fromDb = readPostsFromDb(author);
+  if (fromDb) {
+    setPostCache<RawPost>(author, fromDb); // warm cache so subsequent calls within TTL skip DB
+    return fromDb;
+  }
+
+  // 3. RPC fallback — only when PostScanner hasn't run yet or failed for this author
   const client = createSteemClient();
-  const db = client.database as unknown as {
+  const rpc = client.database as unknown as {
     call(method: string, params: unknown[]): Promise<RawPost[]>
   };
   try {
@@ -164,7 +213,7 @@ async function fetchRawPosts(author: string, limit: number): Promise<RawPost[] |
       setTimeout(() => reject(new Error("steem_timeout")), FETCH_TIMEOUT_MS)
     );
     const posts = await Promise.race([
-      db.call("get_discussions_by_blog", [{ tag: author, limit }]),
+      rpc.call("get_discussions_by_blog", [{ tag: author, limit }]),
       timeout,
     ]);
     if (Array.isArray(posts)) {

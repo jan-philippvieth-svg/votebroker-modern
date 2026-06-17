@@ -21,6 +21,7 @@ import { startShadowOutcomeResolver } from "./jobs/shadowOutcomeResolverJob.js";
 import { startOpportunityRefresh } from "./jobs/opportunityRefreshJob.js";
 import { startGrowthSnapshotSampler } from "./jobs/growthSnapshotSampler.js";
 import { scanWhaleHistory } from "./chain/whaleHistoryScanner.js";
+import { startPostScanner } from "./jobs/postScannerJob.js";
 import { registerContentRoutes } from "./admin/contentRoutes.js";
 import { registerStrategyRoutes } from "./strategy/routes.js";
 
@@ -86,6 +87,7 @@ startPayoutSync(log);
 // health check (start_period 90s, first check at 15s) can succeed before we
 // saturate the event loop with external API calls.
 setTimeout(() => {
+  startPostScanner(log);   // must start before other scanners — warms vb_posts for DB-first reads
   startVpSampler(log);
   startPriceSampler(log);
   startWhaleEnrichment(log);

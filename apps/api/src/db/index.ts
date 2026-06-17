@@ -794,6 +794,37 @@ function runMigrations(db: Database): void {
     db.exec(`CREATE INDEX IF NOT EXISTS idx_sgs_user    ON vb_shadow_growth_snapshots(username)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_sgs_type    ON vb_shadow_growth_snapshots(snapshot_type, measured_at)`);
 
+    // ── vb_posts (Post Scanner store) ────────────────────────────────────────
+    // Single source of truth for recent Steem posts across all tracked authors.
+    // Written by postScannerJob every 90s; read by Opportunity/Shadow scanners
+    // instead of making individual RPC calls per author.
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS vb_posts (
+        author              TEXT NOT NULL,
+        permlink            TEXT NOT NULL,
+        title               TEXT NOT NULL DEFAULT '',
+        created             TEXT NOT NULL,
+        pending_payout_sbd  REAL NOT NULL DEFAULT 0,
+        active_votes_json   TEXT,           -- JSON [{voter,weight}]
+        active_votes_count  INTEGER NOT NULL DEFAULT 0,
+        parent_permlink     TEXT,
+        fetched_at          TEXT NOT NULL,
+        PRIMARY KEY (author, permlink)
+      )
+    `);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_vb_posts_author    ON vb_posts(author)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_vb_posts_fetched   ON vb_posts(fetched_at)`);
+
+    // Tracks the last time each author was scanned so readers can decide
+    // whether DB data is fresh enough or fall back to a live RPC call.
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS vb_post_scan_log (
+        author      TEXT PRIMARY KEY,
+        scanned_at  TEXT NOT NULL,
+        post_count  INTEGER NOT NULL DEFAULT 0
+      )
+    `);
+
     // ── v_event_chain ─────────────────────────────────────────────────────────
     // Unified per-post event chain: actual VoteBroker votes + shadow-mode observations.
     // Primary research view for "how does growth happen on Steem?"
