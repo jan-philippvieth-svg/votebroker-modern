@@ -1,4 +1,5 @@
 import { createSteemClient } from "./steemBroadcaster.js";
+import { getPostCache, setPostCache } from "./postCache.js";
 
 // Steem payout window: exactly 7 days after post creation
 const PAYOUT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -151,6 +152,9 @@ export async function fetchRecentPostsDebug(
 const FETCH_TIMEOUT_MS = 8_000;
 
 async function fetchRawPosts(author: string, limit: number): Promise<RawPost[] | null> {
+  const cached = getPostCache<RawPost>(author);
+  if (cached) return cached;
+
   const client = createSteemClient();
   const db = client.database as unknown as {
     call(method: string, params: unknown[]): Promise<RawPost[]>
@@ -163,7 +167,11 @@ async function fetchRawPosts(author: string, limit: number): Promise<RawPost[] |
       db.call("get_discussions_by_blog", [{ tag: author, limit }]),
       timeout,
     ]);
-    return Array.isArray(posts) ? posts : null;
+    if (Array.isArray(posts)) {
+      setPostCache<RawPost>(author, posts);
+      return posts;
+    }
+    return null;
   } catch {
     return null;
   }

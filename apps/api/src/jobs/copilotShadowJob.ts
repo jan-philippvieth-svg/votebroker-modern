@@ -19,6 +19,7 @@ import { loadStrategy } from "../strategy/strategyStore.js";
 import { fetchRecentPostsWithVotes, type PostOpportunity } from "../chain/recentPosts.js";
 import { calcOpportunityScore, OPPORTUNITY_GATE } from "../chain/opportunityScore.js";
 import { MIN_GROWTH_FACTOR_SAMPLE } from "./signalCompute.js";
+import { getPostCacheMetrics } from "../chain/postCache.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -430,10 +431,12 @@ async function runShadowEval(username: string, log: typeof console): Promise<voi
 
   const wouldVote = rows.filter(r => r.decision === "would_vote").length;
   const skipped   = rows.length - wouldVote;
+  const cm = getPostCacheMetrics();
   log.info(
     `[CoPilotShadow] ${username}: run ${runId.slice(0, 8)} — ` +
     `${wouldVote} would-vote, ${skipped} skipped, VP=${(vpCtx.vpBps / 100).toFixed(1)}% ` +
-    `budget=${(vpCtx.budgetBps / 100).toFixed(1)}%`
+    `budget=${(vpCtx.budgetBps / 100).toFixed(1)}% | ` +
+    `postCache hits=${cm.hits} misses=${cm.misses} hitRate=${cm.hitRatePct}% avgAge=${cm.avgHitAgeMs}ms`
   );
 }
 

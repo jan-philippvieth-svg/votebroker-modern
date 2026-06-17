@@ -10,6 +10,7 @@ import { getDb } from "../db/index.js";
 import { operatorConfig } from "../config.js";
 import { getUserSettings, saveUserSettings, isValidTimezone } from "../settings/settingsStore.js";
 import { utcOffsetMinutes } from "../utils/timezone.js";
+import { getPostCacheMetrics } from "../chain/postCache.js";
 
 // ── Shared schemas ────────────────────────────────────────────────────────────
 
@@ -516,11 +517,16 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
     const all = [...allPosts.values()].flat();
     const eligibleCount = all.filter(p => p.eligible).length;
 
+    const cm = getPostCacheMetrics();
     request.log.info({
       voterUsername,
       authorCount: authors.length,
       eligiblePosts: eligibleCount,
       totalPosts: all.length,
+      cacheHits: cm.hits,
+      cacheMisses: cm.misses,
+      cacheHitRatePct: cm.hitRatePct,
+      cacheAvgAgeMs: cm.avgHitAgeMs,
     }, "opportunity-scan: results");
 
     const result = {

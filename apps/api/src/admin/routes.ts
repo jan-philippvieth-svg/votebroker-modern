@@ -6,6 +6,7 @@ import { getRecentFeePostLog, getLastFeePostRun, runDailyFeePost } from "../jobs
 import { broadcastConfig, steemNetworkConfig } from "../config.js";
 import { todayBoundsUtc } from "../utils/timezone.js";
 import { createSteemClient } from "../chain/steemBroadcaster.js";
+import { getPostCacheMetrics, resetPostCacheMetrics } from "../chain/postCache.js";
 
 // ── Owner-only access ─────────────────────────────────────────────────────────
 const ADMIN_USERNAME = "jan-philippvieth";
@@ -705,5 +706,22 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       runShadowOutcomeResolver(console).catch(e => console.warn("[ShadowResolver] triggered error:", e))
     ).catch(() => {});
     return { status: "started", message: "Shadow outcome resolver running in background" };
+  });
+
+  // ── Post cache metrics ────────────────────────────────────────────────────────
+
+  app.get("/api/admin/post-cache-metrics", {
+    schema: { tags: ["Admin"], summary: "Shared post-cache hit/miss/age Metriken seit Start" }
+  }, async (request, reply) => {
+    if (!requireAdmin(request)) return reply.code(403).send({ error: "forbidden" });
+    return getPostCacheMetrics();
+  });
+
+  app.post("/api/admin/post-cache-metrics/reset", {
+    schema: { tags: ["Admin"], summary: "Post-cache Metriken zurücksetzen (Cache-Einträge bleiben)" }
+  }, async (request, reply) => {
+    if (!requireAdmin(request)) return reply.code(403).send({ error: "forbidden" });
+    resetPostCacheMetrics();
+    return { status: "reset", metrics: getPostCacheMetrics() };
   });
 }
