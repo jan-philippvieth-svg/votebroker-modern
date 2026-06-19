@@ -18,6 +18,7 @@ import { hasConsent } from "../consent/consentStore.js";
 import { loadStrategy } from "../strategy/strategyStore.js";
 import { fetchRecentPostsWithVotes, type PostOpportunity } from "../chain/recentPosts.js";
 import { calcOpportunityScore, OPPORTUNITY_GATE } from "../chain/opportunityScore.js";
+import { calcOpportunityScoreV4, V4_VERSION, type V4Result, type V4Params } from "../chain/opportunityScoreV4.js";
 import { MIN_GROWTH_FACTOR_SAMPLE } from "./signalCompute.js";
 import { getPostCacheMetrics } from "../chain/postCache.js";
 import { vpCostBps, dynamicBudgetPct } from "../curation/budgetMath.js";
@@ -57,6 +58,12 @@ interface ShadowRow {
   vp_bps_at_run:        number;
   vp_budget_bps:        number;
   signals_json:         string | null;
+  // Shadow model v4 — side-by-side verdict on the same candidate. Optional here:
+  // candidate-bearing rows set them via v4Fields(); the rest default to null at insert.
+  v4_score?:            number | null;
+  v4_decision?:         string | null;
+  v4_components?:       string | null;
+  v4_version?:          string | null;
 }
 
 // VP cost (vp_cost_bps = weight_bps / 50) is shared with the planner — see
@@ -109,14 +116,91 @@ function getRecentlyVotedKeys(voter: string): Set<string> {
 
 // ── Whale signal lookup (optional enrichment) ─────────────────────────────────
 
-function getWhaleSignal(author: string): { whaleCount: number; avgPayoutSbd: number; avgGrowthFactor: number | null } | null {
+interface WhaleSignal {
+  whaleCount:       number;
+  avgPayoutSbd:     number;
+  avgGrowthFactor:  number | null;
+  // Extra fields v4 consumes (v3 ignores these) — quality priors, whale-robust.
+  medianPayoutSbd:  number | null;
+  whaleFollowRate:  number | null;
+  spPerVpCv:        number | null;
+}
+
+function getWhaleSignal(author: string): WhaleSignal | null {
   const row = getDb().prepare(`
-    SELECT whale_count, avg_payout_sbd, avg_growth_factor, gf_sample_n FROM vb_signal_author WHERE author = ?
-  `).get(author) as { whale_count: number; avg_payout_sbd: number; avg_growth_factor: number | null; gf_sample_n: number | null } | undefined;
+    SELECT whale_count, avg_payout_sbd, median_payout_sbd, whale_follow_rate,
+           sp_per_vp_cv, avg_growth_factor, gf_sample_n
+    FROM vb_signal_author WHERE author = ?
+  `).get(author) as {
+    whale_count: number; avg_payout_sbd: number; median_payout_sbd: number | null;
+    whale_follow_rate: number | null; sp_per_vp_cv: number | null;
+    avg_growth_factor: number | null; gf_sample_n: number | null;
+  } | undefined;
   if (!row) return null;
   // Only expose growth factor when sample is large enough to be reliable
   const reliableGf = (row.gf_sample_n ?? 0) >= MIN_GROWTH_FACTOR_SAMPLE ? row.avg_growth_factor : null;
-  return { whaleCount: row.whale_count ?? 0, avgPayoutSbd: row.avg_payout_sbd ?? 0, avgGrowthFactor: reliableGf };
+  return {
+    whaleCount:      row.whale_count ?? 0,
+    avgPayoutSbd:    row.avg_payout_sbd ?? 0,
+    avgGrowthFactor: reliableGf,
+    medianPayoutSbd: row.median_payout_sbd,
+    whaleFollowRate: row.whale_follow_rate,
+    spPerVpCv:       row.sp_per_vp_cv,
+  };
+}
+
+// ── Community signal lookup (vb_signal_community) — weak prior for v4 ──────────
+
+function getCommunityAvgPayout(community: string | null): number | undefined {
+  if (!community) return undefined;
+  const row = getDb().prepare(
+    `SELECT avg_payout_sbd FROM vb_signal_community WHERE community = ?`
+  ).get(community) as { avg_payout_sbd: number | null } | undefined;
+  return row?.avg_payout_sbd ?? undefined;
+}
+
+// ── v4 shadow model glue ──────────────────────────────────────────────────────
+// v4 is scored on the SAME candidate v3 logs (true per-candidate side-by-side).
+// It never broadcasts; these fields land in the existing shadow row next to v3's.
+
+interface V4RowFields {
+  v4_score:      number | null;
+  v4_decision:   string | null;
+  v4_components: string | null;
+  v4_version:    string | null;
+}
+
+const V4_NULL: V4RowFields = { v4_score: null, v4_decision: null, v4_components: null, v4_version: null };
+
+function buildV4Params(category: string, post: PostOpportunity, whale: WhaleSignal | null): V4Params {
+  return {
+    ageMinutes:            post.ageMinutes,
+    remainingHours:        post.remainingHours,
+    pendingPayoutSbd:      post.pendingPayoutSbd,
+    activeVotesCount:      post.activeVotesCount,
+    isSelfPost:            post.isSelfPost,
+    category,
+    authorMedianPayoutSbd: whale?.medianPayoutSbd ?? undefined,
+    authorAvgPayoutSbd:    whale?.avgPayoutSbd ?? undefined,
+    whaleCount:            whale?.whaleCount ?? undefined,
+    whaleFollowRate:       whale?.whaleFollowRate ?? undefined,
+    spPerVpCv:             whale?.spPerVpCv ?? undefined,
+    communityAvgPayoutSbd: getCommunityAvgPayout(post.community),
+  };
+}
+
+// Map a V4Result (+ optional independent-pick divergence note) to row columns.
+function v4Fields(
+  v4: V4Result,
+  independentBest?: { permlink: string; score: number; diverges: boolean },
+): V4RowFields {
+  const decision = v4.hardSkip != null ? "skip_hard" : v4.wouldAct ? "would_vote" : "skip_score";
+  return {
+    v4_score:      v4.score,
+    v4_decision:   decision,
+    v4_components: JSON.stringify({ ...v4.components, pGood: v4.pGood, threshold: v4.threshold, hardSkip: v4.hardSkip, independentBest }),
+    v4_version:    V4_VERSION,
+  };
 }
 
 // ── Author history lookup (sp_per_vp from realized votes) ─────────────────────
@@ -322,11 +406,27 @@ async function runShadowEval(username: string, log: typeof console): Promise<voi
     const best    = scored[0].post;
     const oppResult = scored[0].opp;
 
+    // ── Shadow model v4 (research) — scored independently on the SAME candidate set.
+    // v3 logs its best post; v4 scores THAT post for a true per-candidate side-by-side,
+    // and also ranks all eligible itself so divergent picks are visible (analysis only —
+    // the resolved outcome on the row belongs to v3's pick). v4 never broadcasts.
+    const v4Scored = eligible
+      .map(p => ({ p, v4: calcOpportunityScoreV4(buildV4Params(rule.category, p, whale)) }))
+      .sort((a, b) => b.v4.pGood - a.v4.pGood);
+    const v4OnBest  = v4Scored.find(s => s.p.permlink === best.permlink)!.v4;
+    const v4Pick    = v4Scored[0];
+    const v4Row     = v4Fields(v4OnBest, {
+      permlink: v4Pick.p.permlink,
+      score:    v4Pick.v4.score,
+      diverges: v4Pick.p.permlink !== best.permlink,
+    });
+
     // Opportunity gate check (composite score, not age-only)
     if (!oppResult.wouldAct) {
       rows.push({
         id: randomUUID(), run_id: runId, username, run_at: runAt,
         decision:             "skip_score",
+        ...v4Row,
         author:               rule.username,
         permlink:             best.permlink,
         title:                best.title,
@@ -364,6 +464,7 @@ async function runShadowEval(username: string, log: typeof console): Promise<voi
       rows.push({
         id: randomUUID(), run_id: runId, username, run_at: runAt,
         decision:             "skip_budget",
+        ...v4Row,
         author:               rule.username,
         permlink:             best.permlink,
         title:                best.title,
@@ -411,6 +512,7 @@ async function runShadowEval(username: string, log: typeof console): Promise<voi
     rows.push({
       id: randomUUID(), run_id: runId, username, run_at: runAt,
       decision:             "would_vote",
+      ...v4Row,
       author:               rule.username,
       permlink:             best.permlink,
       title:                best.title,
@@ -451,16 +553,19 @@ async function runShadowEval(username: string, log: typeof console): Promise<voi
       id, run_id, username, run_at, decision,
       author, permlink, title, category,
       post_score, score_gate, suggested_weight_bps, vp_cost_bps, expected_vote_usd,
-      reasons_json, skip_reason, vp_bps_at_run, vp_budget_bps, signals_json
+      reasons_json, skip_reason, vp_bps_at_run, vp_budget_bps, signals_json,
+      v4_score, v4_decision, v4_components, v4_version
     ) VALUES (
       @id, @run_id, @username, @run_at, @decision,
       @author, @permlink, @title, @category,
       @post_score, @score_gate, @suggested_weight_bps, @vp_cost_bps, @expected_vote_usd,
-      @reasons_json, @skip_reason, @vp_bps_at_run, @vp_budget_bps, @signals_json
+      @reasons_json, @skip_reason, @vp_bps_at_run, @vp_budget_bps, @signals_json,
+      @v4_score, @v4_decision, @v4_components, @v4_version
     )
   `);
 
-  getDb().transaction(() => { for (const row of rows) insert.run(row); })();
+  // V4_NULL first so rows without a candidate still bind the v4 params (never undefined).
+  getDb().transaction(() => { for (const row of rows) insert.run({ ...V4_NULL, ...row }); })();
 
   const wouldVote = rows.filter(r => r.decision === "would_vote").length;
   const skipped   = rows.length - wouldVote;

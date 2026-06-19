@@ -563,7 +563,13 @@ function runMigrations(db: Database): void {
         resolved_payout_sbd        REAL,               -- total author + curator payout after settlement
         resolved_vote_count        INTEGER,            -- net_votes at resolution time
         resolved_active_votes_count INTEGER,           -- active_votes[] count at resolution time
-        resolved_at                TEXT               -- ISO timestamp of resolution
+        resolved_at                TEXT,              -- ISO timestamp of resolution
+        -- Shadow model v4 (research) — scored side-by-side with v3 on the SAME candidate.
+        -- v4 never broadcasts; the outcome columns above are shared, so v3-vs-v4 needs no join.
+        v4_score                   REAL,              -- v4 pGood × 100 (0–100), comparable to post_score
+        v4_decision                TEXT,              -- 'would_vote'|'skip_score'|'skip_hard' (null if no candidate)
+        v4_components              TEXT,              -- JSON: logit contributions + raw features + pGood/threshold
+        v4_version                 TEXT               -- e.g. 'v4.0-priors'
       );
       CREATE INDEX IF NOT EXISTS idx_shadow_username ON vb_copilot_shadow_runs(username, run_at DESC);
       CREATE INDEX IF NOT EXISTS idx_shadow_run_id   ON vb_copilot_shadow_runs(run_id);
@@ -580,6 +586,11 @@ function runMigrations(db: Database): void {
       if (!shadowCols.includes("resolved_vote_count"))         db.exec("ALTER TABLE vb_copilot_shadow_runs ADD COLUMN resolved_vote_count INTEGER");
       if (!shadowCols.includes("resolved_active_votes_count")) db.exec("ALTER TABLE vb_copilot_shadow_runs ADD COLUMN resolved_active_votes_count INTEGER");
       if (!shadowCols.includes("resolved_at"))                 db.exec("ALTER TABLE vb_copilot_shadow_runs ADD COLUMN resolved_at TEXT");
+      // Shadow model v4 columns (research) — side-by-side with v3 on the same row.
+      if (!shadowCols.includes("v4_score"))                    db.exec("ALTER TABLE vb_copilot_shadow_runs ADD COLUMN v4_score REAL");
+      if (!shadowCols.includes("v4_decision"))                 db.exec("ALTER TABLE vb_copilot_shadow_runs ADD COLUMN v4_decision TEXT");
+      if (!shadowCols.includes("v4_components"))               db.exec("ALTER TABLE vb_copilot_shadow_runs ADD COLUMN v4_components TEXT");
+      if (!shadowCols.includes("v4_version"))                  db.exec("ALTER TABLE vb_copilot_shadow_runs ADD COLUMN v4_version TEXT");
     }
     // Partial index on outcome_status — safe to run here because the column now exists
     db.exec(`
