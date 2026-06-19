@@ -46,7 +46,7 @@
  * empty, so v4 runs on priors and says so.
  */
 
-export const V4_VERSION = "v4.0-priors";
+export const V4_VERSION = "v4.1-priors";
 
 export type StrategyCategory =
   | "immer_voten" | "lieblingsautor" | "bevorzugt"
@@ -103,6 +103,8 @@ export interface V4Result {
   wouldAct:    boolean;
   hardSkip:    string | null;  // non-null = mechanical/intent skip, overrides pGood
   components:  V4Components;
+  authorHistoryAvailable: boolean;      // was reconstructable author payout history present?
+  authorPriorUsed:        number | null; // unknownAuthorPrior applied (null when real history used)
 }
 
 // ── Calibration (PRIORS) ────────────────────────────────────────────────────
@@ -120,6 +122,7 @@ export interface V4Calibration {
   wReverseAuction: number;  // applied to penalty (negative effect)
   wFreshnessDecay: number;  // applied to penalty (negative effect)
   wPoolNeutral:    number;  // ~0 by design
+  unknownAuthorPrior: number; // authorQuality feature value for an unknown author [0,1]
 }
 
 export const V4_CALIBRATION: V4Calibration = {
@@ -132,7 +135,24 @@ export const V4_CALIBRATION: V4Calibration = {
   wReverseAuction: -1.6,   // hard mechanism: <5min curator reward returns to pool
   wFreshnessDecay: -2.0,   // expiring posts can't realize curation
   wPoolNeutral:     0.0,   // pool size deliberately carries no weight
+  // Unknown authors were the single biggest *cheap* recall loss in the point-in-time
+  // backtest: a strict-neutral 0.5 over-skipped good authors with no reconstructable
+  // history (2026-06 backtest: recovering them was the top single lever — raising this
+  // toward 0.80 recovered ~144 FNs at precision 0.982, vs only +17 for a threshold shift).
+  // Default 0.65 is a moderate setting; the full opportunity universe has more bad
+  // unknowns than the pre-filtered backtest set, so we stay below the 0.80 optimum and
+  // let live calibration tune it. Runtime-overridable via env V4_UNKNOWN_AUTHOR_PRIOR.
+  // See DevLog 2026-06-19.
+  unknownAuthorPrior: resolveUnknownAuthorPrior(),
 };
+
+/** Default unknown-author prior, overridable at runtime via V4_UNKNOWN_AUTHOR_PRIOR (clamped [0,1]). */
+export function resolveUnknownAuthorPrior(): number {
+  const raw = process.env.V4_UNKNOWN_AUTHOR_PRIOR;
+  if (raw == null || raw === "") return 0.65;
+  const v = Number(raw);
+  return Number.isFinite(v) ? (v < 0 ? 0 : v > 1 ? 1 : v) : 0.65; // inline clamp (clamp01 not yet initialised here)
+}
 
 // Decision thresholds on pGood by category. Higher-trust categories vote on lower
 // confidence (user already vouched for the author); "niedrig" demands strong signal.
@@ -171,12 +191,12 @@ function timingFit(ageMinutes: number, isSelfPost: boolean): number {
 }
 
 /** Author quality from realized payout — median preferred (whale-robust). */
-function authorQualityFeature(p: V4Params): number {
+function authorQualityFeature(p: V4Params, cal: V4Calibration): number {
   const median = p.authorMedianPayoutSbd;
   const mean   = p.authorAvgPayoutSbd;
   // Prefer median; fall back to a discounted mean (mean is whale-inflated, hence ×0.7).
   const basis = median != null ? median : mean != null ? mean * 0.7 : null;
-  if (basis == null) return 0.5;       // unknown author → neutral prior, not a penalty
+  if (basis == null) return cal.unknownAuthorPrior; // unknown author → tunable prior, not a penalty
   return clamp01(Math.log1p(Math.max(0, basis)) / Math.log1p(AUTHOR_PAYOUT_REF));
 }
 
@@ -219,7 +239,8 @@ export function calcOpportunityScoreV4(
   else if (category === "ignorieren") hardSkip = "Kategorie ignorieren";
 
   // Features (normalized)
-  const fAuthorQ  = authorQualityFeature(params);
+  const authorHistoryAvailable = params.authorMedianPayoutSbd != null || params.authorAvgPayoutSbd != null;
+  const fAuthorQ  = authorQualityFeature(params, cal);
   const fWhaleC   = whaleConfirmFeature(params);
   const fConsist  = consistencyFeature(params);
   const fCommY    = communityYieldFeature(params);
@@ -252,6 +273,8 @@ export function calcOpportunityScoreV4(
     threshold,
     wouldAct,
     hardSkip,
+    authorHistoryAvailable,
+    authorPriorUsed: authorHistoryAvailable ? null : cal.unknownAuthorPrior,
     components: {
       authorQuality:  round4(cAuthorQ),
       whaleConfirm:   round4(cWhaleC),

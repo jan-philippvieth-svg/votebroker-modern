@@ -569,7 +569,9 @@ function runMigrations(db: Database): void {
         v4_score                   REAL,              -- v4 pGood × 100 (0–100), comparable to post_score
         v4_decision                TEXT,              -- 'would_vote'|'skip_score'|'skip_hard' (null if no candidate)
         v4_components              TEXT,              -- JSON: logit contributions + raw features + pGood/threshold
-        v4_version                 TEXT               -- e.g. 'v4.0-priors'
+        v4_version                 TEXT,              -- e.g. 'v4.1-priors'
+        author_prior_used          REAL,              -- unknownAuthorPrior applied (NULL when real history used)
+        author_history_available   INTEGER            -- 1 = reconstructable author payout history present, else 0
       );
       CREATE INDEX IF NOT EXISTS idx_shadow_username ON vb_copilot_shadow_runs(username, run_at DESC);
       CREATE INDEX IF NOT EXISTS idx_shadow_run_id   ON vb_copilot_shadow_runs(run_id);
@@ -591,6 +593,8 @@ function runMigrations(db: Database): void {
       if (!shadowCols.includes("v4_decision"))                 db.exec("ALTER TABLE vb_copilot_shadow_runs ADD COLUMN v4_decision TEXT");
       if (!shadowCols.includes("v4_components"))               db.exec("ALTER TABLE vb_copilot_shadow_runs ADD COLUMN v4_components TEXT");
       if (!shadowCols.includes("v4_version"))                  db.exec("ALTER TABLE vb_copilot_shadow_runs ADD COLUMN v4_version TEXT");
+      if (!shadowCols.includes("author_prior_used"))           db.exec("ALTER TABLE vb_copilot_shadow_runs ADD COLUMN author_prior_used REAL");
+      if (!shadowCols.includes("author_history_available"))    db.exec("ALTER TABLE vb_copilot_shadow_runs ADD COLUMN author_history_available INTEGER");
     }
     // Partial index on outcome_status — safe to run here because the column now exists
     db.exec(`

@@ -60,10 +60,12 @@ interface ShadowRow {
   signals_json:         string | null;
   // Shadow model v4 — side-by-side verdict on the same candidate. Optional here:
   // candidate-bearing rows set them via v4Fields(); the rest default to null at insert.
-  v4_score?:            number | null;
-  v4_decision?:         string | null;
-  v4_components?:       string | null;
-  v4_version?:          string | null;
+  v4_score?:                 number | null;
+  v4_decision?:              string | null;
+  v4_components?:            string | null;
+  v4_version?:               string | null;
+  author_prior_used?:        number | null;
+  author_history_available?: number | null;
 }
 
 // VP cost (vp_cost_bps = weight_bps / 50) is shared with the planner — see
@@ -164,13 +166,18 @@ function getCommunityAvgPayout(community: string | null): number | undefined {
 // It never broadcasts; these fields land in the existing shadow row next to v3's.
 
 interface V4RowFields {
-  v4_score:      number | null;
-  v4_decision:   string | null;
-  v4_components: string | null;
-  v4_version:    string | null;
+  v4_score:                 number | null;
+  v4_decision:              string | null;
+  v4_components:            string | null;
+  v4_version:               string | null;
+  author_prior_used:        number | null;   // unknownAuthorPrior applied (null = real history used)
+  author_history_available: number | null;   // 1 = author history present, 0 = prior used, null = no candidate
 }
 
-const V4_NULL: V4RowFields = { v4_score: null, v4_decision: null, v4_components: null, v4_version: null };
+const V4_NULL: V4RowFields = {
+  v4_score: null, v4_decision: null, v4_components: null, v4_version: null,
+  author_prior_used: null, author_history_available: null,
+};
 
 function buildV4Params(category: string, post: PostOpportunity, whale: WhaleSignal | null): V4Params {
   return {
@@ -196,10 +203,12 @@ function v4Fields(
 ): V4RowFields {
   const decision = v4.hardSkip != null ? "skip_hard" : v4.wouldAct ? "would_vote" : "skip_score";
   return {
-    v4_score:      v4.score,
-    v4_decision:   decision,
-    v4_components: JSON.stringify({ ...v4.components, pGood: v4.pGood, threshold: v4.threshold, hardSkip: v4.hardSkip, independentBest }),
-    v4_version:    V4_VERSION,
+    v4_score:                 v4.score,
+    v4_decision:              decision,
+    v4_components:            JSON.stringify({ ...v4.components, pGood: v4.pGood, threshold: v4.threshold, hardSkip: v4.hardSkip, independentBest }),
+    v4_version:               V4_VERSION,
+    author_prior_used:        v4.authorPriorUsed,
+    author_history_available: v4.authorHistoryAvailable ? 1 : 0,
   };
 }
 
@@ -554,13 +563,15 @@ async function runShadowEval(username: string, log: typeof console): Promise<voi
       author, permlink, title, category,
       post_score, score_gate, suggested_weight_bps, vp_cost_bps, expected_vote_usd,
       reasons_json, skip_reason, vp_bps_at_run, vp_budget_bps, signals_json,
-      v4_score, v4_decision, v4_components, v4_version
+      v4_score, v4_decision, v4_components, v4_version,
+      author_prior_used, author_history_available
     ) VALUES (
       @id, @run_id, @username, @run_at, @decision,
       @author, @permlink, @title, @category,
       @post_score, @score_gate, @suggested_weight_bps, @vp_cost_bps, @expected_vote_usd,
       @reasons_json, @skip_reason, @vp_bps_at_run, @vp_budget_bps, @signals_json,
-      @v4_score, @v4_decision, @v4_components, @v4_version
+      @v4_score, @v4_decision, @v4_components, @v4_version,
+      @author_prior_used, @author_history_available
     )
   `);
 

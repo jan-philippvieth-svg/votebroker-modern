@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calcOpportunityScoreV4, V4_VERSION, type V4Params } from "./opportunityScoreV4.js";
+import { calcOpportunityScoreV4, V4_VERSION, V4_CALIBRATION, type V4Params } from "./opportunityScoreV4.js";
 import { deriveV4Calibration, MIN_CALIBRATION_SAMPLE } from "../jobs/v4Calibration.js";
 
 // A neutral, healthy baseline candidate: fresh, on-peak timing, average author.
@@ -72,12 +72,29 @@ test("trusted categories act on lower confidence than 'niedrig'", () => {
   assert.ok(always.threshold < low.threshold);
 });
 
-test("unknown author yields a neutral (non-penalising) prior, not a zero", () => {
+test("unknown author falls back to the tunable unknownAuthorPrior, not a zero", () => {
   const r = calcOpportunityScoreV4({
     ageMinutes: 18, remainingHours: 160, category: "normal",
   });
-  assert.equal(r.components.features.authorQ, 0.5);
+  assert.equal(r.components.features.authorQ, V4_CALIBRATION.unknownAuthorPrior);
+  assert.ok(V4_CALIBRATION.unknownAuthorPrior >= 0.5, "default prior is non-penalising");
   assert.ok(r.pGood > 0.1 && r.pGood < 0.9);
+});
+
+test("unknownAuthorPrior is tunable: a higher prior raises an unknown author's score", () => {
+  const params: V4Params = { ageMinutes: 18, remainingHours: 160, category: "normal" };
+  const low  = calcOpportunityScoreV4(params, { ...V4_CALIBRATION, unknownAuthorPrior: 0.5 });
+  const high = calcOpportunityScoreV4(params, { ...V4_CALIBRATION, unknownAuthorPrior: 0.8 });
+  assert.equal(low.components.features.authorQ, 0.5);
+  assert.equal(high.components.features.authorQ, 0.8);
+  assert.ok(high.pGood > low.pGood, `high ${high.pGood} should exceed low ${low.pGood}`);
+});
+
+test("a known author overrides the prior (prior only applies when history is absent)", () => {
+  const params: V4Params = { ageMinutes: 18, remainingHours: 160, category: "normal", authorMedianPayoutSbd: 10 };
+  const r1 = calcOpportunityScoreV4(params, { ...V4_CALIBRATION, unknownAuthorPrior: 0.5 });
+  const r2 = calcOpportunityScoreV4(params, { ...V4_CALIBRATION, unknownAuthorPrior: 0.8 });
+  assert.equal(r1.components.features.authorQ, r2.components.features.authorQ);
 });
 
 // ── Calibration hook ──────────────────────────────────────────────────────────
@@ -118,4 +135,18 @@ test("deriveV4Calibration fits weights from a sufficient sample, label-correlate
     assert.ok(res.correlations.authorQuality > 0, "author quality should correlate with good outcomes");
     assert.ok(res.suggested.wAuthorQuality > 0);
   }
+});
+
+// ── author history / prior provenance in the result ─────────────────────────────
+
+test("result flags when the unknown-author prior was used (no history)", () => {
+  const r = calcOpportunityScoreV4({ ageMinutes: 18, remainingHours: 160, category: "normal" });
+  assert.equal(r.authorHistoryAvailable, false);
+  assert.equal(r.authorPriorUsed, V4_CALIBRATION.unknownAuthorPrior);
+});
+
+test("result flags when real author history was used (prior not applied)", () => {
+  const r = calcOpportunityScoreV4({ ageMinutes: 18, remainingHours: 160, category: "normal", authorMedianPayoutSbd: 8 });
+  assert.equal(r.authorHistoryAvailable, true);
+  assert.equal(r.authorPriorUsed, null);
 });
