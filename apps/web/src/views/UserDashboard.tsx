@@ -534,9 +534,10 @@ function VpGauge({ pct, sp, voteUsd }: { pct: number; sp?: number; voteUsd?: num
 
 // ── Operative KPI Row (Cockpit — direkt nach Hero) ────────────────────────────
 
-function OperativeKPIRow({ snapshot, snapshotLoading, snapshotRefreshedAt, opportunities, opportunitiesMeta, onRefresh, onLoadOpps, onTabChange, t }: {
+function OperativeKPIRow({ snapshot, snapshotLoading, snapshotRefreshedAt, opportunities, opportunitiesMeta, lastScannedAt, onRefresh, onLoadOpps, onTabChange, t }: {
   snapshot: SteemAccountSnapshot|null; snapshotLoading: boolean; snapshotRefreshedAt?: Date;
   opportunities: PostOpportunity[]|null; opportunitiesMeta: OpportunitiesMeta|null;
+  lastScannedAt?: Date;
   onRefresh?: ()=>void; onLoadOpps: ()=>void;
   onTabChange:(tab:"dna"|"dashboard"|"community"|"billing")=>void;
   t: ReturnType<typeof createTranslator>;
@@ -631,22 +632,13 @@ function OperativeKPIRow({ snapshot, snapshotLoading, snapshotRefreshedAt, oppor
                 </span>
               )}
               <span style={{ color:C.dim }}>{t("oppNoneFound")}</span>
-              {(() => {
-                const voted = (opportunities ?? []).filter(p => p.alreadyVoted && p.remainingHours > 0);
-                const minRemaining = voted.length > 0
-                  ? Math.min(...voted.map(p => p.remainingHours))
-                  : null;
-                return (
-                  <span style={{ color:C.faint, fontSize:"0.85rem", marginTop:"0.1rem" }}>
-                    {t("oppNextScanIn")}{" "}
-                    <b style={{ color:C.dim }}>
-                      {minRemaining !== null && minRemaining < 2
-                        ? t("opp30min")
-                        : t("opp60min")}
-                    </b>
-                  </span>
-                );
-              })()}
+              {/* Honest freshness: the scan auto-refreshes (60s poll + on app return),
+                  so show the real last-scan age instead of a fake "next scan in ~30 min". */}
+              {lastScannedAt && (
+                <span style={{ color:C.faint, fontSize:"0.85rem", marginTop:"0.1rem" }}>
+                  ⟳ {fmtAge(lastScannedAt.toISOString(), t)}
+                </span>
+              )}
             </div>
           </>
         )}
@@ -2133,6 +2125,7 @@ export function UserDashboard(props: {
   strategyRules: StrategyRuleLite[]|null;
   opportunities: PostOpportunity[]|null; opportunitiesLoading: boolean;
   opportunitiesMeta: OpportunitiesMeta|null;
+  lastScannedAt?: Date;   // freshness of the opportunity scan (for honest "auto-updated" hint)
   votePlan: VotePlanResponse|null;
   curationProfile: CurationProfile|null;
   recentVotes: RecentVote[];
@@ -2287,7 +2280,7 @@ export function UserDashboard(props: {
       {/* 3. VP + Offene Chancen */}
       <OperativeKPIRow
         snapshot={snapshot} snapshotLoading={props.snapshotLoading} snapshotRefreshedAt={props.snapshotRefreshedAt}
-        opportunities={opportunities} opportunitiesMeta={opportunitiesMeta}
+        opportunities={opportunities} opportunitiesMeta={opportunitiesMeta} lastScannedAt={props.lastScannedAt}
         onRefresh={props.onRefreshSnapshot} onLoadOpps={props.onLoadOpportunities}
         onTabChange={props.onTabChange} t={t}
       />

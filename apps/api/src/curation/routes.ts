@@ -417,7 +417,7 @@ interface ScanCacheEntry {
   cachedAt:   number;
 }
 
-const SCAN_CACHE_TTL_MS   = 120_000;
+const SCAN_CACHE_TTL_MS   = 60_000;   // 60s — fresher "Offene Chancen" without flooding the RPC node
 const SCAN_CACHE_MAX_KEYS = 500;   // hard cap — bounds memory regardless of distinct users
 const scanCache = new Map<string, ScanCacheEntry>();
 

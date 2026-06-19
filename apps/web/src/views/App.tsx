@@ -417,13 +417,16 @@ export function App() {
     return () => clearInterval(id);
   }, [session?.token, activeTab]);
 
-  // Dashboard: silent initial opportunity scan when no data loaded yet.
-  // Fires immediately on tab entry so "Offene Chancen" shows a count right away
-  // instead of "—" for up to 60 s until the background poll interval fires.
+  // Dashboard: silent opportunity scan on tab entry — when there's no data yet,
+  // OR when the last scan is stale (>3 min). Without the staleness path the
+  // "Offene Chancen" count would freeze on whatever was loaded first and only
+  // update via the 60s poll (which pauses while the tab is hidden).
   useEffect(() => {
     if (!session || activeTab !== "dashboard") return;
-    if (opportunitiesRef.current !== null) return; // already have data
     if (!strategyRules || strategyRules.filter(r => r.enabled && r.category !== "ignorieren").length === 0) return;
+    const STALE_MS = 3 * 60_000;
+    const fresh = lastScannedAt && (Date.now() - lastScannedAt.getTime()) < STALE_MS;
+    if (opportunitiesRef.current !== null && fresh) return; // have fresh data
     void backgroundPollRef.current?.();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.token, activeTab, strategyRules]);
@@ -434,6 +437,21 @@ export function App() {
     if (!session) return;
     const id = setInterval(() => { void backgroundPollRef.current?.(); }, 60_000);
     return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.token]);
+
+  // Re-scan immediately when the user returns to the app. Browsers pause the 60s
+  // interval (and our poll skips on document.hidden) while the tab is hidden, so
+  // without this "Offene Chancen" would stay stale until the next tick after return.
+  useEffect(() => {
+    if (!session) return;
+    const onReturn = () => { if (!document.hidden) void backgroundPollRef.current?.(); };
+    document.addEventListener("visibilitychange", onReturn);
+    window.addEventListener("focus", onReturn);
+    return () => {
+      document.removeEventListener("visibilitychange", onReturn);
+      window.removeEventListener("focus", onReturn);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.token]);
 
@@ -1240,6 +1258,7 @@ export function App() {
           opportunities={opportunities}
           opportunitiesLoading={opportunitiesLoading}
           opportunitiesMeta={opportunitiesMeta}
+          lastScannedAt={lastScannedAt ?? undefined}
           votePlan={votePlan}
           curationProfile={curationProfile}
           recentVotes={recentVotes}
