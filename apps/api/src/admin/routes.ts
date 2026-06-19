@@ -503,6 +503,70 @@ function getShadowOutcomes(goodPayoutThreshold: number, goodVoteThreshold: numbe
     GROUP BY decision
   `).all() as AvgRow[];
 
+  // ── v4 (research model) — same confusion matrix on the v4_decision column ──────
+  // v4 logs side-by-side on the same candidate; only rows written after v4 deploy
+  // carry v4_decision, so this is naturally empty until v4 has run in production.
+  const v4MatrixRows = db.prepare(`
+    SELECT v4_decision AS decision,
+           CASE WHEN resolved_payout_sbd >= @payout THEN 1 ELSE 0 END AS good_payout,
+           COUNT(*) AS n
+    FROM vb_copilot_shadow_runs
+    WHERE outcome_status = 'resolved'
+      AND v4_decision IN ('would_vote', 'skip_score', 'skip_hard')
+      AND author IS NOT NULL AND permlink IS NOT NULL
+    GROUP BY v4_decision, good_payout
+  `).all({ payout: goodPayoutThreshold }) as MatrixRow[];
+
+  let v4tp = 0, v4fp = 0, v4fn = 0, v4tn = 0;
+  for (const r of v4MatrixRows) {
+    const isGood = r.good_payout === 1;
+    const isVote = r.decision === "would_vote";
+    const isSkip = r.decision === "skip_score" || r.decision === "skip_hard";
+    if (isVote && isGood)  v4tp += r.n;
+    if (isVote && !isGood) v4fp += r.n;
+    if (isSkip && isGood)  v4fn += r.n;
+    if (isSkip && !isGood) v4tn += r.n;
+  }
+  const v4prec = (v4tp + v4fp) > 0 ? Math.round((v4tp / (v4tp + v4fp)) * 10000) / 100 : null;
+  const v4rec  = (v4tp + v4fn) > 0 ? Math.round((v4tp / (v4tp + v4fn)) * 10000) / 100 : null;
+  const v4f1   = v4prec !== null && v4rec !== null && (v4prec + v4rec) > 0
+    ? Math.round((2 * v4prec * v4rec / (v4prec + v4rec)) * 100) / 100 : null;
+
+  const v4Avg = db.prepare(`
+    SELECT v4_decision AS decision, AVG(resolved_payout_sbd) as avg_payout, COUNT(*) as n
+    FROM vb_copilot_shadow_runs
+    WHERE outcome_status = 'resolved' AND v4_decision IS NOT NULL
+    GROUP BY v4_decision
+  `).all() as AvgRow[];
+
+  // Author-prior provenance (new v4.1 columns) over resolved v4-scored rows.
+  type V4PriorRow = { with_history: number; prior_used: number; avg_prior: number | null; n: number; version: string | null };
+  const v4Prior = db.prepare(`
+    SELECT
+      SUM(CASE WHEN author_history_available = 1 THEN 1 ELSE 0 END) AS with_history,
+      SUM(CASE WHEN author_history_available = 0 THEN 1 ELSE 0 END) AS prior_used,
+      AVG(author_prior_used) AS avg_prior,
+      COUNT(*) AS n,
+      MAX(v4_version) AS version
+    FROM vb_copilot_shadow_runs
+    WHERE outcome_status = 'resolved' AND v4_decision IS NOT NULL
+  `).get() as V4PriorRow;
+
+  const v4 = {
+    version:  v4Prior?.version ?? null,
+    scored:   v4Prior?.n ?? 0,
+    confusionMatrix: { tp: v4tp, fp: v4fp, fn: v4fn, tn: v4tn },
+    metrics:  { precision: v4prec, recall: v4rec, f1: v4f1 },
+    avgByDecision: Object.fromEntries(
+      v4Avg.map(r => [r.decision, { avgPayout: r.avg_payout !== null ? Math.round(r.avg_payout * 1000) / 1000 : null, n: r.n }])
+    ),
+    authorPrior: {
+      withHistory: v4Prior?.with_history ?? 0,
+      priorUsed:   v4Prior?.prior_used ?? 0,
+      avgPrior:    v4Prior?.avg_prior != null ? Math.round(v4Prior.avg_prior * 1000) / 1000 : null,
+    },
+  };
+
   return {
     thresholds: { goodPayoutThreshold, goodVoteThreshold },
     resolution: {
@@ -513,6 +577,7 @@ function getShadowOutcomes(goodPayoutThreshold: number, goodVoteThreshold: numbe
     },
     confusionMatrix: { tp, fp, fn, tn },
     metrics: { precision, recall, f1 },
+    v4,
     missedOpportunities: fn,
     bestMissed: bestMissed.map(r => ({
       author:            r.author,

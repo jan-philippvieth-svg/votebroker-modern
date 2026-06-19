@@ -1349,6 +1349,9 @@ function ShadowOutcomeSection({ session }: { session: AuthSession }) {
   if (error || !data) return <p style={{ color: C.err, padding: "1rem" }}>{error ?? "Keine Daten"}</p>;
 
   const { confusionMatrix: cm, metrics, resolution, thresholds, bestMissed, avgByDecision } = data;
+  const v4 = data.v4;
+  const delta = (a: number | null, b: number | null) =>
+    a !== null && b !== null ? `${a - b >= 0 ? "+" : ""}${Math.round((a - b) * 10) / 10}pp vs v3` : "—";
   const totalResolvable = cm.tp + cm.fp + cm.fn + cm.tn;
 
   const matrixCell = (v: number, col: string) => (
@@ -1429,6 +1432,58 @@ function ShadowOutcomeSection({ session }: { session: AuthSession }) {
             <KpiCard label="Recall"    value={metrics.recall    !== null ? metrics.recall    + "%" : "—"} color={metrics.recall    !== null && metrics.recall    >= 60 ? C.ok : C.warn} />
             <KpiCard label="F1-Score"  value={metrics.f1        !== null ? metrics.f1        + "%" : "—"} color={metrics.f1        !== null && metrics.f1        >= 60 ? C.ok : C.warn} />
             <KpiCard label="Verpasst"  value={data.missedOpportunities} color={C.warn} sub="False Negatives" />
+          </div>
+
+          {/* v4 research model — side-by-side with v3 on the same candidates */}
+          <div style={{ borderTop: `1px solid ${C.border}`, margin: "0.25rem 0 0.75rem", paddingTop: "0.6rem" }}>
+            <p style={{ ...lbl, margin: "0 0 0.4rem", color: C.purple }}>
+              v4 (Forschungsmodell, Shadow){v4?.version ? ` · ${v4.version}` : ""} — derselbe Kandidat, kein echter Vote
+            </p>
+            {!v4 || v4.scored === 0 ? (
+              <p style={{ color: C.dim, fontSize: "0.8rem" }}>
+                Noch keine v4-Daten. v4 loggt erst nach Deployment; resolved v4-Zeilen erscheinen ~7 Tage später.
+              </p>
+            ) : (
+              <>
+                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.6rem" }}>
+                  <KpiCard label="Precision v4" value={v4.metrics.precision !== null ? v4.metrics.precision + "%" : "—"}
+                    color={v4.metrics.precision !== null && v4.metrics.precision >= 60 ? C.ok : C.warn}
+                    sub={delta(v4.metrics.precision, metrics.precision)} />
+                  <KpiCard label="Recall v4" value={v4.metrics.recall !== null ? v4.metrics.recall + "%" : "—"}
+                    color={v4.metrics.recall !== null && v4.metrics.recall >= 60 ? C.ok : C.warn}
+                    sub={delta(v4.metrics.recall, metrics.recall)} />
+                  <KpiCard label="F1 v4" value={v4.metrics.f1 !== null ? v4.metrics.f1 + "%" : "—"}
+                    color={v4.metrics.f1 !== null && v4.metrics.f1 >= 60 ? C.ok : C.warn}
+                    sub={delta(v4.metrics.f1, metrics.f1)} />
+                  <KpiCard label="v4 gescored" value={v4.scored} color={C.purple} sub="resolved Rows" />
+                </div>
+                <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.6rem" }}>
+                  <span style={tagStyle(C.ok)}>TP={v4.confusionMatrix.tp}</span>
+                  <span style={tagStyle(C.err)}>FP={v4.confusionMatrix.fp}</span>
+                  <span style={tagStyle(C.warn)}>FN={v4.confusionMatrix.fn}</span>
+                  <span style={tagStyle(C.dim)}>TN={v4.confusionMatrix.tn}</span>
+                </div>
+                <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.5rem" }}>
+                  {(["would_vote","skip_score","skip_hard"] as const).map(d => {
+                    const avg = v4.avgByDecision[d];
+                    if (!avg) return null;
+                    return (
+                      <div key={d} style={{ ...card, padding: "0.5rem 0.75rem", minWidth: "120px" }}>
+                        <p style={{ ...lbl, margin: "0 0 0.2rem" }}>v4: {d}</p>
+                        <span style={{ fontWeight: 700, color: d === "would_vote" ? C.ok : C.dim }}>
+                          {avg.avgPayout !== null ? avg.avgPayout.toFixed(3) + " SBD" : "—"}
+                        </span>
+                        <span style={{ color: C.dim, fontSize: "0.7rem", marginLeft: "0.4rem" }}>n={avg.n}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p style={{ color: C.dim, fontSize: "0.74rem", margin: 0 }}>
+                  Autor-Prior: {v4.authorPrior.priorUsed} × verwendet · {v4.authorPrior.withHistory} × echte Historie
+                  {v4.authorPrior.avgPrior !== null ? ` · Ø Prior ${v4.authorPrior.avgPrior}` : ""}
+                </p>
+              </>
+            )}
           </div>
 
           {/* Avg payout by decision */}

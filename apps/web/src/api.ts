@@ -1475,6 +1475,18 @@ export interface ShadowMissedPost {
   steemitUrl:        string;
 }
 
+export interface ShadowModelMetrics {
+  confusionMatrix: { tp: number; fp: number; fn: number; tn: number };
+  metrics: { precision: number | null; recall: number | null; f1: number | null };
+  avgByDecision: Record<string, { avgPayout: number | null; n: number }>;
+}
+
+export interface ShadowV4 extends ShadowModelMetrics {
+  version: string | null;
+  scored: number;   // resolved rows carrying a v4 decision
+  authorPrior: { withHistory: number; priorUsed: number; avgPrior: number | null };
+}
+
 export interface ShadowOutcomes {
   thresholds: { goodPayoutThreshold: number; goodVoteThreshold: number };
   resolution: { resolved: number; missing: number; error: number; unresolved: number };
@@ -1483,6 +1495,7 @@ export interface ShadowOutcomes {
   missedOpportunities: number;
   bestMissed: ShadowMissedPost[];
   avgByDecision: Record<string, { avgPayout: number | null; n: number }>;
+  v4?: ShadowV4;   // research model, side-by-side; absent/empty until v4 runs in prod
 }
 
 export async function fetchShadowOutcomes(
