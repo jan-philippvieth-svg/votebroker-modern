@@ -47,9 +47,15 @@ interface RawPost {
   active_votes?:         Array<{ voter: string; weight: number }>;
 }
 
+// INTENT: Timing-Kurve des Vote-Plans (strategiegetriebene VP-Verteilung).
+// Bewusst UNABHÄNGIG von der CoPilot-Kurve (opportunityScore.timingScore) — nicht
+// vereinheitlichen. Beide Systeme verfolgen unterschiedliche Ziele (manuelle
+// VP-Verteilung vs. autonome Curation-Maximierung) und dürfen verschiedene
+// Sweetspots haben. Aktuell formgleich (Peak 15–20 min); falls ein System sein
+// Fenster verschiebt, ist das hier eine eigenständige Entscheidung, kein Drift-Bug.
 function calcPostScore(ageMinutes: number, remainingHours: number): number {
   if (ageMinutes < 5 || remainingHours <= 0) return 0;
-  // Bell curve aligned with v3 OpportunityScore: peak 15–20 min, drops off sharply after 2h
+  // Bell curve: peak 15–20 min, drops off sharply after 2h
   if (ageMinutes <=  10) return 30;
   if (ageMinutes <=  15) return 65;
   if (ageMinutes <=  20) return 100; // peak

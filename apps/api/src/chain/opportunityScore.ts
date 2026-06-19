@@ -78,6 +78,12 @@ function payoutSweetspotScore(pendingPayoutSbd: number | undefined): number {
 }
 
 // ── Component: timing ─────────────────────────────────────────────────────────
+// INTENT: Timing-Kurve des CoPilot (autonome Curation-Maximierung). Bewusst
+// UNABHÄNGIG von der Vote-Plan-Kurve (recentPosts.calcPostScore) — nicht
+// vereinheitlichen. Der CoPilot-Sweetspot wird gegen echte
+// vb_global_vote_outcomes-Daten kalibriert und darf vom Vote-Plan-Fenster
+// abweichen. Aktuell formgleich (Peak 15–20 min); Divergenz ist erlaubt, kein Bug.
+//
 // Bell-curve peaking at 15–20 min. Reflects Steem curation mechanics:
 // <5 min = reverse-auction (curator reward returned to pool) → 0 pts.
 // >120 min = timing bonus exhausted; hard gate handles late posts separately.
