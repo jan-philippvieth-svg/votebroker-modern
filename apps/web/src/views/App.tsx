@@ -185,6 +185,7 @@ export function App() {
   const autoScanRunningRef = useRef(false);
   const opportunitiesRef = useRef<PostOpportunity[] | null>(null); // always current, safe in intervals
   const backgroundPollRef = useRef<() => Promise<void>>(); // always points to latest closure
+  const loadOpportunitiesRef = useRef<() => Promise<void>>(); // latest loadOpportunities closure (for event handlers)
   // Keys of posts voted successfully this session — prevents server re-scan from un-doing local state
   const recentlyVotedKeysRef = useRef<Set<string>>(new Set());
   const [votePlan, setVotePlan] = useState<VotePlanResponse | null>(null);
@@ -417,19 +418,33 @@ export function App() {
     return () => clearInterval(id);
   }, [session?.token, activeTab]);
 
-  // Dashboard: silent opportunity scan on tab entry — when there's no data yet,
-  // OR when the last scan is stale (>3 min). Without the staleness path the
-  // "Offene Chancen" count would freeze on whatever was loaded first and only
-  // update via the 60s poll (which pauses while the tab is hidden).
+  // Dashboard: same reliable rescan the DNA tab does — full loadOpportunities() on
+  // tab entry when there's no data OR the last scan is stale (>3 min). Mirrors the
+  // DNA-tab effect below; the 60s background poll alone is not enough because it
+  // pauses on document.hidden and only feeds pendingOpportunities, not the tile.
   useEffect(() => {
     if (!session || activeTab !== "dashboard") return;
     if (!strategyRules || strategyRules.filter(r => r.enabled && r.category !== "ignorieren").length === 0) return;
     const STALE_MS = 3 * 60_000;
-    const fresh = lastScannedAt && (Date.now() - lastScannedAt.getTime()) < STALE_MS;
-    if (opportunitiesRef.current !== null && fresh) return; // have fresh data
-    void backgroundPollRef.current?.();
+    const isStale = !lastScannedAt || (Date.now() - lastScannedAt.getTime()) > STALE_MS;
+    if (!opportunitiesLoading && (opportunitiesRef.current === null || isStale)) {
+      void loadOpportunities();
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.token, activeTab, strategyRules]);
+
+  // While the dashboard is the active, visible tab, keep "Offene Chancen" live with
+  // the SAME full scan as the DNA tab, every 60s — so new chances appear without
+  // leaving the dashboard. This is the reliable path (replaces the tile state),
+  // unlike the global background poll which only feeds the pending banner.
+  useEffect(() => {
+    if (!session || activeTab !== "dashboard") return;
+    const id = setInterval(() => {
+      if (!document.hidden) void loadOpportunitiesRef.current?.();
+    }, 60_000);
+    return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.token, activeTab]);
 
   // Background poll: always running while logged in, not tied to active tab.
   // Puts newly-found eligible posts into pendingOpportunities for any tab.
@@ -440,12 +455,13 @@ export function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.token]);
 
-  // Re-scan immediately when the user returns to the app. Browsers pause the 60s
-  // interval (and our poll skips on document.hidden) while the tab is hidden, so
-  // without this "Offene Chancen" would stay stale until the next tick after return.
+  // Re-scan immediately when the user returns to the app (tab visible / window focus).
+  // Uses the same full loadOpportunities() as the DNA tab — not the background poll,
+  // which skips on document.hidden and is throttled by browsers in the background.
+  // loadOpportunities self-guards via autoScanRunningRef, so a double fire is safe.
   useEffect(() => {
     if (!session) return;
-    const onReturn = () => { if (!document.hidden) void backgroundPollRef.current?.(); };
+    const onReturn = () => { if (!document.hidden) void loadOpportunitiesRef.current?.(); };
     document.addEventListener("visibilitychange", onReturn);
     window.addEventListener("focus", onReturn);
     return () => {
@@ -545,6 +561,7 @@ export function App() {
 
   async function loadOpportunities() {
     if (!session || !strategyRules) return;
+    if (autoScanRunningRef.current) return;   // a scan (full load or poll) is already in flight
     const unique = buildActiveAuthors();
 
     console.log(
@@ -554,6 +571,7 @@ export function App() {
     );
 
     if (unique.length === 0) return;
+    autoScanRunningRef.current = true;
     setOpportunitiesLoading(true);
     setOpportunitiesError(null);
     try {
@@ -590,8 +608,10 @@ export function App() {
       setOpportunitiesError(err instanceof Error ? err.message : "Fehler beim Laden der offenen Votes");
     } finally {
       setOpportunitiesLoading(false);
+      autoScanRunningRef.current = false;
     }
   }
+  loadOpportunitiesRef.current = loadOpportunities; // keep ref pointed at latest closure
 
   // ── Background auto-poll (silent, no spinner, deduplicates against current list) ──
   async function backgroundPollOpportunities() {
