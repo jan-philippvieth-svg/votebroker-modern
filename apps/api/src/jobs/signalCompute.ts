@@ -172,9 +172,20 @@ function computeAuthorSignals(log: typeof console): void {
 
   insert();
 
-  // Enrich with Growth Factor from vb_global_vote_outcomes (post-level metric, voter-independent)
-  // GF = post_final_payout_sbd / post_pending_payout_sbd — measures post growth after vote
-  // r(log_gf, sp_per_vp) = 0.868 (ADR-005) — strongest predictor we have
+  // Enrich with Growth Factor from vb_global_vote_outcomes.
+  // GF = post_final_payout_sbd / post_pending_payout_sbd.
+  //
+  // CAVEAT — NOT fully voter-independent: the denominator is the pending payout
+  // at OUR vote time, i.e. at post age = vote_delay_minutes. An early vote sees a
+  // small pending pool → inflated GF; a late vote sees a large pool → GF ≈ 1.
+  // So a raw cross-author GF average conflates post growth with our own timing.
+  //
+  // Mitigation: restrict the sample to a consistent delay band (5–60 min) so the
+  // anchor age is comparable across posts. Within that band GF is a usable proxy
+  // for post-level growth; outside it the metric is dominated by timing artefacts.
+  // A truly timing-independent GF would need pending anchored at a FIXED post age,
+  // which the current snapshot schema (vote-relative) cannot provide without
+  // interpolation — tracked as a follow-up, not done here.
   const gfRows = db.prepare(`
     SELECT author,
            AVG(post_final_payout_sbd / post_pending_payout_sbd) as avg_gf,
@@ -183,9 +194,10 @@ function computeAuthorSignals(log: typeof console): void {
     WHERE post_pending_payout_sbd > 0.01
       AND post_final_payout_sbd IS NOT NULL
       AND post_final_payout_sbd / post_pending_payout_sbd BETWEEN 0.1 AND 100
+      AND vote_delay_minutes BETWEEN 5 AND 60
     GROUP BY author
-    HAVING COUNT(*) >= 3
-  `).all() as Array<{ author: string; avg_gf: number; n: number }>;
+    HAVING COUNT(*) >= ?
+  `).all(MIN_GROWTH_FACTOR_SAMPLE) as Array<{ author: string; avg_gf: number; n: number }>;
 
   if (gfRows.length > 0) {
     const updateGf = db.prepare(`
@@ -200,6 +212,51 @@ function computeAuthorSignals(log: typeof console): void {
     })();
     log.info(`[SignalCompute] Growth factor enriched for ${gfRows.length} authors`);
   }
+
+  // ── sp_per_vp (direct realized reward signal) ────────────────────────────────
+  // avg_sp_per_vp = realized curation SP per full VP spent (weight 10 000 = 1 VP).
+  // This is the reward the CoPilot ultimately optimises. It was previously NEVER
+  // written, so every reader of vb_signal_author.avg_sp_per_vp (opportunityRefreshJob)
+  // saw NULL and silently fell back to a neutral authorHistory score. Definition
+  // matches the on-the-fly query in the shadow job and strategy routes.
+  // sp_per_vp_cv = stddev/mean — consistency measure (low CV = predictable author).
+  //
+  // Note: realized curation reward is itself timing-sensitive (earlier vote →
+  // larger curation share, minus the <5min reverse-auction penalty). This is the
+  // real per-vote outcome, not a proxy ratio, so it is stored unbanded; consumers
+  // gate on MIN_SP_PER_VP_SAMPLE before trusting it.
+  const spRows = db.prepare(`
+    SELECT author, realized_curation_sp / (weight_bps / 10000.0) AS sp_per_vp
+    FROM vb_global_vote_outcomes
+    WHERE realized_curation_sp IS NOT NULL AND weight_bps > 0
+  `).all() as Array<{ author: string; sp_per_vp: number }>;
+
+  const spByAuthor = new Map<string, number[]>();
+  for (const r of spRows) {
+    if (!Number.isFinite(r.sp_per_vp)) continue;
+    if (!spByAuthor.has(r.author)) spByAuthor.set(r.author, []);
+    spByAuthor.get(r.author)!.push(r.sp_per_vp);
+  }
+
+  const updateSp = db.prepare(`
+    UPDATE vb_signal_author SET avg_sp_per_vp = ?, sp_per_vp_cv = ? WHERE author = ?
+  `);
+  let spUpdated = 0;
+  db.transaction(() => {
+    for (const [author, vals] of spByAuthor) {
+      if (vals.length < MIN_SP_PER_VP_SAMPLE) continue;
+      const mean     = vals.reduce((s, v) => s + v, 0) / vals.length;
+      const variance = vals.reduce((s, v) => s + (v - mean) ** 2, 0) / vals.length;
+      const cv       = mean > 0 ? Math.sqrt(variance) / mean : null;
+      updateSp.run(
+        Math.round(mean * 100_000) / 100_000,
+        cv !== null ? Math.round(cv * 1000) / 1000 : null,
+        author,
+      );
+      spUpdated++;
+    }
+  })();
+  log.info(`[SignalCompute] sp_per_vp enriched for ${spUpdated} authors`);
 
   log.info(`[SignalCompute] Author signals: ${byAuthor.size} authors processed`);
 }

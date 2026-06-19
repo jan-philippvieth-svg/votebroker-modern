@@ -20,6 +20,7 @@ import { startCopilotShadow } from "./jobs/copilotShadowJob.js";
 import { startShadowOutcomeResolver } from "./jobs/shadowOutcomeResolverJob.js";
 import { startOpportunityRefresh } from "./jobs/opportunityRefreshJob.js";
 import { startGrowthSnapshotSampler } from "./jobs/growthSnapshotSampler.js";
+import { startRetention } from "./jobs/retentionJob.js";
 import { scanWhaleHistory } from "./chain/whaleHistoryScanner.js";
 import { startPostScanner } from "./jobs/postScannerJob.js";
 import { registerContentRoutes } from "./admin/contentRoutes.js";
@@ -100,5 +101,6 @@ setTimeout(() => {
   startGrowthSnapshotSampler(log);
   startSignalCompute(log);
   startOpportunityRefresh(log);
+  startRetention(log);
   scanWhaleHistory(log).catch(e => log.warn("[WhaleHistory] startup scan error:", e));
 }, 30_000);

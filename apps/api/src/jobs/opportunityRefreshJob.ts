@@ -207,8 +207,12 @@ export async function runOpportunityRefresh(log: typeof console = console): Prom
         const authorAvgGf = gfSampleN >= MIN_GROWTH_FACTOR_SAMPLE
           ? (signal?.avg_growth_factor ?? null) : null;
 
-        // Author sp_per_vp — for authorHistory score component; use gf_sample_n >= 3 as confidence gate
-        const authorSpPerVp = gfSampleN >= 3 ? (signal?.avg_sp_per_vp ?? undefined) : undefined;
+        // Author sp_per_vp — for authorHistory score component. signalCompute only
+        // writes avg_sp_per_vp once it has >= MIN_SP_PER_VP_SAMPLE realized votes,
+        // so a non-null value is already sample-gated; use it directly. (Previously
+        // gated on gf_sample_n, which — combined with the column never being
+        // written — meant authorHistory was always neutral.)
+        const authorSpPerVp = signal?.avg_sp_per_vp ?? undefined;
 
         const result = calcOpportunityScore({
           ageMinutes,
