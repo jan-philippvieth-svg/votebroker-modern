@@ -16,7 +16,7 @@ import {
 } from "./chain/steemBroadcaster.js";
 import { getCachedAuthority, setCachedAuthority } from "./chain/authorityCache.js";
 import { fetchSteemAccountSnapshot } from "./chain/steemAccount.js";
-import { broadcastConfig, feePolicy, operatorConfig } from "./config.js";
+import { billingConfig, broadcastConfig, feePolicy, operatorConfig } from "./config.js";
 import { generateDevlogDraft } from "./jobs/dailyDevlog.js";
 import { fetchVBEarnings } from "./chain/voteBrokerEarnings.js";
 import { createReadStream, existsSync, readdirSync } from "node:fs";
@@ -911,6 +911,16 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     const session = getSession(getSessionHeader(request.headers.session));
     if (!session) {
       return reply.code(401).send({ error: "authorized_session_required" });
+    }
+
+    // Hard kill-switch: the fee-settlement broadcast is gated behind an explicit
+    // env flag until the billing flow is validated end-to-end. Returns before any
+    // chain interaction so half-finished finance logic cannot broadcast a fee vote.
+    if (!billingConfig.enabled) {
+      return reply.code(503).send({
+        error: "billing_disabled",
+        hint:  "Fee-Settlement ist derzeit deaktiviert (VOTEBROKER_BILLING_ENABLED nicht gesetzt)."
+      });
     }
 
     const input = settleSchema.safeParse(request.body);

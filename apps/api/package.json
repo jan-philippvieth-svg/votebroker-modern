@@ -7,7 +7,7 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
-    "test": "node --test dist/auth/*.test.js dist/chain/*.test.js",
+    "test": "tsc -p tsconfig.json && node --test dist/auth/*.test.js dist/chain/*.test.js dist/curation/*.test.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

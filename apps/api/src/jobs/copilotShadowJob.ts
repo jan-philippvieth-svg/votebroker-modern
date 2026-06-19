@@ -20,6 +20,7 @@ import { fetchRecentPostsWithVotes, type PostOpportunity } from "../chain/recent
 import { calcOpportunityScore, OPPORTUNITY_GATE } from "../chain/opportunityScore.js";
 import { MIN_GROWTH_FACTOR_SAMPLE } from "./signalCompute.js";
 import { getPostCacheMetrics } from "../chain/postCache.js";
+import { vpCostBps, dynamicBudgetPct } from "../curation/budgetMath.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -58,13 +59,8 @@ interface ShadowRow {
   signals_json:         string | null;
 }
 
-// VP cost: a 100% vote (10 000 BPS) uses exactly 2% VP (5-day regen cycle, 10 votes/day).
-// Formula: vp_cost_bps = weight_bps / 50
-function vpCostBps(weightBps: number): number {
-  return Math.round(weightBps / 50);
-}
-
-// Steem regenerates 20 percentage-points of VP per day (5 days × 20% = 100%).
+// VP cost (vp_cost_bps = weight_bps / 50) is shared with the planner — see
+// curation/budgetMath.ts. Steem regenerates 20 pp of VP per day.
 const DAILY_REGEN_BPS = 2_000;
 
 // ── VP helpers ────────────────────────────────────────────────────────────────
@@ -89,8 +85,7 @@ function getVpContext(username: string): VpContext | null {
   const vpBps      = snap.vp_bps;
   const vpPct      = vpBps / 100;
   const targetPct  = 80;                              // floor: keep tomorrow at 80%
-  const tomorrowPct = Math.min(100, vpPct + (DAILY_REGEN_BPS / 100));
-  const budgetPct   = Math.max(0, tomorrowPct - targetPct);
+  const budgetPct   = dynamicBudgetPct(vpPct, targetPct, DAILY_REGEN_BPS / 100);
   const budgetBps   = Math.round(budgetPct * 100);
 
   // Approximate full-power vote value: SP × 0.02 × (current VP / 100) × SBD price ≈ USD
@@ -253,7 +248,7 @@ async function runShadowEval(username: string, log: typeof console): Promise<voi
         skip_reason:          "No recent posts found for author",
         vp_bps_at_run:        vpCtx.vpBps,
         vp_budget_bps:        vpCtx.budgetBps,
-        signals_json:         JSON.stringify(baseSignals),
+        signals_json:         JSON.stringify({ ...baseSignals, score_version: 'v3' }),
       });
       continue;
     }
@@ -280,7 +275,7 @@ async function runShadowEval(username: string, log: typeof console): Promise<voi
         skip_reason:          "Best post already voted",
         vp_bps_at_run:        vpCtx.vpBps,
         vp_budget_bps:        vpCtx.budgetBps,
-        signals_json:         JSON.stringify({ ...baseSignals, ageMinutes: p.ageMinutes, remainingHours: p.remainingHours }),
+        signals_json:         JSON.stringify({ ...baseSignals, ageMinutes: p.ageMinutes, remainingHours: p.remainingHours, score_version: 'v3' }),
       });
       continue;
     }
@@ -301,7 +296,7 @@ async function runShadowEval(username: string, log: typeof console): Promise<voi
         skip_reason:          "No eligible posts (all expired or self-posts below min age)",
         vp_bps_at_run:        vpCtx.vpBps,
         vp_budget_bps:        vpCtx.budgetBps,
-        signals_json:         JSON.stringify(baseSignals),
+        signals_json:         JSON.stringify({ ...baseSignals, score_version: 'v3' }),
       });
       continue;
     }
@@ -347,8 +342,11 @@ async function runShadowEval(username: string, log: typeof console): Promise<voi
         vp_budget_bps:        vpCtx.budgetBps,
         signals_json:         JSON.stringify({
           ...baseSignals,
+          score_version:         'v3',
           ageMinutes:            best.ageMinutes,
           remainingHours:        best.remainingHours,
+          pendingPayoutSbd:      best.pendingPayoutSbd,
+          authorAvgSpPerVp,
           opportunityScore:      oppResult.finalScore,
           opportunityScoreRaw:   oppResult.score,
           opportunityComponents: oppResult.components,
@@ -381,8 +379,11 @@ async function runShadowEval(username: string, log: typeof console): Promise<voi
         vp_budget_bps:        vpCtx.budgetBps,
         signals_json:         JSON.stringify({
           ...baseSignals,
+          score_version:         'v3',
           ageMinutes:            best.ageMinutes,
           remainingHours:        best.remainingHours,
+          pendingPayoutSbd:      best.pendingPayoutSbd,
+          authorAvgSpPerVp,
           opportunityScore:      oppResult.finalScore,
           opportunityScoreRaw:   oppResult.score,
           opportunityComponents: oppResult.components,
@@ -425,8 +426,11 @@ async function runShadowEval(username: string, log: typeof console): Promise<voi
       vp_budget_bps:        vpCtx.budgetBps,
       signals_json:         JSON.stringify({
         ...baseSignals,
+        score_version:         'v3',
         ageMinutes:            best.ageMinutes,
         remainingHours:        best.remainingHours,
+        pendingPayoutSbd:      best.pendingPayoutSbd,
+        authorAvgSpPerVp,
         opportunityScore:      oppResult.finalScore,
         opportunityScoreRaw:   oppResult.score,
         opportunityComponents: oppResult.components,

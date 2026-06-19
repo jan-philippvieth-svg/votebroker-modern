@@ -12,7 +12,7 @@
     "build": "npm run build -w @votebroker/domain && npm run build -w @votebroker/api && npm run build -w @votebroker/web",
     "dev:api": "npm run dev -w @votebroker/api",
     "dev:web": "npm run dev -w @votebroker/web",
-    "test": "npm run test --workspaces --if-present",
+    "test": "npm run build -w @votebroker/domain && npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck -w @votebroker/domain && npm run typecheck -w @votebroker/api && npm run typecheck -w @votebroker/web",
     "devlog:today": "node scripts/devlog-today.js"
   },

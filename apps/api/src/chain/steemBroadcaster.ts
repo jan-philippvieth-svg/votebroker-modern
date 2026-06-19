@@ -57,11 +57,59 @@ export function evaluateVoteBroadcastPolicy(params: VoteBroadcastPreconditions):
   return { allowed: true };
 }
 
-export function createSteemClient(): Client {
-  return new Client(steemNetworkConfig.nodeUrl, {
+// ── Node pool + failover ────────────────────────────────────────────────────
+// dsteem's Client binds to a single address with no built-in multi-node
+// failover. We keep an ordered node list (config) and a module-level pointer to
+// the currently-healthy node. `withSteemFailover` rotates the pointer on error;
+// every plain `createSteemClient()` caller then follows to the healthy node
+// without needing its own failover logic.
+
+const RPC_TIMEOUT_MS = 8_000;
+let _activeNodeIndex = 0;
+
+function clientForNode(url: string): Client {
+  return new Client(url, {
     addressPrefix: steemNetworkConfig.addressPrefix,
-    chainId: steemNetworkConfig.chainId
+    chainId:       steemNetworkConfig.chainId,
+    timeout:       RPC_TIMEOUT_MS,   // also retries with backoff on the same node within this budget
   });
+}
+
+export function getActiveSteemNode(): string {
+  const nodes = steemNetworkConfig.nodeUrls;
+  return nodes[_activeNodeIndex % nodes.length];
+}
+
+export function createSteemClient(): Client {
+  return clientForNode(getActiveSteemNode());
+}
+
+/**
+ * Run an operation against the active Steem node, failing over to the next node
+ * in the list on error. On success the active-node pointer sticks, so every
+ * subsequent `createSteemClient()` call also uses the node that just worked.
+ */
+export async function withSteemFailover<T>(
+  fn: (client: Client) => Promise<T>,
+  log?: { warn: (msg: string) => void },
+): Promise<T> {
+  const nodes = steemNetworkConfig.nodeUrls;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < nodes.length; attempt++) {
+    const idx = (_activeNodeIndex + attempt) % nodes.length;
+    try {
+      const result = await fn(clientForNode(nodes[idx]));
+      _activeNodeIndex = idx;   // stick to the node that worked
+      return result;
+    } catch (err) {
+      lastErr = err;
+      log?.warn(
+        `[Steem] node ${nodes[idx]} failed (attempt ${attempt + 1}/${nodes.length}): ` +
+        (err instanceof Error ? err.message : String(err)),
+      );
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error("all Steem nodes failed");
 }
 
 export async function getPostingAuthority(params: {
@@ -84,26 +132,30 @@ export async function broadcastServerSideVote(params: {
   weightBps: number;
 }): Promise<{ transactionId: string; confirmed: boolean }> {
   requireBroadcastConfig(broadcastConfig);
-  const client = params.client ?? createSteemClient();
   const key = PrivateKey.fromString(broadcastConfig.postingWif);
 
-  const result = await client.broadcast.vote({
-    voter:    params.voter,
-    author:   params.author,
-    permlink: params.permlink,
-    weight:   params.weightBps
-  }, key);
+  const doVote = async (client: Client): Promise<{ transactionId: string; confirmed: boolean }> => {
+    const result = await client.broadcast.vote({
+      voter:    params.voter,
+      author:   params.author,
+      permlink: params.permlink,
+      weight:   params.weightBps
+    }, key);
 
-  // A confirmed broadcast has a 40-char hex transaction ID
-  const txId     = result.id ?? "";
-  const confirmed = /^[0-9a-f]{40}$/i.test(txId);
+    // A confirmed broadcast has a 40-char hex transaction ID
+    const txId = result.id ?? "";
+    if (!txId) {
+      throw new Error(
+        `Vote broadcast returned no transaction ID — the Steem node may have rejected the transaction. ` +
+        `voter=${params.voter} author=${params.author} permlink=${params.permlink} weight=${params.weightBps}`
+      );
+    }
+    return { transactionId: txId, confirmed: /^[0-9a-f]{40}$/i.test(txId) };
+  };
 
-  if (!txId) {
-    throw new Error(
-      `Vote broadcast returned no transaction ID — the Steem node may have rejected the transaction. ` +
-      `voter=${params.voter} author=${params.author} permlink=${params.permlink} weight=${params.weightBps}`
-    );
-  }
-
-  return { transactionId: txId, confirmed };
+  // When the caller supplies a client (it already did an authority check on that
+  // node), reuse it. Otherwise broadcast through the failover pool.
+  // Note: a vote is effectively idempotent on-chain — a retry after a timeout
+  // either lands or returns "already voted", which callers already handle.
+  return params.client ? doVote(params.client) : withSteemFailover(doVote);
 }

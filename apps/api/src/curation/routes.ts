@@ -11,6 +11,18 @@ import { operatorConfig } from "../config.js";
 import { getUserSettings, saveUserSettings, isValidTimezone } from "../settings/settingsStore.js";
 import { utcOffsetMinutes } from "../utils/timezone.js";
 import { getPostCacheMetrics } from "../chain/postCache.js";
+import { createRateLimiter } from "../middleware/rateLimit.js";
+import { vpCostPct } from "./budgetMath.js";
+
+// Shared limiter for the blockchain-fanout endpoints. Generous enough for the
+// 60s auto-scan poll, strict enough to stop abuse loops. Per authenticated IP.
+const scanRateLimit = createRateLimiter({ windowMs: 60_000, max: 40, keyPrefix: "curation:" });
+
+function sessionFromHeaders(headers: Record<string, unknown>) {
+  const raw = headers["session"];
+  const token = Array.isArray(raw) ? raw[0] : (raw as string | undefined);
+  return token ? getSession(token) : null;
+}
 
 // ── Shared schemas ────────────────────────────────────────────────────────────
 
@@ -223,7 +235,7 @@ function buildVotePlan(params: {
 
   // Steem VP cost: a 100% vote consumes 100/50 = 2% VP (full regen = 5 days × 10 votes/day = 50 votes)
   function totalSpend(entries: VotePlanEntry[]) {
-    return entries.reduce((s, e) => s + e.suggestedWeightBps / 5_000, 0);
+    return entries.reduce((s, e) => s + vpCostPct(e.suggestedWeightBps), 0);
   }
 
   // Phase A — weight reduction
@@ -405,11 +417,28 @@ interface ScanCacheEntry {
   cachedAt:   number;
 }
 
-const SCAN_CACHE_TTL_MS = 120_000;
+const SCAN_CACHE_TTL_MS   = 120_000;
+const SCAN_CACHE_MAX_KEYS = 500;   // hard cap — bounds memory regardless of distinct users
 const scanCache = new Map<string, ScanCacheEntry>();
 
 function getScanCacheKey(authors: string[]): string {
   return [...authors].sort().join(",");
+}
+
+// Store a scan result, pruning expired entries and enforcing the size cap.
+// Key is the authenticated username, so growth is already bounded by the user
+// count — the cap and TTL prune are a defence-in-depth safety net.
+function setScanCache(username: string, entry: ScanCacheEntry): void {
+  const now = Date.now();
+  for (const [k, v] of scanCache) {
+    if (now - v.cachedAt >= SCAN_CACHE_TTL_MS) scanCache.delete(k);
+  }
+  if (scanCache.size >= SCAN_CACHE_MAX_KEYS && !scanCache.has(username)) {
+    // Evict the oldest entry (Map preserves insertion order).
+    const oldest = scanCache.keys().next().value;
+    if (oldest !== undefined) scanCache.delete(oldest);
+  }
+  scanCache.set(username, entry);
 }
 
 // ── Batch fetch helper ────────────────────────────────────────────────────────
@@ -455,8 +484,12 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
   }));
 
   app.get("/api/curation/dna", {
-    schema: { tags: ["Curation"], summary: "Curation-DNA eines Accounts analysieren", querystring: zodToJsonSchema(dnaQuerySchema) }
+    preHandler: scanRateLimit,
+    schema: { tags: ["Curation"], summary: "Curation-DNA eines Accounts analysieren", querystring: zodToJsonSchema(dnaQuerySchema), security: [{ sessionToken: [] }] }
   }, async (request, reply) => {
+    const session = sessionFromHeaders(request.headers as Record<string, unknown>);
+    if (!session) return reply.code(401).send({ error: "unauthorized" });
+
     const query = dnaQuerySchema.safeParse(request.query);
     if (!query.success) {
       return reply.code(400).send({ error: "invalid_request", detail: query.error.flatten() });
@@ -475,13 +508,23 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
   });
 
   app.post("/api/curation/opportunities", {
+    preHandler: scanRateLimit,
     schema: { tags: ["Curation"], summary: "Vote-Opportunities für Autoren-Liste abrufen", body: zodToJsonSchema(opportunitiesSchema), security: [{ sessionToken: [] }] }
   }, async (request, reply) => {
+    const session = sessionFromHeaders(request.headers as Record<string, unknown>);
+    if (!session) return reply.code(401).send({ error: "unauthorized" });
+
     const body = opportunitiesSchema.safeParse(request.body);
     if (!body.success) {
       return reply.code(400).send({ error: "invalid_request", detail: body.error.flatten() });
     }
     const { authors, voterUsername } = body.data;
+
+    // Bind the scan to the authenticated user — prevents one client from
+    // scanning on behalf of arbitrary usernames and poisoning the cache.
+    if (voterUsername !== session.user.username) {
+      return reply.code(403).send({ error: "voter_username_mismatch" });
+    }
 
     // Cache check — serve without blockchain scan if result is fresh
     const authorsKey = getScanCacheKey(authors);
@@ -540,19 +583,26 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
       },
     };
 
-    scanCache.set(voterUsername, { result, authorsKey, cachedAt: Date.now() });
+    setScanCache(voterUsername, { result, authorsKey, cachedAt: Date.now() });
     return result;
   });
 
   // Debug endpoint — shows every post and why it was accepted or rejected
   app.post("/api/curation/opportunities/debug", {
-    schema: { tags: ["Curation"], summary: "Opportunities mit Debug-Infos (intern)", body: zodToJsonSchema(opportunitiesSchema) }
+    preHandler: scanRateLimit,
+    schema: { tags: ["Curation"], summary: "Opportunities mit Debug-Infos (intern)", body: zodToJsonSchema(opportunitiesSchema), security: [{ sessionToken: [] }] }
   }, async (request, reply) => {
+    const session = sessionFromHeaders(request.headers as Record<string, unknown>);
+    if (!session) return reply.code(401).send({ error: "unauthorized" });
+
     const body = opportunitiesSchema.safeParse(request.body);
     if (!body.success) {
       return reply.code(400).send({ error: "invalid_request" });
     }
     const { authors, voterUsername } = body.data;
+    if (voterUsername !== session.user.username) {
+      return reply.code(403).send({ error: "voter_username_mismatch" });
+    }
     const results: Record<string, Awaited<ReturnType<typeof fetchRecentPostsDebug>>> = {};
     const BATCH = 3;
     for (let i = 0; i < authors.length; i += BATCH) {
@@ -580,14 +630,21 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
   // ── POST /api/curation/generate ───────────────────────────────────────────
   // Generates an intelligent, ordered vote plan from strategy rules + live posts
   app.post("/api/curation/generate", {
+    preHandler: scanRateLimit,
     schema: { tags: ["Curation"], summary: "Vote-Plan generieren", body: zodToJsonSchema(generateSchema), security: [{ sessionToken: [] }] }
   }, async (request, reply) => {
+    const session = sessionFromHeaders(request.headers as Record<string, unknown>);
+    if (!session) return reply.code(401).send({ error: "unauthorized" });
+
     const body = generateSchema.safeParse(request.body);
     if (!body.success) {
       return reply.code(400).send({ error: "invalid_request", detail: body.error.flatten() });
     }
 
     const { voterUsername, currentVpBps, currentVoteUsd, rules } = body.data;
+    if (voterUsername !== session.user.username) {
+      return reply.code(403).send({ error: "voter_username_mismatch" });
+    }
     const targetVpPct        = body.data.targetVpPct ?? 85;
     const targetTomorrowVpPct = body.data.targetTomorrowVpPct ?? 80;
     const constraints = {
@@ -616,7 +673,7 @@ export async function registerCurationRoutes(app: FastifyInstance): Promise<void
     const { entries, report } = buildVotePlan({ rules, posts: postMap, currentVpBps, targetVpPct, targetTomorrowVpPct, currentVoteUsd, constraints });
 
     // VP cost = weightBps / 5000 (100% vote = 2% VP in Steem)
-    const spendPct = Math.round(entries.reduce((s, e) => s + e.suggestedWeightBps / 5_000, 0) * 10) / 10;
+    const spendPct = Math.round(entries.reduce((s, e) => s + vpCostPct(e.suggestedWeightBps), 0) * 10) / 10;
     const sustainability: "sustainable" | "aggressive" | "critical" =
       spendPct <= 5  ? "sustainable" :   // ≤5% VP consumed = well within daily regen
       spendPct <= 12 ? "aggressive"  :   // 5–12% VP = moderate spend

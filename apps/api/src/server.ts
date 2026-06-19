@@ -29,7 +29,11 @@ import { registerStrategyRoutes } from "./strategy/routes.js";
 getDb();
 
 const app = Fastify({
-  logger: true
+  logger: true,
+  // Fronted by Caddy — trust X-Forwarded-* so request.ip is the real client IP.
+  // Required for per-IP rate limiting to work (otherwise every request looks
+  // like it comes from the reverse proxy).
+  trustProxy: true
 });
 
 await app.register(cors, {

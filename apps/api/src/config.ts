@@ -18,8 +18,40 @@ export const operatorConfig = {
   token: process.env.VOTEBROKER_OPERATOR_TOKEN ?? ""
 };
 
+// Fee settlement broadcasts a real vote on the user's behalf to pay the service
+// fee. The billing flow is not yet validated end-to-end and there are no paying
+// users, so it is OFF by default and must be explicitly enabled in production
+// (VOTEBROKER_BILLING_ENABLED=true). This guarantees half-finished finance logic
+// can never broadcast a fee vote by accident.
+export const billingConfig = {
+  enabled: process.env.VOTEBROKER_BILLING_ENABLED === "true"
+};
+
+// STEEM_NODE_URL may be a single URL or a comma-separated list of fallback
+// nodes. dsteem's Client binds to one address (no built-in multi-node
+// failover), so the broadcaster rotates through this list — see chain/steemBroadcaster.ts.
+const DEFAULT_STEEM_NODES = [
+  "https://api.steemit.com",
+  "https://api.justyy.com",
+  "https://api.steemitdev.com",
+  "https://steemapi.boylikegirl.club",
+];
+
+function parseNodeList(raw: string | undefined): string[] {
+  const list = (raw ?? "")
+    .split(",")
+    .map(s => s.trim())
+    .filter(Boolean);
+  if (list.length === 0) return DEFAULT_STEEM_NODES;
+  // Append the known-good defaults as extra fallbacks (de-duplicated).
+  return [...new Set([...list, ...DEFAULT_STEEM_NODES])];
+}
+
 export const steemNetworkConfig = {
-  nodeUrl: process.env.STEEM_NODE_URL ?? "https://api.steemit.com",
+  /** First configured node — kept for backward-compatibility with existing call sites. */
+  nodeUrl: parseNodeList(process.env.STEEM_NODE_URL)[0],
+  /** Full ordered failover list. */
+  nodeUrls: parseNodeList(process.env.STEEM_NODE_URL),
   chainId: process.env.STEEM_CHAIN_ID ?? "0000000000000000000000000000000000000000000000000000000000000000",
   addressPrefix: process.env.STEEM_ADDRESS_PREFIX ?? "STM"
 };

@@ -610,10 +610,10 @@ export async function generateVotePlan(payload: {
   targetTomorrowVpPct?: number;
   constraints?: VotePlanConstraints;
   rules: Array<{ username: string; category: string; maxWeightPct: number; minWeightPct: number; enabled: boolean; selectionReasons?: string[] }>;
-}): Promise<VotePlanResponse> {
+}, token: string): Promise<VotePlanResponse> {
   const response = await fetch(`${API_BASE}/api/curation/generate`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", session: token },
     body: JSON.stringify(payload)
   });
   if (!response.ok) throw new Error("Vote-Plan konnte nicht generiert werden.");
@@ -640,7 +640,8 @@ export interface OpportunitiesResponse {
 
 export async function getVoteOpportunities(
   authors: string[],
-  voterUsername: string
+  voterUsername: string,
+  token: string
 ): Promise<OpportunitiesResponse> {
   // Deduplicate authors before sending
   const unique = [...new Set(authors.map(a => a.toLowerCase().trim()))].filter(Boolean);
@@ -649,7 +650,7 @@ export async function getVoteOpportunities(
 
   const response = await fetch(`${API_BASE}/api/curation/opportunities`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", session: token },
     body: JSON.stringify({ authors: unique, voterUsername })
   });
   if (!response.ok) throw new Error("Offene Votes konnten nicht geladen werden.");
@@ -1052,9 +1053,10 @@ export async function persistStrategy(token: string, rules: unknown[]): Promise<
   });
 }
 
-export async function getCurationDna(username: string, maxVotes = 500): Promise<CurationProfile> {
+export async function getCurationDna(username: string, maxVotes = 500, token?: string): Promise<CurationProfile> {
   const response = await fetch(
-    `${API_BASE}/api/curation/dna?username=${encodeURIComponent(username)}&maxVotes=${maxVotes}`
+    `${API_BASE}/api/curation/dna?username=${encodeURIComponent(username)}&maxVotes=${maxVotes}`,
+    { headers: token ? { session: token } : {} }
   );
   if (!response.ok) throw new Error("Vote-DNA konnte nicht geladen werden.");
   return response.json();

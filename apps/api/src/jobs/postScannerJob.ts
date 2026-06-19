@@ -24,7 +24,7 @@
  */
 
 import { getDb } from "../db/index.js";
-import { createSteemClient } from "../chain/steemBroadcaster.js";
+import { withSteemFailover } from "../chain/steemBroadcaster.js";
 import { setPostCache } from "../chain/postCache.js";
 
 const SCAN_INTERVAL_MS = 90_000;
@@ -68,21 +68,24 @@ function getAllUniqueAuthors(): string[] {
 // ── Blockchain fetch (single author) ─────────────────────────────────────────
 
 async function fetchAuthorPosts(author: string): Promise<RawPost[] | null> {
-  const client = createSteemClient();
-  const db = client.database as unknown as {
-    call(method: string, params: unknown[]): Promise<RawPost[]>
-  };
   try {
-    const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("steem_timeout")), FETCH_TIMEOUT_MS)
-    );
-    const posts = await Promise.race([
-      db.call("get_discussions_by_blog", [{ tag: author, limit: POSTS_PER_AUTHOR }]),
-      timeout,
-    ]);
+    // Routed through the failover pool: a node failure rotates the shared active
+    // node so every other createSteemClient() caller follows to a healthy node.
+    const posts = await withSteemFailover(async (client) => {
+      const db = client.database as unknown as {
+        call(method: string, params: unknown[]): Promise<RawPost[]>
+      };
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("steem_timeout")), FETCH_TIMEOUT_MS)
+      );
+      return Promise.race([
+        db.call("get_discussions_by_blog", [{ tag: author, limit: POSTS_PER_AUTHOR }]),
+        timeout,
+      ]);
+    });
     return Array.isArray(posts) ? posts : null;
   } catch {
-    return null;
+    return null;  // all nodes failed for this author — caller keeps the entry stale
   }
 }
 

@@ -17,12 +17,14 @@ import { getDb } from "../db/index.js";
 
 // ── Node list ─────────────────────────────────────────────────────────────────
 
-const FALLBACK_NODES = [
-  steemNetworkConfig.nodeUrl,
+// Start from the centrally-configured failover list, then append this job's
+// extra historical-scan nodes. De-duplicated so config changes propagate here.
+const FALLBACK_NODES = [...new Set([
+  ...steemNetworkConfig.nodeUrls,
   "https://api.steem.fans",
   "https://steemit.simpleassets.io",
   "https://rpc.steemviz.com",
-];
+])];
 
 function makeClient(nodeUrl: string): Client {
   return new Client(nodeUrl, {

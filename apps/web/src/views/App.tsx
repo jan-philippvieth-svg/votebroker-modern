@@ -279,7 +279,7 @@ export function App() {
     setCurationLoading(true);
     setCurationProfile(null);
     setCurationError(null);
-    getCurationDna(session.user.username, 500)
+    getCurationDna(session.user.username, 500, session.token)
       .then(setCurationProfile)
       .catch((err) => setCurationError(err instanceof Error ? err.message : "Vote-DNA konnte nicht geladen werden."))
       .finally(() => setCurationLoading(false));
@@ -507,7 +507,7 @@ export function App() {
           enabled:          r.enabled,
           selectionReasons: r.selectionReasons,
         }))
-      });
+      }, session.token);
       setVotePlan(plan);
     } catch (err) {
       setPlanError(err instanceof Error ? err.message : "Plan konnte nicht generiert werden");
@@ -539,7 +539,7 @@ export function App() {
     setOpportunitiesLoading(true);
     setOpportunitiesError(null);
     try {
-      const result = await getVoteOpportunities(unique, session.user.username);
+      const result = await getVoteOpportunities(unique, session.user.username, session.token);
       const voted = recentlyVotedKeysRef.current;
       const filtered = voted.size === 0
         ? result.opportunities
@@ -586,7 +586,7 @@ export function App() {
 
     autoScanRunningRef.current = true;
     try {
-      const result = await getVoteOpportunities(unique, session.user.username);
+      const result = await getVoteOpportunities(unique, session.user.username, session.token);
       const voted = recentlyVotedKeysRef.current;
 
       const knownKeys = new Set(
