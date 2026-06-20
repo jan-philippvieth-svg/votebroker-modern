@@ -17,6 +17,8 @@ const LOOKBACK_DAYS = 90;
 const PAGE_SIZE     = 100;   // api.steemit.com hard-limits get_account_history to 100
 const MAX_PAGES     = 2000;  // 200k ops max per whale before giving up
 const RATE_MS       = 150;   // ms between API calls
+const SCAN_INTERVAL_MS = 15 * 60 * 1000; // re-scan every 15 min so fresh whale votes
+                                          // land inside the opportunity timing window (≤2h)
 
 type HistoryEntry = [
   number,
@@ -30,7 +32,27 @@ type HistoryEntry = [
 
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
+let _running = false;
+let _timer: ReturnType<typeof setTimeout> | null = null;
+let _started = false;
+
 export async function scanWhaleHistory(
+  log: typeof console = console,
+): Promise<{ whalesScanned: number; votesInserted: number }> {
+  if (_running) {
+    log.info("[WhaleHistory] Already running, skipping");
+    return { whalesScanned: 0, votesInserted: 0 };
+  }
+  _running = true;
+
+  try {
+    return await runScan(log);
+  } finally {
+    _running = false;
+  }
+}
+
+async function runScan(
   log: typeof console = console,
 ): Promise<{ whalesScanned: number; votesInserted: number }> {
   const db     = getDb();
@@ -123,4 +145,30 @@ export async function scanWhaleHistory(
 
   log.info(`[WhaleHistory] Done — ${whalesScanned} whales, ${totalInserted} votes inserted`);
   return { whalesScanned, votesInserted: totalInserted };
+}
+
+// ── Scheduler ─────────────────────────────────────────────────────────────────
+// Runs an immediate scan, then re-scans every SCAN_INTERVAL_MS. Without this the
+// scan only ran once at startup, so whale-vote ingestion froze after boot and the
+// opportunity cache dried up once every whale-voted post aged past the 2h timing
+// window. Incremental re-scans are cheap (picks up from last stored voted_at).
+export function startWhaleHistoryScanner(log: typeof console = console): void {
+  if (_started) return;
+  _started = true;
+
+  const schedule = () => {
+    _timer = setTimeout(async () => {
+      try { await scanWhaleHistory(log); } catch (e) { log.warn("[WhaleHistory] scan error:", e); }
+      schedule();
+    }, SCAN_INTERVAL_MS);
+  };
+
+  scanWhaleHistory(log).catch(e => log.warn("[WhaleHistory] startup scan error:", e));
+  schedule();
+  log.info(`[WhaleHistory] Started — interval ${SCAN_INTERVAL_MS / 60_000} min`);
+}
+
+export function stopWhaleHistoryScanner(): void {
+  if (_timer) { clearTimeout(_timer); _timer = null; }
+  _started = false;
 }
