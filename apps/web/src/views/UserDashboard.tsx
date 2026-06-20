@@ -705,8 +705,8 @@ function PendingDebugPanel({ data, t }: { data: PendingCuration; t: ReturnType<t
             </div>
             {spDelta !== null && (
               <div style={{ marginTop: "0.25rem", display: "flex", gap: "1rem", flexWrap: "wrap" }}>
-                <span>weight: <strong style={{ color: C.ok }}>{data.pendingSp.toFixed(3)} SP</strong></span>
-                <span>rshares: <strong style={{ color: C.dim }}>{data.pendingSpRshares.toFixed(3)} SP</strong></span>
+                <span>weight: <strong style={{ color: C.ok }}>{data.pendingSp.toFixed(3)} SP</strong>{data.activeModel === "weight" && <em style={{ color: C.ok, fontStyle: "normal", marginLeft: "0.25rem" }}>· aktiv</em>}</span>
+                <span>rshares: <strong style={{ color: C.dim }}>{data.pendingSpRshares.toFixed(3)} SP</strong>{data.activeModel === "rshares" && <em style={{ color: C.warn, fontStyle: "normal", marginLeft: "0.25rem" }}>· aktiv</em>}</span>
                 <span style={{ color: Math.abs(spDelta) > 0.05 ? C.warn : C.faint }}>
                   Δ {spDelta > 0 ? "+" : ""}{spDelta.toFixed(3)} SP
                 </span>

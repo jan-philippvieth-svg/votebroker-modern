@@ -884,10 +884,14 @@ export interface PendingDebugPost {
   estimatedSpRshares: number;
 }
 
+export type CurationModel = "weight" | "rshares";
+
 export interface PendingCuration {
   pendingUsd:       number;
   pendingSp:        number;
   pendingSpRshares: number;  // same total via rshares-based share (for comparison)
+  activeModel:      CurationModel;  // configured estimation model (default 'weight')
+  primarySp:        number;         // pendingSp or pendingSpRshares per activeModel
   postCount:    number;
   voteCount:    number;
   nextPayout:   { cashoutTime: string; estimatedSp: number; estimatedUsd: number } | null;
@@ -934,7 +938,8 @@ export async function fetchTodayStats(token: string): Promise<TodayStats> {
 // ── User Settings ─────────────────────────────────────────────────────────────
 
 export interface UserSettings {
-  timezone: string;
+  timezone:      string;
+  curationModel: CurationModel;
 }
 
 export async function fetchUserSettings(token: string): Promise<UserSettings> {
@@ -1439,6 +1444,59 @@ export interface DelayVsPostBucket {
   medianFinalPayoutSbd: number | null;
 }
 
+export interface Percentiles {
+  p25: number | null;
+  p50: number | null;
+  p75: number | null;
+  p90: number | null;
+  p95: number | null;
+}
+
+export interface DelayPercentileBucket {
+  label:          string;
+  votes:          number;
+  finalPayoutSbd: Percentiles;
+  growthFactor:   Percentiles;
+  curationSp:     Percentiles;
+}
+
+export interface DelayHitRateBucket {
+  label:    string;
+  votes:    number;
+  pctGt5:   number;
+  pctGt10:  number;
+  pctGt25:  number;
+  pctGt50:  number;
+  pctGt100: number;
+  discoveryScore: number;
+}
+
+export interface VoteScatterPoint {
+  delayMinutes:   number;
+  finalPayoutSbd: number;
+  growthFactor:   number | null;
+  curationSp:     number;
+}
+
+export interface V4FalseNegativeBucket {
+  label:                string;
+  count:                number;
+  highValueCount:       number;
+  avgFinalPayoutSbd:    number | null;
+  medianFinalPayoutSbd: number | null;
+  maxFinalPayoutSbd:    number | null;
+  withAuthorHistory:    number;
+  withAuthorPrior:      number;
+}
+
+export interface V4FalseNegativeReport {
+  threshold: number;
+  resolved:  number;
+  highValue: number;
+  byDelay:   V4FalseNegativeBucket[];
+  note:      string;
+}
+
 export interface LiveVoteReport {
   username:            string;
   since:               string;
@@ -1452,6 +1510,10 @@ export interface LiveVoteReport {
   modelComparison:     ModelComparisonMetrics | null;
   byDelay:             LiveVoteReportBucket[];
   byDelayVsPost:       DelayVsPostBucket[];
+  byDelayPercentiles:  DelayPercentileBucket[];
+  byDelayHitRate:      DelayHitRateBucket[];
+  scatter:             VoteScatterPoint[];
+  v4FalseNegatives:    V4FalseNegativeReport;
 }
 
 export async function fetchLiveVoteReport(token: string): Promise<LiveVoteReport> {

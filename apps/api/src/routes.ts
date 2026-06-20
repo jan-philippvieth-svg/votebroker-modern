@@ -28,7 +28,7 @@ import { getAccount, getCommunityPool, saveAccount } from "./mockStore.js";
 import { getInvoice, listInvoices, saveInvoice, saveBillingAccount, loadBillingAccount } from "./billing/billingStore.js";
 import { voteBrokerWorkflow } from "./workflows.js";
 import { todayBoundsUtc } from "./utils/timezone.js";
-import { getUserTimezone } from "./settings/settingsStore.js";
+import { getUserTimezone, getUserCurationModel } from "./settings/settingsStore.js";
 
 const quoteSchema = z.object({
   username: z.string().min(1),
@@ -314,7 +314,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     const query = z.object({ steemPriceUsd: z.coerce.number().positive().optional() }).safeParse(request.query);
     const sbdPerSteem = query.success && query.data.steemPriceUsd ? query.data.steemPriceUsd : 0.05;
     try {
-      return await fetchPendingCuration(session.user.username, sbdPerSteem);
+      return await fetchPendingCuration(session.user.username, sbdPerSteem, getUserCurationModel(session.user.username));
     } catch (err) {
       return reply.code(500).send({ error: "pending_curation_failed", detail: err instanceof Error ? err.message : "unknown" });
     }

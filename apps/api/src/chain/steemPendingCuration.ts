@@ -15,6 +15,7 @@
 
 import { createSteemClient } from "./steemBroadcaster.js";
 import { fetchLiveSbdPerSteem } from "./steemAccount.js";
+import type { CurationModel } from "../settings/settingsStore.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -48,8 +49,10 @@ export interface PendingDebugPost {
 export interface PendingCurationResult {
   // 7-day pending window
   pendingUsd:       number;
-  pendingSp:        number;
-  pendingSpRshares: number;  // same total via rshares-based share (for comparison with SteemWorld)
+  pendingSp:        number;          // weight-based total (chain-accurate; product default)
+  pendingSpRshares: number;          // same total via rshares-based share (for comparison with SteemWorld)
+  activeModel:      CurationModel;   // model the user is configured on (default 'weight')
+  primarySp:        number;          // pendingSp or pendingSpRshares, per activeModel
   postCount:    number;
   voteCount:    number;
   nextPayout:   { cashoutTime: string; estimatedSp: number; estimatedUsd: number } | null;
@@ -75,7 +78,7 @@ export interface PendingCurationResult {
     };
     posts:       PendingDebugPost[];   // all posts sorted by estimatedSp desc
     postsByTime: PendingDebugPost[];   // all posts sorted by cashout_time asc
-    method:  "weight";            // curation estimation method in use
+    method:  CurationModel;            // curation estimation method in use
   };
 
   computedAt:   string;         // ISO — so UI can show "as of …"
@@ -93,7 +96,8 @@ interface CacheEntry {
 const cache = new Map<string, CacheEntry>();
 
 export function clearPendingCurationCache(username: string): void {
-  cache.delete(username);
+  cache.delete(`${username}:weight`);
+  cache.delete(`${username}:rshares`);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -115,9 +119,12 @@ type PostContent = {
 export async function fetchPendingCuration(
   username:    string,
   sbdPerSteem: number,   // SBD per STEEM hint from caller — overridden by live feed
+  model:       CurationModel = "weight",   // configured estimation model (default weight)
 ): Promise<PendingCurationResult> {
   // ── Cache check ────────────────────────────────────────────────────────────
-  const cached = cache.get(username);
+  // Keyed by model so a user switching weight↔rshares gets a fresh estimate.
+  const cacheKey = `${username}:${model}`;
+  const cached = cache.get(cacheKey);
   if (cached && Date.now() < cached.expiresAt) return cached.result;
 
   const client  = createSteemClient();
@@ -196,14 +203,14 @@ export async function fetchPendingCuration(
 
   if (unique.length === 0) {
     const empty: PendingCurationResult = {
-      pendingUsd: 0, pendingSp: 0, pendingSpRshares: 0, postCount: 0,
+      pendingUsd: 0, pendingSp: 0, pendingSpRshares: 0, activeModel: model, primarySp: 0, postCount: 0,
       voteCount: voteOps.length, nextPayout: null, topPending: [],
       earned30dSp, earned30dUsd, earned30dCount,
       sbdPerSteemUsed: sbdPerSteem,
-      debug: { uniqueTotal: 0, fetched: 0, totalPayoutUsd: 0, skipped, posts: [], postsByTime: [], method: "weight" },
+      debug: { uniqueTotal: 0, fetched: 0, totalPayoutUsd: 0, skipped, posts: [], postsByTime: [], method: model },
       computedAt: new Date().toISOString(),
     };
-    cache.set(username, { result: empty, expiresAt: nowMs + CACHE_TTL_MS });
+    cache.set(cacheKey, { result: empty, expiresAt: nowMs + CACHE_TTL_MS });
     return empty;
   }
 
@@ -326,6 +333,8 @@ export async function fetchPendingCuration(
 
   const result: PendingCurationResult = {
     pendingUsd, pendingSp, pendingSpRshares,
+    activeModel: model,
+    primarySp:   model === "rshares" ? pendingSpRshares : pendingSp,
     postCount:   pendingPosts.length,
     voteCount:   voteOps.length,
     nextPayout,
@@ -339,11 +348,11 @@ export async function fetchPendingCuration(
       skipped,
       posts:       debugPosts,
       postsByTime: debugByTime,
-      method: "weight",
+      method: model,
     },
     computedAt:  new Date().toISOString(),
   };
 
-  cache.set(username, { result, expiresAt: nowMs + CACHE_TTL_MS });
+  cache.set(cacheKey, { result, expiresAt: nowMs + CACHE_TTL_MS });
   return result;
 }

@@ -12,6 +12,7 @@ import {
   type ContentDraft, type ContentListResponse, type ContentQueueItem,
   type DraftStatus, type FeePostLogEntry, type PromoLocale, type PublishResult, type ScreenshotFile,
   type LiveVoteReport, type ModelErrorMetrics, type DelayVsPostBucket,
+  type VoteScatterPoint,
   type ShadowOutcomes, type ShadowMissedPost,
   type AuthorTrustRanking, type AuthorTrustEntry,
   type SystemMetrics,
@@ -58,6 +59,75 @@ function Sparkline({ data, color = C.info, height = 28, width = 72 }: { data: nu
     <svg width={width} height={height} style={{ overflow: "visible", display: "block" }}>
       <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
     </svg>
+  );
+}
+
+// ── Discovery vs. Curation scatter ────────────────────────────────────────────
+// X = vote delay (log), Y = post final payout (log), colour = realized curation SP.
+// Hand-rolled SVG (no chart lib in this project) — matches the Sparkline approach.
+function DiscoveryScatter({ points }: { points: VoteScatterPoint[] }) {
+  if (points.length < 3) {
+    return <p style={{ color: C.dim, fontSize: "0.82rem" }}>Zu wenig Datenpunkte für eine Streuung (min. 3).</p>;
+  }
+  const W = 660, H = 340, padL = 52, padR = 14, padT = 12, padB = 40;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const log = (v: number) => Math.log10(Math.max(v, 1e-6));
+
+  const xRaw = points.map(p => Math.max(5, p.delayMinutes));
+  const yRaw = points.map(p => Math.max(0.1, p.finalPayoutSbd));
+  const xMin = log(Math.min(...xRaw)), xMax = log(Math.max(...xRaw));
+  const yMin = log(Math.min(...yRaw)), yMax = log(Math.max(...yRaw));
+  const xScale = (v: number) => padL + (log(Math.max(5, v)) - xMin) / (xMax - xMin || 1) * plotW;
+  const yScale = (v: number) => padT + plotH - (log(Math.max(0.1, v)) - yMin) / (yMax - yMin || 1) * plotH;
+
+  const sps = points.map(p => p.curationSp);
+  const spMin = Math.min(...sps), spMax = Math.max(...sps);
+  // colour ramp: low SP = blue (#2563eb) → high SP = red (#dc2626)
+  const ramp = (sp: number) => {
+    const t = (sp - spMin) / (spMax - spMin || 1);
+    const lerp = (a: number, b: number) => Math.round(a + (b - a) * t);
+    return `rgb(${lerp(37, 220)},${lerp(99, 38)},${lerp(235, 38)})`;
+  };
+
+  const xTicks = [5, 15, 30, 60, 360, 1440, 4320, 10080]
+    .filter(t => t >= Math.min(...xRaw) - 0.001 && t <= Math.max(...xRaw) + 0.001)
+    .map(t => ({ v: t, label: t < 60 ? `${t}m` : t < 1440 ? `${t / 60}h` : `${t / 1440}d` }));
+  const yTicks = [1, 5, 10, 25, 50, 100, 250, 500]
+    .filter(t => t >= Math.min(...yRaw) - 0.001 && t <= Math.max(...yRaw) + 0.001);
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", maxWidth: W, display: "block" }}>
+        {/* axes */}
+        <line x1={padL} y1={padT} x2={padL} y2={padT + plotH} stroke={C.border} strokeWidth="1" />
+        <line x1={padL} y1={padT + plotH} x2={padL + plotW} y2={padT + plotH} stroke={C.border} strokeWidth="1" />
+        {yTicks.map(t => (
+          <g key={`y${t}`}>
+            <line x1={padL} y1={yScale(t)} x2={padL + plotW} y2={yScale(t)} stroke={C.border} strokeWidth="0.5" strokeDasharray="2 3" />
+            <text x={padL - 6} y={yScale(t) + 3} textAnchor="end" fontSize="9" fill={C.dim}>{t}</text>
+          </g>
+        ))}
+        {xTicks.map(t => (
+          <text key={`x${t.v}`} x={xScale(t.v)} y={padT + plotH + 14} textAnchor="middle" fontSize="9" fill={C.dim}>{t.label}</text>
+        ))}
+        {/* points */}
+        {points.map((p, i) => (
+          <circle key={i} cx={xScale(Math.max(5, p.delayMinutes))} cy={yScale(p.finalPayoutSbd)}
+            r="2.6" fill={ramp(p.curationSp)} fillOpacity="0.62" />
+        ))}
+        {/* axis titles */}
+        <text x={padL + plotW / 2} y={H - 4} textAnchor="middle" fontSize="9.5" fill={C.dim}>Vote-Delay (log)</text>
+        <text x={12} y={padT + plotH / 2} textAnchor="middle" fontSize="9.5" fill={C.dim}
+          transform={`rotate(-90 12 ${padT + plotH / 2})`}>Post-Payout SBD (log)</text>
+      </svg>
+      {/* colour legend */}
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.4rem", fontSize: "0.72rem", color: C.dim }}>
+        <span>Curation-SP {spMin.toFixed(3)}</span>
+        <span style={{ flex: "0 0 120px", height: "8px", borderRadius: "4px", background: "linear-gradient(90deg, rgb(37,99,235), rgb(220,38,38))" }} />
+        <span>{spMax.toFixed(3)}</span>
+        <span style={{ marginLeft: "0.5rem" }}>· {points.length} Votes</span>
+      </div>
+    </div>
   );
 }
 
@@ -1686,6 +1756,7 @@ function ResearchLabSection({ session }: { session: AuthSession }) {
   const [report, setReport]   = useState<LiveVoteReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
+  const [pctMetric, setPctMetric] = useState<"final" | "growth" | "sp">("final");
 
   useEffect(() => {
     setLoading(true);
@@ -1907,6 +1978,144 @@ function ResearchLabSection({ session }: { session: AuthSession }) {
         <p style={{ fontSize: "0.73rem", color: C.dim, marginTop: "0.5rem", marginBottom: 0 }}>
           ★ = Delay-Bucket mit dem höchsten Ø Post-Payout. Interpretation: Je früher der Vote, desto höher der finale Post-Payout? → Datenbasis prüfen.
         </p>
+      </div>
+
+      {/* E: Percentile-Verteilung je Delay-Bucket */}
+      <div style={card}>
+        <p style={{ ...lbl, margin: "0 0 0.4rem" }}>E — Verteilung statt Durchschnitt (P25–P95)</p>
+        <p style={{ fontSize: "0.73rem", color: C.dim, margin: "0 0 0.6rem" }}>
+          Einzelne Ausreißer verzerren den Mittelwert massiv. Median &amp; Percentile zeigen die echte Verteilung pro Delay-Fenster.
+        </p>
+        <div style={{ display: "flex", gap: "0.4rem", marginBottom: "0.6rem", flexWrap: "wrap" }}>
+          {([["final", "Post-Payout (SBD)"], ["growth", "Growth Factor"], ["sp", "Curation-SP"]] as const).map(([k, label]) => (
+            <button key={k} type="button" onClick={() => setPctMetric(k)}
+              style={btnStyle(pctMetric === k ? C.info : C.border)}>{label}</button>
+          ))}
+        </div>
+        {report.byDelayPercentiles.length === 0 ? (
+          <p style={{ color: C.dim, fontSize: "0.82rem" }}>Noch keine Verteilungsdaten.</p>
+        ) : (
+          <table style={{ borderCollapse: "collapse", width: "100%", fontSize: "0.8rem" }}>
+            <thead>
+              <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                <th style={thLeft}>Delay</th><th style={thStyle}>n</th>
+                <th style={thStyle}>P25</th><th style={thStyle}>Median</th>
+                <th style={thStyle}>P75</th><th style={thStyle}>P90</th><th style={thStyle}>P95</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.byDelayPercentiles.map(b => {
+                const p = pctMetric === "final" ? b.finalPayoutSbd : pctMetric === "growth" ? b.growthFactor : b.curationSp;
+                const dp = pctMetric === "sp" ? 4 : pctMetric === "growth" ? 2 : 2;
+                const fmt = (v: number | null) => v !== null ? v.toFixed(dp) : "–";
+                return (
+                  <tr key={b.label} style={{ borderBottom: `1px solid ${C.border}44` }}>
+                    <td style={{ padding: "0.3rem 0.6rem", color: C.text }}>{b.label}</td>
+                    <td style={{ padding: "0.3rem 0.6rem", textAlign: "right", color: C.dim }}>{b.votes}</td>
+                    <td style={{ padding: "0.3rem 0.6rem", textAlign: "right", color: C.dim }}>{fmt(p.p25)}</td>
+                    <td style={{ padding: "0.3rem 0.6rem", textAlign: "right", color: C.text, fontWeight: 600 }}>{fmt(p.p50)}</td>
+                    <td style={{ padding: "0.3rem 0.6rem", textAlign: "right", color: C.dim }}>{fmt(p.p75)}</td>
+                    <td style={{ padding: "0.3rem 0.6rem", textAlign: "right", color: C.dim }}>{fmt(p.p90)}</td>
+                    <td style={{ padding: "0.3rem 0.6rem", textAlign: "right", color: C.dim }}>{fmt(p.p95)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* F: Trefferwahrscheinlichkeit + Discovery Score */}
+      <div style={card}>
+        <p style={{ ...lbl, margin: "0 0 0.4rem" }}>F — Delay vs. Trefferwahrscheinlichkeit</p>
+        <p style={{ fontSize: "0.73rem", color: C.dim, margin: "0 0 0.75rem" }}>
+          Wahrscheinlichkeiten statt Mittelwerte: Anteil der Posts, die einen bestimmten Payout überschreiten.
+          Discovery Score = 0,2·(&gt;10) + 0,3·(&gt;25) + 0,5·(&gt;50) — „wann finden wir hochwertige Posts?“
+        </p>
+        {(() => {
+          const rows = report.byDelayHitRate;
+          if (rows.length === 0) return <p style={{ color: C.dim, fontSize: "0.82rem" }}>Noch keine Daten.</p>;
+          const bestScore = Math.max(...rows.map(r => r.discoveryScore));
+          return (
+            <table style={{ borderCollapse: "collapse", width: "100%", fontSize: "0.8rem" }}>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <th style={thLeft}>Delay</th><th style={thStyle}>n</th>
+                  <th style={thStyle}>&gt;5</th><th style={thStyle}>&gt;10</th><th style={thStyle}>&gt;25</th>
+                  <th style={thStyle}>&gt;50</th><th style={thStyle}>&gt;100</th>
+                  <th style={thStyle}>Discovery Score</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(b => {
+                  const isBest = b.discoveryScore === bestScore && bestScore > 0;
+                  const pc = (v: number) => <td style={{ padding: "0.3rem 0.6rem", textAlign: "right", color: C.dim }}>{v.toFixed(0)}%</td>;
+                  return (
+                    <tr key={b.label} style={{ borderBottom: `1px solid ${C.border}44`, background: isBest ? C.purple + "0e" : undefined }}>
+                      <td style={{ padding: "0.3rem 0.6rem", color: isBest ? C.purple : C.text, fontWeight: isBest ? 600 : undefined }}>
+                        {isBest ? "★ " : ""}{b.label}
+                      </td>
+                      <td style={{ padding: "0.3rem 0.6rem", textAlign: "right", color: C.dim }}>{b.votes}</td>
+                      {pc(b.pctGt5)}{pc(b.pctGt10)}{pc(b.pctGt25)}{pc(b.pctGt50)}{pc(b.pctGt100)}
+                      <td style={{ padding: "0.3rem 0.6rem", textAlign: "right", color: isBest ? C.purple : C.text, fontWeight: 600 }}>
+                        {b.discoveryScore.toFixed(1)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          );
+        })()}
+        <p style={{ fontSize: "0.73rem", color: C.dim, marginTop: "0.5rem", marginBottom: 0 }}>
+          ★ = bestes Discovery-Fenster (höchster Score). Vergleiche mit Block C (bester Curation-SP) — sind es dieselben Fenster?
+        </p>
+      </div>
+
+      {/* G: Scatter — Discovery vs. Curation */}
+      <div style={card}>
+        <p style={{ ...lbl, margin: "0 0 0.4rem" }}>G — Scatter: Delay × Post-Payout × Curation-SP</p>
+        <p style={{ fontSize: "0.73rem", color: C.dim, margin: "0 0 0.75rem" }}>
+          Cluster erkennen statt Bucket-Durchschnitte. X = Vote-Delay (log) · Y = Post-Payout SBD (log) · Farbe = realisierter Curation-SP.
+        </p>
+        <DiscoveryScatter points={report.scatter} />
+      </div>
+
+      {/* H: v4 False Negatives nach Delay */}
+      <div style={card}>
+        <p style={{ ...lbl, margin: "0 0 0.4rem" }}>H — v4 False Negatives: verpasste Chancen nach Delay</p>
+        <p style={{ fontSize: "0.73rem", color: C.dim, margin: "0 0 0.6rem" }}>
+          Posts, die v4 geskippt hat und die dennoch ausgezahlt haben. Frage: echtes Timing-Problem oder nur wenige hochwertige Ausreißer?
+        </p>
+        <p style={{ fontSize: "0.75rem", color: report.v4FalseNegatives.resolved === 0 ? C.dim : C.warn, margin: "0 0 0.6rem" }}>
+          {report.v4FalseNegatives.note}
+        </p>
+        {report.v4FalseNegatives.byDelay.length > 0 && (
+          <table style={{ borderCollapse: "collapse", width: "100%", fontSize: "0.8rem" }}>
+            <thead>
+              <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                <th style={thLeft}>Delay</th><th style={thStyle}>Skips</th>
+                <th style={thStyle}>&gt;{report.v4FalseNegatives.threshold} SBD</th>
+                <th style={thStyle}>Ø Payout</th><th style={thStyle}>Median</th><th style={thStyle}>Max</th>
+                <th style={thStyle}>Autor-Hist.</th><th style={thStyle}>Prior</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.v4FalseNegatives.byDelay.map(b => (
+                <tr key={b.label} style={{ borderBottom: `1px solid ${C.border}44` }}>
+                  <td style={{ padding: "0.3rem 0.6rem", color: C.text }}>{b.label}</td>
+                  <td style={{ padding: "0.3rem 0.6rem", textAlign: "right", color: C.text }}>{b.count}</td>
+                  <td style={{ padding: "0.3rem 0.6rem", textAlign: "right", color: b.highValueCount > 0 ? C.warn : C.dim }}>{b.highValueCount}</td>
+                  <td style={{ padding: "0.3rem 0.6rem", textAlign: "right", color: C.dim }}>{b.avgFinalPayoutSbd?.toFixed(2) ?? "–"}</td>
+                  <td style={{ padding: "0.3rem 0.6rem", textAlign: "right", color: C.text }}>{b.medianFinalPayoutSbd?.toFixed(2) ?? "–"}</td>
+                  <td style={{ padding: "0.3rem 0.6rem", textAlign: "right", color: C.dim }}>{b.maxFinalPayoutSbd?.toFixed(2) ?? "–"}</td>
+                  <td style={{ padding: "0.3rem 0.6rem", textAlign: "right", color: C.dim }}>{b.withAuthorHistory}</td>
+                  <td style={{ padding: "0.3rem 0.6rem", textAlign: "right", color: C.dim }}>{b.withAuthorPrior}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       <ShadowOutcomeSection session={session} />

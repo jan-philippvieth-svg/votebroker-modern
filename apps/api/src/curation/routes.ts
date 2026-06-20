@@ -8,7 +8,7 @@ import { getSession } from "../auth/sessionStore.js";
 import { getGrowthData } from "./growthService.js";
 import { getDb } from "../db/index.js";
 import { operatorConfig } from "../config.js";
-import { getUserSettings, saveUserSettings, isValidTimezone } from "../settings/settingsStore.js";
+import { getUserSettings, saveUserSettings, isValidTimezone, isValidCurationModel } from "../settings/settingsStore.js";
 import { utcOffsetMinutes } from "../utils/timezone.js";
 import { getPostCacheMetrics } from "../chain/postCache.js";
 import { createRateLimiter } from "../middleware/rateLimit.js";
@@ -1070,8 +1070,12 @@ export function registerUserSettingsRoutes(app: FastifyInstance): void {
     if (body.timezone !== undefined && !isValidTimezone(body.timezone)) {
       return reply.code(400).send({ error: "invalid_timezone", message: "Unbekannte IANA-Zeitzone" });
     }
+    if (body.curationModel !== undefined && !isValidCurationModel(body.curationModel)) {
+      return reply.code(400).send({ error: "invalid_curation_model", message: "Modell muss 'weight' oder 'rshares' sein" });
+    }
     return saveUserSettings(session.user.username, {
-      timezone: typeof body.timezone === "string" ? body.timezone : undefined,
+      timezone:      typeof body.timezone === "string" ? body.timezone : undefined,
+      curationModel: isValidCurationModel(body.curationModel) ? body.curationModel : undefined,
     });
   });
 }

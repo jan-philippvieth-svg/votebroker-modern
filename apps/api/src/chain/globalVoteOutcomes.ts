@@ -90,6 +90,68 @@ export interface DelayVsPostBucket {
   medianFinalPayoutSbd: number | null;
 }
 
+// Robust distribution summary — single metric over a delay bucket.
+// Outliers heavily skew the mean; percentiles show the real spread.
+export interface Percentiles {
+  p25: number | null;
+  p50: number | null;   // median
+  p75: number | null;
+  p90: number | null;
+  p95: number | null;
+}
+
+// One delay bucket with full percentile distributions for the three metrics
+// that separate Discovery (post quality) from Curation (our vote's yield).
+export interface DelayPercentileBucket {
+  label:          string;
+  votes:          number;
+  finalPayoutSbd: Percentiles;   // post quality — describes the post, not our vote
+  growthFactor:   Percentiles;   // post_final / post_pending at vote time
+  curationSp:     Percentiles;   // our vote's realized curation reward
+}
+
+// Delay vs. hit-probability — "how often do we land a high-value post here?"
+// Probabilities, not averages: a single 500-SBD post should not make a bucket look great.
+export interface DelayHitRateBucket {
+  label:    string;
+  votes:    number;
+  pctGt5:   number;   // % of posts with final payout > 5 SBD
+  pctGt10:  number;
+  pctGt25:  number;
+  pctGt50:  number;
+  pctGt100: number;
+  discoveryScore: number;   // 0–100 — weighted blend of the high-value hit rates
+}
+
+// One vote as a raw point for the Discovery-vs-Curation scatter plot.
+export interface VoteScatterPoint {
+  delayMinutes:   number;
+  finalPayoutSbd: number;
+  growthFactor:   number | null;
+  curationSp:     number;
+}
+
+// v4 false-negative analysis — posts v4 chose to skip that resolved with real payout.
+// Answers: are missed opportunities a timing problem, or just a few high outliers?
+export interface V4FalseNegativeBucket {
+  label:                string;
+  count:                number;        // resolved skips in this delay bucket
+  highValueCount:       number;        // of those, final payout > HIGH_VALUE_SBD
+  avgFinalPayoutSbd:    number | null;
+  medianFinalPayoutSbd: number | null;
+  maxFinalPayoutSbd:    number | null;
+  withAuthorHistory:    number;        // author_history_available = 1
+  withAuthorPrior:      number;        // unknown author → prior applied
+}
+
+export interface V4FalseNegativeReport {
+  threshold:   number;                 // HIGH_VALUE_SBD used to flag "missed"
+  resolved:    number;                 // total resolved v4 skips in window
+  highValue:   number;                 // total above threshold
+  byDelay:     V4FalseNegativeBucket[];
+  note:        string;
+}
+
 export interface LiveVoteReport {
   username:         string;
   since:            string;          // LIVE_VOTES_SINCE
@@ -105,6 +167,10 @@ export interface LiveVoteReport {
   // analysis dimensions (realized votes only)
   byDelay:             LiveVoteReportBucket[];
   byDelayVsPost:       DelayVsPostBucket[];
+  byDelayPercentiles:  DelayPercentileBucket[];   // robust distributions (P25–P95)
+  byDelayHitRate:      DelayHitRateBucket[];       // hit probabilities + discovery score
+  scatter:             VoteScatterPoint[];         // raw points for cluster analysis
+  v4FalseNegatives:    V4FalseNegativeReport;      // v4 missed-opportunity analysis
   byWeight:            LiveVoteReportBucket[];
   byCategory:          Array<{ category: string; votes: number; avgCurationSp: number | null; avgWeightPct: number | null }>;
   byCommunity:         Array<{ community: string; votes: number; avgCurationSp: number | null }>;
@@ -462,6 +528,46 @@ export function getVoteOutcomeSummary(username: string): GlobalVoteOutcomeSummar
 // Only votes from LIVE_VOTES_SINCE onwards; only realized entries.
 // This is the foundation for the future vote copilot.
 
+// ── Distribution helpers (shared by percentile / hit-rate / scatter analyses) ──
+
+// Same delay buckets as the byDelay/byDelayVsPost SQL — keeps every delay table aligned.
+function delayBucketLabel(min: number): string {
+  if (min < 10)   return "5–10 min";
+  if (min < 15)   return "10–15 min";
+  if (min < 20)   return "15–20 min";
+  if (min < 25)   return "20–25 min";
+  if (min < 30)   return "25–30 min";
+  if (min < 60)   return "30–60 min";
+  if (min < 120)  return "1–2 h";
+  if (min < 360)  return "2–6 h";
+  if (min < 1440) return "6–24 h";
+  if (min < 4320) return "1–3 Tage";
+  return "> 3 Tage";
+}
+const DELAY_LABEL_ORDER = [
+  "5–10 min", "10–15 min", "15–20 min", "20–25 min", "25–30 min",
+  "30–60 min", "1–2 h", "2–6 h", "6–24 h", "1–3 Tage", "> 3 Tage",
+];
+
+// Linear-interpolated percentile over an ascending-sorted array.
+function percentile(sortedAsc: number[], p: number): number | null {
+  const n = sortedAsc.length;
+  if (n === 0) return null;
+  if (n === 1) return round(sortedAsc[0], 4);
+  const idx = (p / 100) * (n - 1);
+  const lo  = Math.floor(idx), hi = Math.ceil(idx);
+  const val = lo === hi ? sortedAsc[lo] : sortedAsc[lo] + (sortedAsc[hi] - sortedAsc[lo]) * (idx - lo);
+  return round(val, 4);
+}
+function percentiles(values: number[]): Percentiles {
+  const s = [...values].sort((a, b) => a - b);
+  return { p25: percentile(s, 25), p50: percentile(s, 50), p75: percentile(s, 75), p90: percentile(s, 90), p95: percentile(s, 95) };
+}
+function round(v: number, dp: number): number {
+  const f = 10 ** dp;
+  return Math.round(v * f) / f;
+}
+
 export function getLiveVoteReport(username: string): LiveVoteReport {
   const db = getDb();
 
@@ -691,6 +797,68 @@ export function getLiveVoteReport(username: string): LiveVoteReport {
     label: string; votes: number; avg_final: number | null; median_final: number | null;
   }>;
 
+  // ── Raw rows for percentile / hit-rate / scatter analyses (Blocks E–G) ────
+  // One fetch, all JS aggregation: 1–3 dimensions over the same realized votes.
+  // growth_factor = post_final / post_pending (only when pending > 0 — else null).
+  const rawRows = db.prepare(`
+    SELECT vote_delay_minutes AS delay,
+           post_final_payout_sbd   AS final,
+           post_pending_payout_sbd AS pending,
+           realized_curation_sp    AS sp
+    FROM vb_global_vote_outcomes
+    WHERE voter = ? AND voted_at >= ?
+      AND realized_curation_sp IS NOT NULL
+      AND post_final_payout_sbd IS NOT NULL
+      AND vote_delay_minutes IS NOT NULL AND vote_delay_minutes >= 5
+    ORDER BY vote_delay_minutes
+  `).all(username, LIVE_VOTES_SINCE) as Array<{
+    delay: number; final: number; pending: number | null; sp: number;
+  }>;
+
+  // Group raw rows by delay bucket once
+  const byBucket = new Map<string, Array<{ delay: number; final: number; gf: number | null; sp: number }>>();
+  const scatter: VoteScatterPoint[] = [];
+  for (const r of rawRows) {
+    const gf = r.pending && r.pending > 0 ? r.final / r.pending : null;
+    const label = delayBucketLabel(r.delay);
+    if (!byBucket.has(label)) byBucket.set(label, []);
+    byBucket.get(label)!.push({ delay: r.delay, final: r.final, gf, sp: r.sp });
+    scatter.push({
+      delayMinutes:   round(r.delay, 1),
+      finalPayoutSbd: round(r.final, 3),
+      growthFactor:   gf !== null ? round(gf, 3) : null,
+      curationSp:     round(r.sp, 5),
+    });
+  }
+
+  const orderedLabels = DELAY_LABEL_ORDER.filter(l => byBucket.has(l));
+
+  // Block E — percentiles (P25/P50/P75/P90/P95) per delay bucket
+  const byDelayPercentiles: DelayPercentileBucket[] = orderedLabels.map(label => {
+    const rows = byBucket.get(label)!;
+    return {
+      label,
+      votes:          rows.length,
+      finalPayoutSbd: percentiles(rows.map(r => r.final)),
+      growthFactor:   percentiles(rows.filter(r => r.gf !== null).map(r => r.gf as number)),
+      curationSp:     percentiles(rows.map(r => r.sp)),
+    };
+  });
+
+  // Block F — hit probabilities + discovery score per delay bucket
+  // discoveryScore = 0.2·pctGt10 + 0.3·pctGt25 + 0.5·pctGt50 (weights sum to 1 → already 0–100)
+  const byDelayHitRate: DelayHitRateBucket[] = orderedLabels.map(label => {
+    const rows = byBucket.get(label)!;
+    const n = rows.length;
+    const pct = (thr: number) => round(rows.filter(r => r.final > thr).length / n * 100, 1);
+    const pctGt10 = pct(10), pctGt25 = pct(25), pctGt50 = pct(50);
+    return {
+      label, votes: n,
+      pctGt5: pct(5), pctGt10, pctGt25, pctGt50, pctGt100: pct(100),
+      discoveryScore: round(0.2 * pctGt10 + 0.3 * pctGt25 + 0.5 * pctGt50, 1),
+    };
+  });
+
   return {
     username,
     since:               LIVE_VOTES_SINCE,
@@ -704,6 +872,10 @@ export function getLiveVoteReport(username: string): LiveVoteReport {
     modelComparison: getModelComparisonMetrics(username),
     byDelay:       delayRows.map(r => ({ label: r.label, votes: r.votes, avgCurationSp: r.avg_sp, minDelay: r.min_delay, maxDelay: r.max_delay })),
     byDelayVsPost: delayVsPostRows.map(r => ({ label: r.label, votes: r.votes, avgFinalPayoutSbd: r.avg_final, medianFinalPayoutSbd: r.median_final })),
+    byDelayPercentiles,
+    byDelayHitRate,
+    scatter,
+    v4FalseNegatives: getV4FalseNegativesByDelay(username),
     byWeight:      weightRows.map(r => ({ label: r.label, votes: r.votes, avgCurationSp: r.avg_sp, minDelay: r.min_delay, maxDelay: r.max_delay })),
     byCategory:    categoryRows.map(r => ({ category: r.category, votes: r.votes, avgCurationSp: r.avg_sp, avgWeightPct: r.avg_weight_pct })),
     byCommunity:   communityRows.map(r => ({ community: r.community, votes: r.votes, avgCurationSp: r.avg_sp })),
@@ -711,6 +883,80 @@ export function getLiveVoteReport(username: string): LiveVoteReport {
     byPendingPayout:  payoutBucketRows.map(r => ({ label: r.label, votes: r.votes, avgCurationSp: r.avg_sp, avgVpBps: r.avg_vp_bps, avgWeightPct: r.avg_weight_pct })),
     byDelayAndPayout: delayPayoutRows.map(r => ({ delayLabel: r.delay_label, payoutLabel: r.payout_label, votes: r.votes, avgCurationSp: r.avg_sp, avgVpBps: r.avg_vp_bps, avgWeightPct: r.avg_weight_pct })),
     generatedAt: new Date().toISOString(),
+  };
+}
+
+// ── v4 False-Negative analysis (Block H) ──────────────────────────────────────
+//
+// A "false negative" = v4 chose to skip a post (v4_decision = 'skip_score') that
+// then resolved with real payout. The question this answers: are the missed posts
+// genuinely a timing problem (early posts we'd want to catch sooner), or just a
+// handful of high-value outliers that no timing rule would reliably capture?
+//
+// Delay proxy = signals_json.ageMinutes (post age at the decision moment — there is
+// no vote, so no vote_delay_minutes). Mirrors scripts/backtestV4_fn.mjs, but live.
+export function getV4FalseNegativesByDelay(username: string): V4FalseNegativeReport {
+  const db = getDb();
+  const HIGH_VALUE_SBD = 10;   // "would have been worth voting" threshold
+
+  const rows = db.prepare(`
+    SELECT signals_json, resolved_payout_sbd, author_history_available, author_prior_used
+    FROM vb_copilot_shadow_runs
+    WHERE username = ?
+      AND v4_decision = 'skip_score'
+      AND outcome_status = 'resolved'
+      AND resolved_payout_sbd IS NOT NULL
+  `).all(username) as Array<{
+    signals_json: string | null;
+    resolved_payout_sbd: number;
+    author_history_available: number | null;
+    author_prior_used: number | null;
+  }>;
+
+  const byBucket = new Map<string, Array<{ payout: number; hist: boolean; prior: boolean }>>();
+  let highValue = 0;
+  for (const r of rows) {
+    let ageMinutes: number | null = null;
+    if (r.signals_json) {
+      try { ageMinutes = (JSON.parse(r.signals_json) as { ageMinutes?: number }).ageMinutes ?? null; }
+      catch { /* malformed signals_json — bucket as unknown */ }
+    }
+    const label = ageMinutes !== null ? delayBucketLabel(ageMinutes) : "unbekannt";
+    if (!byBucket.has(label)) byBucket.set(label, []);
+    byBucket.get(label)!.push({
+      payout: r.resolved_payout_sbd,
+      hist:   r.author_history_available === 1,
+      prior:  r.author_prior_used !== null,
+    });
+    if (r.resolved_payout_sbd > HIGH_VALUE_SBD) highValue++;
+  }
+
+  const order = [...DELAY_LABEL_ORDER, "unbekannt"];
+  const byDelay: V4FalseNegativeBucket[] = order
+    .filter(l => byBucket.has(l))
+    .map(label => {
+      const b = byBucket.get(label)!;
+      const payouts = b.map(x => x.payout).sort((a, c) => a - c);
+      return {
+        label,
+        count:                b.length,
+        highValueCount:       b.filter(x => x.payout > HIGH_VALUE_SBD).length,
+        avgFinalPayoutSbd:    payouts.length ? round(payouts.reduce((a, c) => a + c, 0) / payouts.length, 3) : null,
+        medianFinalPayoutSbd: percentile(payouts, 50),
+        maxFinalPayoutSbd:    payouts.length ? round(payouts[payouts.length - 1], 3) : null,
+        withAuthorHistory:    b.filter(x => x.hist).length,
+        withAuthorPrior:      b.filter(x => x.prior).length,
+      };
+    });
+
+  return {
+    threshold: HIGH_VALUE_SBD,
+    resolved:  rows.length,
+    highValue,
+    byDelay,
+    note: rows.length === 0
+      ? "Noch keine aufgelösten v4-Skip-Entscheidungen. Füllt sich, sobald v4-geskippte Posts auszahlen."
+      : `${rows.length} aufgelöste v4-Skips · ${highValue} davon > ${HIGH_VALUE_SBD} SBD (verpasst).`,
   };
 }
 

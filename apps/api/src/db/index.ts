@@ -462,6 +462,11 @@ function runMigrations(db: Database): void {
     addIfMissing("publish_tx_id", "TEXT");
     addIfMissing("published_permlink", "TEXT");
     addIfMissing("screenshot_snap",   "TEXT");   // devlog snapshot dir, e.g. "snap-20260602"
+    // user_settings: curation model preference (default 'weight' — validated research winner)
+    const usCols = (db.prepare("PRAGMA table_info(user_settings)").all() as Array<{name:string}>).map(c=>c.name);
+    if (usCols.length > 0 && !usCols.includes("curation_model")) {
+      db.exec("ALTER TABLE user_settings ADD COLUMN curation_model TEXT");
+    }
     // vb_vote_outcomes provenance fields (added after initial schema)
     const outcomesCols = (db.prepare("PRAGMA table_info(vb_vote_outcomes)").all() as Array<{name:string}>).map(c=>c.name);
     if (outcomesCols.length > 0) {
