@@ -1740,6 +1740,9 @@ export interface SystemMetrics {
       rssMb: number; heapUsedMb: number; heapTotalMb: number;
       totalMb: number; freeMb: number; usedPct: number;
     };
+    disk: {
+      totalGb: number; usedGb: number; freeGb: number; usedPct: number;
+    } | null;
     uptimeSeconds: number;
     nodeVersion:   string;
   };

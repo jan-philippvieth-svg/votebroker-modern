@@ -1,7 +1,9 @@
 import os from "os";
+import { statfs } from "fs/promises";
+import { dirname } from "path";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { getSession } from "../auth/sessionStore.js";
-import { getDb } from "../db/index.js";
+import { getDb, getDbPath } from "../db/index.js";
 import { getAuditStats, getRecentAuditEvents } from "../audit/auditLog.js";
 import { getRecentFeePostLog, getLastFeePostRun, runDailyFeePost } from "../jobs/dailyFeePost.js";
 import { broadcastConfig, steemNetworkConfig } from "../config.js";
@@ -876,6 +878,25 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
     const db       = getDb();
     const cm       = getPostCacheMetrics();
 
+    // Disk usage of the volume holding the live SQLite DB (the partition that fills up).
+    let disk: {
+      totalGb: number; usedGb: number; freeGb: number; usedPct: number;
+    } | null = null;
+    try {
+      const fs = await statfs(dirname(getDbPath()));
+      const totalB = fs.blocks * fs.bsize;
+      const freeB  = fs.bavail * fs.bsize;          // available to non-root processes
+      const usedB  = totalB - fs.bfree * fs.bsize;  // actually used (excludes root-reserved)
+      disk = {
+        totalGb: Math.round((totalB / 1024 / 1024 / 1024) * 10) / 10,
+        usedGb:  Math.round((usedB  / 1024 / 1024 / 1024) * 10) / 10,
+        freeGb:  Math.round((freeB  / 1024 / 1024 / 1024) * 10) / 10,
+        usedPct: totalB > 0 ? Math.round((usedB / totalB) * 1000) / 10 : 0,
+      };
+    } catch {
+      disk = null;  // statfs unsupported / path missing — frontend hides the cell
+    }
+
     // Data counters from SQLite
     const authorCount = (db.prepare("SELECT COUNT(*) AS n FROM vb_post_scan_log").get() as { n: number })?.n ?? 0;
     const postCount   = (db.prepare("SELECT COUNT(*) AS n FROM vb_posts").get() as { n: number })?.n ?? 0;
@@ -908,6 +929,7 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
           freeMb:      Math.round(freeMem         / 1024 / 1024),
           usedPct:     Math.round((1 - freeMem / totalMem) * 1000) / 10,
         },
+        disk,
         uptimeSeconds: Math.round(process.uptime()),
         nodeVersion:   process.version,
       },

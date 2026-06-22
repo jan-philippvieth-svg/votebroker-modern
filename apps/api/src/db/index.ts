@@ -10,6 +10,11 @@ type Database = InstanceType<typeof DatabaseConstructor>;
 
 const DB_PATH = process.env.VOTEBROKER_DB_PATH ?? resolve("data", "votebroker.db");
 
+/** Absolute path of the live SQLite DB — used e.g. for disk-usage metrics on its volume. */
+export function getDbPath(): string {
+  return resolve(DB_PATH);
+}
+
 let _db: Database | null = null;
 
 export function getDb(): Database {

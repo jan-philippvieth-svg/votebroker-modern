@@ -487,6 +487,9 @@ function SystemMetricsWidget({ token }: { token: string }) {
   const { system, scanner, blockchain, data } = metrics;
   const cpuColor  = system.cpu.loadPct1 > 80 ? C.err : system.cpu.loadPct1 > 50 ? C.warn : C.ok;
   const ramColor  = system.memory.usedPct > 85 ? C.err : system.memory.usedPct > 65 ? C.warn : C.ok;
+  const diskColor = system.disk
+    ? (system.disk.usedPct > 90 ? C.err : system.disk.usedPct > 75 ? C.warn : C.ok)
+    : C.dim;
   const hitColor  = blockchain.cacheHitRate > 60 ? C.ok : blockchain.cacheHitRate > 30 ? C.warn : C.err;
   const rpcColor  = blockchain.rpcCallsPerMin > 10 ? C.err : blockchain.rpcCallsPerMin > 5 ? C.warn : C.ok;
 
@@ -512,6 +515,15 @@ function SystemMetricsWidget({ token }: { token: string }) {
             sub={`${system.memory.rssMb} MB RSS · ${system.memory.freeMb} MB frei`}
             color={ramColor}
             bar={system.memory.usedPct}
+          />
+          <MetricCell
+            label="Disk"
+            value={system.disk ? `${system.disk.usedPct}%` : "n/a"}
+            sub={system.disk
+              ? `${system.disk.usedGb} / ${system.disk.totalGb} GB · ${system.disk.freeGb} GB frei`
+              : "nicht verfügbar"}
+            color={diskColor}
+            bar={system.disk ? system.disk.usedPct : undefined}
           />
           <MetricCell
             label="Uptime"
