@@ -464,6 +464,45 @@ function initSchema(db: Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_post_outcomes_resolved ON vb_post_outcomes(resolved_at);
     CREATE INDEX IF NOT EXISTS idx_post_outcomes_created  ON vb_post_outcomes(post_created_at);
+
+    -- ── Model predictions (Phase 2, additive, long-format) ────────────────────────
+    -- One row per (decision_id, model). New models become INSERTs, never ALTER TABLE.
+    -- Two prediction families share this table, distinguished by context_kind:
+    --   'decision' — CoPilot shadow verdict (would_vote/skip, score); decision_id =
+    --                vb_copilot_shadow_runs.id (v3 and v4 share the same decision_id).
+    --   'estimate' — curation-model SP estimate for an ACTUAL vote; decision_id =
+    --                'est:'||voter||'/'||author||'/'||permlink.
+    -- voter/author/permlink are carried for JOINs to vb_post_outcomes (author,permlink)
+    -- and vb_vote_outcomes (username=voter, author, permlink).
+    --
+    -- Strictly additive: legacy prediction columns (v4_*, post_score in
+    -- vb_copilot_shadow_runs; estimated_sp_* in vb_global_vote_outcomes) stay UNCHANGED
+    -- and remain the source of truth for existing admin/dashboard readers. See ADR-007.
+    CREATE TABLE IF NOT EXISTS vb_model_predictions (
+      decision_id          TEXT NOT NULL,
+      model                TEXT NOT NULL,   -- 'v3','v4','weight','rshares','steemworld',...
+      model_version        TEXT,            -- e.g. 'v4.1-priors' (NULL allowed)
+      context_kind         TEXT NOT NULL,   -- 'decision' | 'estimate'
+      voter                TEXT NOT NULL,
+      author               TEXT NOT NULL,
+      permlink             TEXT NOT NULL,
+      decision_type        TEXT,            -- 'would_vote'|'skip_score'|'skip_hard'|... (NULL for estimate)
+      would_vote           INTEGER,         -- 0/1 (NULL for estimate)
+      predicted_sp         REAL,
+      predicted_rshares    REAL,
+      score                REAL,            -- postScore / pGood×100
+      confidence           REAL,            -- reserved
+      suggested_weight_bps INTEGER,
+      expected_value_sbd   REAL,
+      raw_json             TEXT,            -- v4_components / signals_json (audit)
+      predicted_at         TEXT NOT NULL,
+      recorded_at          TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (decision_id, model)
+    );
+    CREATE INDEX IF NOT EXISTS idx_mp_model    ON vb_model_predictions(model);
+    CREATE INDEX IF NOT EXISTS idx_mp_anchor   ON vb_model_predictions(author, permlink);
+    CREATE INDEX IF NOT EXISTS idx_mp_voteanc  ON vb_model_predictions(voter, author, permlink);
+    CREATE INDEX IF NOT EXISTS idx_mp_kind     ON vb_model_predictions(context_kind);
   `);
 }
 
