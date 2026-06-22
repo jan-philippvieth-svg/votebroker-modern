@@ -16,3 +16,7 @@ tools/showcase/__pycache__/
 tools/showcase/output/
 tools/showcase/raw/
 tools/showcase/debug.png
+
+# Local SQLite working copies (prod DB is the Docker volume votebroker_data)
+apps/api/data/
+apps/api/votebroker.db
