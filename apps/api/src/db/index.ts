@@ -439,6 +439,31 @@ function initSchema(db: Database): void {
       PRIMARY KEY (author, permlink)
     );
     CREATE INDEX IF NOT EXISTS idx_opp_cache_score ON vb_opportunity_cache(opportunity_score DESC);
+
+    -- ── Canonical post-outcome table (Phase 1, additive) ──────────────────────────
+    -- One row per POST (author, permlink) — independent of who voted or what a model
+    -- predicted. Holds only properties of the post itself. Backfilled once from
+    -- vb_global_vote_outcomes (no chain re-scan) and kept fresh by existing enrichment.
+    --
+    -- This is the start of separating three concerns currently mixed in
+    -- vb_global_vote_outcomes / vb_copilot_shadow_runs / vb_whale_vote_details:
+    --   post-outcome (here) · vote-outcome (vb_vote_outcomes) · model-prediction (Phase 2).
+    -- Legacy tables and their columns stay UNCHANGED; existing readers are untouched.
+    CREATE TABLE IF NOT EXISTS vb_post_outcomes (
+      author          TEXT NOT NULL,
+      permlink        TEXT NOT NULL,
+      post_created_at TEXT,            -- ISO, get_content.created
+      community       TEXT,            -- json_metadata.community / parent_permlink
+      final_payout    REAL,            -- total_payout_value + curator_payout_value (SBD) after settlement
+      net_votes       INTEGER,         -- best available net_votes (Phase 1: vote-time snapshot; see Phase 2 notes)
+      active_votes    INTEGER,         -- best available active_votes count (Phase 1: vote-time snapshot)
+      paid_at         TEXT,            -- ISO, when the post paid out (proxy: earliest curation_reward op)
+      resolved_at     TEXT,            -- ISO, when VoteBroker first resolved final_payout for this post
+      recorded_at     TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (author, permlink)
+    );
+    CREATE INDEX IF NOT EXISTS idx_post_outcomes_resolved ON vb_post_outcomes(resolved_at);
+    CREATE INDEX IF NOT EXISTS idx_post_outcomes_created  ON vb_post_outcomes(post_created_at);
   `);
 }
 

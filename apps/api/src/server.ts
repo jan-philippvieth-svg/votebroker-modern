@@ -6,6 +6,7 @@ import { registerAuthRoutes } from "./auth/routes.js";
 import { registerConsentRoutes } from "./consent/routes.js";
 import { registerCurationRoutes, registerUserSettingsRoutes } from "./curation/routes.js";
 import { getDb } from "./db/index.js";
+import { syncPostOutcomesFromGvo } from "./chain/postOutcomes.js";
 import { registerOperatorRoutes } from "./operator/routes.js";
 import { registerRoutes, registerTodayVotesRoute } from "./routes.js";
 import { registerAdminRoutes } from "./admin/routes.js";
@@ -81,6 +82,14 @@ const host = process.env.HOST ?? "0.0.0.0";
 await app.listen({ port, host });
 
 const log = app.log as unknown as typeof console;
+
+// Phase 1: backfill the canonical post-outcome table from existing data (no chain calls).
+// Idempotent merge — safe on every boot; existing readers/tables are untouched.
+try {
+  syncPostOutcomesFromGvo(getDb(), log);
+} catch (err) {
+  log.warn({ err }, "[PostOutcomes] startup backfill failed (non-fatal)");
+}
 
 // Schedulers that only register a setTimeout (no immediate I/O) — safe to start now.
 // startPayoutSync's immediate run is delayed 120s internally.

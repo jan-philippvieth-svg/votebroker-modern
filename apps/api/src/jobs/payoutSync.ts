@@ -13,6 +13,7 @@
 import { rebuildVoteOutcomes } from "../chain/rebuildVoteOutcomes.js";
 import { enrichCurationEstimates } from "../chain/globalVoteOutcomes.js";
 import { createSteemClient } from "../chain/steemBroadcaster.js";
+import { upsertPostOutcome, syncPostOutcomesFromGvo } from "../chain/postOutcomes.js";
 import { getDb } from "../db/index.js";
 
 const RUN_HOUR_UTC   = 4;
@@ -134,13 +135,19 @@ export async function runPayoutSync(
           new Promise<never>((_, reject) => setTimeout(() => reject(new Error("get_content timeout")), 8_000)),
         ]) as {
           author?:               string;
+          created?:              string;     // ISO post creation time
           total_payout_value?:   string;    // author payout (SBD) — non-zero after payout
           curator_payout_value?: string;    // curator payout (SP expressed as SBD) — non-zero after payout
           pending_payout_value?: string;    // pre-payout total — zero after payout
+          last_payout?:          string;    // ISO settlement time ("1970-..." before payout)
+          net_votes?:            number;
+          active_votes?:         unknown[];
         };
 
         if (!post?.author) {
           update.run(0, author, permlink); // post deleted/not found — mark with 0
+          // Canonical post-outcome (Phase 1): record the resolution additively.
+          upsertPostOutcome(db, { author, permlink, finalPayout: 0 });
           finalUpdated++;
           continue;
         }
@@ -157,6 +164,19 @@ export async function runPayoutSync(
         if (hasPaidOut) {
           const finalTotal = authorSbd + curatorSbd || null;
           update.run(finalTotal, author, permlink);
+          // Canonical post-outcome (Phase 1): one row per post, from the same get_content
+          // we already fetched — no extra chain call. net_votes/active_votes here are the
+          // settled values (richer than the vote-time snapshot in vb_global_vote_outcomes).
+          const lastPayout = post.last_payout && !post.last_payout.startsWith("1970")
+            ? post.last_payout : null;
+          upsertPostOutcome(db, {
+            author, permlink,
+            postCreatedAt: post.created ?? null,
+            finalPayout: finalTotal,
+            netVotes: typeof post.net_votes === "number" ? post.net_votes : null,
+            activeVotes: Array.isArray(post.active_votes) ? post.active_votes.length : null,
+            paidAt: lastPayout,
+          });
           finalUpdated++;
         }
       } catch { /* skip — will retry next run */ }
@@ -180,6 +200,15 @@ export async function runPayoutSync(
       } catch (err) {
         log.warn({ err }, `[PayoutSync] enrichEstimates failed for @${voter}`);
       }
+    }
+
+    // ── E) Reconcile canonical post-outcome table (Phase 1, additive) ─────────
+    // Folds the latest gvo post-context into vb_post_outcomes (one row per post).
+    // Pure SQL, no chain calls; complements the direct writes in section C above.
+    try {
+      syncPostOutcomesFromGvo(db, log);
+    } catch (err) {
+      log.warn({ err }, "[PayoutSync] post-outcome reconcile failed (non-fatal)");
     }
 
     log.info("[PayoutSync] Done");
